@@ -30,6 +30,7 @@ import vn.lemar.selfstorage.payment.application.dto.PaymentRequest;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationNotFoundException;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationValidationException;
+import vn.lemar.selfstorage.payment.application.event.PaymentDuplicateDetected;
 import vn.lemar.selfstorage.payment.application.event.PaymentFailed;
 import vn.lemar.selfstorage.payment.application.event.PaymentSucceeded;
 import vn.lemar.selfstorage.payment.domain.PaymentDirection;
@@ -158,6 +159,13 @@ public class PaymentService {
         // Hai event dưới đây publish TRƯỚC khi transaction này commit — listener phải đăng ký
         // @TransactionalEventListener(AFTER_COMMIT); xem javadoc PaymentSucceeded/PaymentFailed.
         if (gatewayReportedSuccess(params)) {
+            repository.lockInvoiceForPayment(transaction.getInvoiceId());
+            if (repository.existsByInvoiceIdAndDirectionAndStatus(transaction.getInvoiceId(),
+                    PaymentDirection.PAY, PaymentStatus.SUCCESS)) {
+                applyDuplicate(transaction, params.get("vnp_TransactionNo"),
+                        parsePayDate(params.get("vnp_PayDate")), responsePayload, null);
+                return IpnResponse.alreadyConfirmed();
+            }
             applySuccess(transaction, params.get("vnp_TransactionNo"),
                     parsePayDate(params.get("vnp_PayDate")), responsePayload, null);
         } else {
@@ -204,10 +212,16 @@ public class PaymentService {
             }
             gatewayTransactionNo = gatewayTransactionNo.trim();
             repository.lockInvoiceForPayment(transaction.getInvoiceId());
-            ensureInvoiceHasNoSuccessfulPayment(transaction);
+            boolean duplicate = repository.existsByInvoiceIdAndDirectionAndStatus(
+                    transaction.getInvoiceId(), PaymentDirection.PAY, PaymentStatus.SUCCESS);
             ensureGatewayTransactionNoIsUnused(gatewayTransactionNo);
-            applySuccess(transaction, gatewayTransactionNo, request.paidAt(),
-                    responsePayload, actorEmail);
+            if (duplicate) {
+                applyDuplicate(transaction, gatewayTransactionNo, request.paidAt(),
+                        responsePayload, actorEmail);
+            } else {
+                applySuccess(transaction, gatewayTransactionNo, request.paidAt(),
+                        responsePayload, actorEmail);
+            }
             try {
                 repository.flush();
             } catch (DataIntegrityViolationException e) {
@@ -250,16 +264,21 @@ public class PaymentService {
     }
 
     /**
-     * Một invoice chỉ được có một giao dịch thu tiền thành công. Các phiên Pending cũ vẫn còn sau
-     * khi invoice đã Paid; ops không được chốt thêm một phiên nữa vì sẽ ghi nhận thanh toán lần hai.
+     * Giao dịch thành công thứ hai cho cùng invoice: giữ dấu vết tiền đã vào nhưng không ghi
+     * Success lần hai, không phát PaymentSucceeded. Ops hoàn tiền thủ công.
      */
-    private void ensureInvoiceHasNoSuccessfulPayment(PaymentTransaction transaction) {
-        if (repository.existsByInvoiceIdAndDirectionAndStatus(transaction.getInvoiceId(),
-                PaymentDirection.PAY, PaymentStatus.SUCCESS)) {
-            throw new ManualReconciliationConflictException(
-                    "Hóa đơn " + transaction.getInvoiceId()
-                            + " đã có giao dịch thanh toán thành công, không chốt thêm");
-        }
+    private void applyDuplicate(PaymentTransaction transaction, String gatewayTransactionNo,
+            Instant paidAt, String responsePayload, String actorEmail) {
+        transaction.markDuplicate(gatewayTransactionNo, paidAt,
+                "duplicate payment - refund required", responsePayload);
+        audit.record(new AuditEntry(AuditAction.PAYMENT_DUPLICATE,
+                AuditEntityType.PAYMENT_TRANSACTION, String.valueOf(transaction.getId()),
+                Map.of("status", "Pending"),
+                Map.of("status", "Duplicate", "gatewayTransactionNo", String.valueOf(gatewayTransactionNo)),
+                actorEmail == null ? "IPN duplicate payment" : "duplicate payment by " + actorEmail,
+                null));
+        events.publishEvent(new PaymentDuplicateDetected(transaction.getInvoiceId(),
+                transaction.getVnpTxnRef(), transaction.getAmount(), transaction.getPaidAt()));
     }
 
     /** Unique constraint bảo vệ DB, nhưng trả 409 thay vì để lỗi ràng buộc thành 500. */

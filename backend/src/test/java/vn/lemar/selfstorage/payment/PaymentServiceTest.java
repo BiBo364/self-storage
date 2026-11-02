@@ -27,6 +27,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import vn.lemar.selfstorage.payment.application.PaymentGateway;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
+import vn.lemar.selfstorage.audit.domain.AuditAction;
 import vn.lemar.selfstorage.payment.application.PaymentService;
 import vn.lemar.selfstorage.payment.application.PaymentUrlCache;
 import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationOutcome;
@@ -342,19 +343,36 @@ class PaymentServiceTest {
     }
 
     @Test
-    void manualSuccessRejectsInvoiceThatAlreadyHasSuccessfulPayment() {
+    void manualSuccessMarksDuplicateWhenInvoiceAlreadyHasSuccessfulPayment() {
         when(repository.existsByInvoiceIdAndDirectionAndStatus(
                 7L, PaymentDirection.PAY, PaymentStatus.SUCCESS)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+        var response = service.reconcileManually(TXN_REF,
                 new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
-                        "portal says paid", Instant.now(), "GW-NEW"), "admin@lemar.vn"))
-                .isInstanceOf(ManualReconciliationConflictException.class)
-                .hasMessageContaining("đã có giao dịch thanh toán thành công");
+                        "portal says paid", Instant.now(), "GW-NEW"), "admin@lemar.vn");
 
-        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
-        verify(events, never()).publishEvent(any());
-        verify(audit, never()).record(any());
+        assertThat(response.status()).isEqualTo(PaymentStatus.DUPLICATE);
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.DUPLICATE);
+        ArgumentCaptor<Object> event = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue()).isInstanceOf(
+                vn.lemar.selfstorage.payment.application.event.PaymentDuplicateDetected.class);
+        verify(audit).record(argThat(entry -> entry.action() == AuditAction.PAYMENT_DUPLICATE));
+    }
+
+    @Test
+    void secondSuccessIpnForSameInvoiceMarksDuplicate() {
+        when(repository.existsByInvoiceIdAndDirectionAndStatus(
+                7L, PaymentDirection.PAY, PaymentStatus.SUCCESS)).thenReturn(true);
+
+        var response = service.handleIpn(ipn());
+
+        assertThat(response.rspCode()).isEqualTo("02");
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.DUPLICATE);
+        verify(events).publishEvent(any(
+                vn.lemar.selfstorage.payment.application.event.PaymentDuplicateDetected.class));
+        verify(audit).record(argThat(entry -> entry.action() == AuditAction.PAYMENT_DUPLICATE));
+        verify(events, never()).publishEvent(any(PaymentSucceeded.class));
     }
 
     @Test

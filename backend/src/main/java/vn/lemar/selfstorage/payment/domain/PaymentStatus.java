@@ -10,7 +10,8 @@ package vn.lemar.selfstorage.payment.domain;
 public enum PaymentStatus {
     PENDING("Pending"),
     FAILED("Failed"),
-    SUCCESS("Success");
+    SUCCESS("Success"),
+    DUPLICATE("Duplicate");
 
     private final String dbValue;
 

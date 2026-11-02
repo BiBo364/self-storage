@@ -82,6 +82,10 @@ chốt đơn và khoang theo loại hoá đơn (routes/booking/invoice-pay.md �
 - **Không mở phiên mới khi đã có giao dịch `PAY/Success`.** IPN ghi giao dịch trước khi listener
   booking chạy; nếu listener chưa chạy/lỗi, invoice vẫn `Unpaid`. `/pay` kiểm giao dịch thành công
   và trả 409, không thu lần hai; local repair hoặc đối soát thủ công chốt phần còn lại.
+- **Một invoice tối đa một `PAY/Success`.** Nếu một nguồn xác nhận thành công thứ hai cho cùng
+  invoice, transaction thứ hai chuyển `Duplicate` — không phát `PaymentSucceeded`, không đụng
+  invoice/order/unit. Ghi audit `PAYMENT_DUPLICATE`, notify FM để hoàn tiền thủ công. IPN trả `02`;
+  manual trả `200` với status `DUPLICATE`.
 - **Ranh giới module:** `PaymentTransaction.invoiceId` là `Long`, không quan hệ JPA với bảng
   `invoices`; module khác giao tiếp qua event, không import chéo.
 - **Listener event bắt buộc `AFTER_COMMIT`.** `PaymentSucceeded`/`PaymentFailed` được publish

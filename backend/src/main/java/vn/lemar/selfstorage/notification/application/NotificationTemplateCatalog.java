@@ -111,6 +111,10 @@ public class NotificationTemplateCatalog {
         put(NotificationType.DEPOSIT_REFUND_REQUIRED, NotificationRecipient.FM,
                 "Cần hoàn cọc thủ công",
                 "Đơn {{orderCode}} đổi sang khoang có cọc thấp hơn. Số tiền cần hoàn: {{refundAmount}}.");
+        put(NotificationType.PAYMENT_DUPLICATE_REFUND_REQUIRED, NotificationRecipient.FM,
+                "Có thanh toán trùng cần hoàn tiền",
+                "Đơn {{orderCode}} có thêm giao dịch {{vnpTxnRef}} số tiền {{amount}} sau khi đã "
+                        + "thanh toán. Cần hoàn tiền thủ công.");
         put(NotificationType.UNIT_CHANGE_PAYMENT_REQUIRED, NotificationRecipient.CUSTOMER,
                 "Thanh toán để giữ khoang mới",
                 "Đơn {{orderCode}}: cần thanh toán thêm {{amount}} để giữ khoang mới. "

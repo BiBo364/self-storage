@@ -38,7 +38,6 @@ import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.payment.application.PaymentService;
 import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationOutcome;
 import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationRequest;
-import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
 
 /**
  * Lớp đối soát thủ công: ops tra portal VNPay rồi nhập kết quả cho giao dịch Pending.
@@ -210,7 +209,7 @@ class ManualReconciliationIntegrationTest {
     }
 
     @Test
-    void invoiceWithExistingSuccessfulPaymentIsAConflict() throws Exception {
+    void invoiceWithExistingSuccessfulPaymentMarksDuplicate() throws Exception {
         String txnRef = createPendingPayment("INV-MANUAL-DOUBLE");
         jdbc.update("INSERT INTO payment_transactions"
                 + " (invoice_id, vnp_txn_ref, amount, direction, status, paid_at)"
@@ -220,12 +219,13 @@ class ManualReconciliationIntegrationTest {
                         {"outcome":"SUCCESS","note":"portal: paid",
                          "paidAt":"%s","gatewayTransactionNo":"GW-NEW"}
                         """.formatted(Instant.now())))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value(
-                        org.hamcrest.Matchers.containsString("đã có giao dịch thanh toán thành công")));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DUPLICATE"));
 
-        assertThat(paymentStatus(txnRef)).isEqualTo("Pending");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Integer.class)).isZero();
+        assertThat(paymentStatus(txnRef)).isEqualTo("Duplicate");
+        assertThat(statusOf("invoices", invoiceId)).isEqualTo("Unpaid");
+        assertThat(jdbc.queryForList("SELECT action FROM audit_logs ORDER BY action", String.class))
+                .containsExactly("PAYMENT_DUPLICATE");
     }
 
     @Test
@@ -262,13 +262,16 @@ class ManualReconciliationIntegrationTest {
             start.countDown();
 
             assertThat(List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS)))
-                    .containsExactlyInAnyOrder("OK", "CONFLICT");
+                    .containsExactlyInAnyOrder("SUCCESS", "DUPLICATE");
         } finally {
             pool.shutdownNow();
         }
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM payment_transactions"
                 + " WHERE invoice_id = ? AND direction = 'PAY' AND status = 'Success'",
+                Integer.class, invoiceId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment_transactions"
+                + " WHERE invoice_id = ? AND direction = 'PAY' AND status = 'Duplicate'",
                 Integer.class, invoiceId)).isEqualTo(1);
         assertThat(statusOf("invoices", invoiceId)).isEqualTo("Paid");
     }
@@ -349,13 +352,10 @@ class ManualReconciliationIntegrationTest {
             if (!start.await(5, TimeUnit.SECONDS)) {
                 throw new IllegalStateException("concurrent reconcile start timed out");
             }
-            paymentService.reconcileManually(txnRef,
+            return paymentService.reconcileManually(txnRef,
                     new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
                             "concurrent manual", Instant.now(), "GW-" + txnRef),
-                    ADMIN_EMAIL);
-            return "OK";
-        } catch (ManualReconciliationConflictException e) {
-            return "CONFLICT";
+                    ADMIN_EMAIL).status().name();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
