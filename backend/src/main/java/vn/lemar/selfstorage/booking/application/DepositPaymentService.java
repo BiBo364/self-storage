@@ -165,6 +165,14 @@ public class DepositPaymentService {
             throw new DepositNotAllowedException(UNIT_BUSY);
         }
 
+        // Hai request cùng invoice có thể đều qua phép kiểm phía trên trước khi bên kia kịp tạo
+        // Pending. Sau khi đã khoá khoang, kiểm lại để bên thua trả URL cũ thay vì mở Pending thứ hai.
+        if (sessions.hasOpenSessionForInvoice(invoice.getId())) {
+            return sessions.openPaymentUrl(invoice.getId())
+                    .or(() -> payments.resumePayment(invoice.getId(), clientIp))
+                    .orElseThrow(() -> new DepositNotAllowedException(SESSION_LOST));
+        }
+
         // (5) Thông thoáng — mở phiên. Số tiền đọc từ hóa đơn trong DB, không tin tham số caller.
         PaymentRequest request = new PaymentRequest(
                 nextTxnRef(invoice.getId()), invoice.getAmount(), invoice.getTitle(), clientIp);

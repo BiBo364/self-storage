@@ -262,4 +262,49 @@ class DepositConcurrencyIntegrationTest {
 
     private record Outcome(boolean opened, String message) {
     }
+    @Test
+    void sameInvoiceRacingOpensExactlyOneSession() throws Exception {
+        List<Outcome> outcomes = callSameInvoiceInParallel();
+
+        assertThat(outcomes).allSatisfy(outcome -> assertThat(outcome.opened())
+                .as("cả hai request same invoice trả URL, không 409: %s", outcome).isTrue());
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM payment_transactions WHERE invoice_id = ? AND status = 'Pending'",
+                Integer.class, invoiceId))
+                .as("chỉ một Pending cho cùng invoice dù hai request đồng thời").isEqualTo(1);
+    }
+
+    private List<Outcome> callSameInvoiceInParallel() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch startLine = new CountDownLatch(1);
+        try {
+            List<Callable<Outcome>> calls = List.of(
+                    () -> openInvoiceInThread(invoiceId, CUSTOMER_EMAIL, startLine),
+                    () -> openInvoiceInThread(invoiceId, CUSTOMER_EMAIL, startLine));
+            List<Future<Outcome>> futures = calls.stream().map(pool::submit).toList();
+            startLine.countDown();
+            List<Outcome> outcomes = new ArrayList<>();
+            for (Future<Outcome> future : futures) {
+                outcomes.add(future.get(30, TimeUnit.SECONDS));
+            }
+            return outcomes;
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    private Outcome openInvoiceInThread(Long targetInvoiceId, String email, CountDownLatch startLine)
+            throws Exception {
+        authenticateCurrentThread(email);
+        startLine.await();
+        try {
+            service.startDeposit(targetInvoiceId, "1.2.3.4");
+            return new Outcome(true, null);
+        } catch (DepositNotAllowedException e) {
+            return new Outcome(false, e.getMessage());
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
 }

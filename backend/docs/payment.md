@@ -91,6 +91,21 @@ chốt đơn và khoang theo loại hoá đơn (routes/booking/invoice-pay.md �
 - **Không dùng `ApiEnvelope` cho IPN.** VNPay đọc phản hồi theo đúng hai key `RspCode`/`Message` ở
   mức gốc — đây là contract của bên thứ ba.
 
+
+## Known limitations
+
+- **Không có đối soát phiên tự động (`querydr`).** IPN không về → `PaymentTransaction(Pending)` nằm
+  nguyên; invoice/order/unit giữ state cũ; ops phải tra portal rồi chốt qua endpoint ADMIN. Không có
+  job tự đóng; `Pending` còn hạn 15' có thể chặn mở phiên mới.
+- **Listener lỗi sau IPN** được local repair xử lý tối đa mỗi 5 phút; nếu job không cứu được thì vẫn
+  cần đối soát thủ công.
+- **Chưa có cron hủy đơn quá hạn thanh toán** (Flow 6); invoice/order không tự `Expired`/`Canceled`,
+  khoang không tự release theo hạn.
+- **Chưa có hoàn tiền tự động** (Flow 4). Tiền vào invoice đã `Canceled`/`Expired`, hoặc khoang đã mất,
+  chỉ log ERROR; hoàn tiền thủ công.
+- **Chỉ VNPay.** Chưa provider-neutral; `PaymentTransaction` chưa có cột provider; chưa có ZaloPay/payOS.
+- **Chưa có ShedLock/multi-instance** cho job tương lai; hiện luồng này chưa có job định kỳ.
+
 ## Cấu hình
 
 Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`,

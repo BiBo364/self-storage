@@ -61,11 +61,12 @@ Endpoint này **không bao giờ** ghi nhận đã thu tiền. `DepositPaymentLi
 | Loại | Ghi gì |
 |---|---|
 | `Deposit` | `Invoice=Paid` · `RentalOrder=Deposited` · `StorageUnit=Reserved` · notify khách `DEPOSIT_PAYMENT_SUCCEEDED` · audit `RENTAL_ORDER_DEPOSITED` + `STORAGE_UNIT_RESERVED` |
-| `DepositSupplement` | `Invoice=Paid` · `StorageUnit=Reserved` (khoang mới) · audit `STORAGE_UNIT_RESERVED` |
+| `DepositSupplement` | `Invoice=Paid` · `StorageUnit=Reserved` (khoang mới) · notify khách `DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED` · audit `STORAGE_UNIT_RESERVED` |
 
 Cọc bổ sung **không** chuyển trạng thái đơn lần hai và **không** gửi lại "Đặt cọc thành công":
-đơn đã `Deposited` từ lần cọc đầu (`booking/proposal-flow.md` › Ranh giới). Khoang mới chưa được
-reserve ở luồng đổi khoang, nên bước thu tiền này mới là chỗ giữ nó (cùng file › Invariants).
+đơn đã `Deposited` từ lần cọc đầu (`booking/proposal-flow.md` › Ranh giới). Khách nhận xác nhận
+riêng `DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED` kèm khoang mới đã giữ. Khoang mới chưa được reserve ở
+luồng đổi khoang, nên bước thu tiền này mới là chỗ giữ nó (cùng file › Invariants).
 
 **Thứ tự khóa: đơn → hóa đơn → khoang.** Luồng đề xuất khoang
 (`booking/proposal-flow.md`) khóa row đơn ở mọi đường ghi, nên luồng thu cọc phải khóa cùng thứ
@@ -112,8 +113,6 @@ Nếu listener lỗi sau khi IPN đã commit, giao dịch vẫn `Success` nhưng
 ## Chưa có trong luồng này
 
 - Cron hủy đơn quá hạn thanh toán; đối soát `Pending` bằng endpoint ADMIN thủ công (không querydr).
-- Thông báo cho khách sau khi thu xong cọc bổ sung — chưa có `NotificationType` nào được định cho
-  ca này.
 - Hoàn tiền khi tiền đã vào mà khoang đã mất: thuộc Flow 4.
 
 ## Liên quan

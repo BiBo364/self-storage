@@ -75,6 +75,9 @@ public class NotificationTemplateCatalog {
         put(NotificationType.DEPOSIT_PAYMENT_SUCCEEDED, NotificationRecipient.CUSTOMER,
                 "Đặt cọc thành công",
                 "Hệ thống đã nhận tiền cọc cho đơn {{orderCode}}. Vui lòng chọn lịch hẹn check-in.");
+        put(NotificationType.DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED, NotificationRecipient.CUSTOMER,
+                "Đặt cọc bổ sung thành công",
+                "Hệ thống đã nhận cọc bổ sung cho đơn {{orderCode}}. Khoang {{unitCode}} đã được giữ.");
         put(NotificationType.APPOINTMENT_CREATED, NotificationRecipient.CUSTOMER,
                 "Lịch hẹn check-in đã được tạo",
                 "Lịch hẹn của bạn: {{appointmentTime}} tại {{facilityAddress}}. Vui lòng mang theo CCCD/Passport.");

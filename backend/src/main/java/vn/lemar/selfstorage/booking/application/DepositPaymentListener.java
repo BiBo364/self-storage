@@ -106,7 +106,8 @@ public class DepositPaymentListener {
 
         if (invoice.getType() == InvoiceType.DEPOSIT_SUPPLEMENT) {
             // Đổi khoang sau khi đã cọc: đơn đã `Deposited` từ lần cọc đầu, chỉ giữ khoang mới.
-            // Không mark lại, không gửi lại "Đặt cọc thành công".
+            // Không mark lại; gửi thông báo riêng cho khách, không gửi lại "Đặt cọc thành công".
+            notifySupplementCustomer(invoice, order);
             LOG.info("Đã thu cọc bổ sung cho hóa đơn {}, giữ khoang {} cho đơn {}",
                     invoice.getId(), order.getUnitId(), order.getId());
             return;
@@ -158,6 +159,18 @@ public class DepositPaymentListener {
         notifications.notify(invoice.getCustomerId(), email, NotificationRecipient.CUSTOMER,
                 NotificationType.DEPOSIT_PAYMENT_SUCCEEDED,
                 Map.of("orderCode", String.valueOf(order.getId())), order.getId());
+    }
+
+    /** Cọc bổ sung: xác nhận riêng cho khách, kèm khoang mới đã được giữ. */
+    private void notifySupplementCustomer(Invoice invoice, RentalOrder order) {
+        String email = accounts.requireEmailById(invoice.getCustomerId());
+        String unitCode = unitQuery.find(order.getUnitId())
+                .map(StorageUnitView::code)
+                .orElse("");
+        notifications.notify(invoice.getCustomerId(), email, NotificationRecipient.CUSTOMER,
+                NotificationType.DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED,
+                Map.of("orderCode", String.valueOf(order.getId()), "unitCode", unitCode),
+                order.getId());
     }
 
     /**

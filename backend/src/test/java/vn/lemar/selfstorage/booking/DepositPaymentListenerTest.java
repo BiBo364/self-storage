@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ import vn.lemar.selfstorage.facility.application.StorageUnitQuery;
 import vn.lemar.selfstorage.facility.application.StorageUnitService;
 import vn.lemar.selfstorage.facility.application.StorageUnitView;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
+import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
 import vn.lemar.selfstorage.payment.application.event.PaymentFailed;
@@ -82,6 +84,8 @@ class DepositPaymentListenerTest {
         when(invoices.findByIdForUpdate(INVOICE_ID)).thenReturn(Optional.of(invoice));
         when(orders.findByIdForUpdate(ORDER_ID)).thenReturn(Optional.of(order));
         when(units.reserveIfAvailable(UNIT_ID)).thenReturn(true);
+        when(unitQuery.find(UNIT_ID)).thenReturn(Optional.of(
+                new StorageUnitView(UNIT_ID, "A-03", 1L, 1L, "Reserved")));
         when(accounts.requireEmailById(CUSTOMER_ID)).thenReturn(CUSTOMER_EMAIL);
     }
 
@@ -201,10 +205,10 @@ class DepositPaymentListenerTest {
 
     /**
      * Đổi khoang sau khi đã cọc (#172): đơn đã `Deposited` từ lần cọc đầu. Thu cọc bổ sung chỉ
-     * giữ khoang mới — không chuyển trạng thái đơn lần hai, không gửi lại thông báo cọc thành công.
+     * giữ khoang mới — không chuyển trạng thái đơn lần hai, nhưng gửi xác nhận riêng cho khách.
      */
     @Test
-    void supplementReservesTheNewUnitWithoutDepositingAgain() {
+    void supplementReservesTheNewUnitAndNotifiesCustomer() {
         when(invoice.getType()).thenReturn(InvoiceType.DEPOSIT_SUPPLEMENT);
 
         listener.onPaymentSucceeded(succeeded());
@@ -212,7 +216,11 @@ class DepositPaymentListenerTest {
         verify(invoice).markPaid();
         verify(units).reserveIfAvailable(UNIT_ID);
         verify(order, never()).markDeposited();
-        verifyNoInteractions(notifications);
+        verify(notifications).notify(eq(CUSTOMER_ID), eq(CUSTOMER_EMAIL),
+                eq(NotificationRecipient.CUSTOMER),
+                eq(NotificationType.DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED),
+                eq(Map.of("orderCode", String.valueOf(ORDER_ID), "unitCode", "A-03")),
+                eq(ORDER_ID));
         verify(audit, times(1)).record(any());
     }
 
