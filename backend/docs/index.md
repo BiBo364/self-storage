@@ -91,7 +91,7 @@ hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V10__unit_change_release_audit.sql`.
+Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V12__payment_duplicate.sql`.
 V1/V2 có mirror ở `backend/sql/`
 — sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -114,6 +114,8 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
   khoang mới chưa reserve cho tới khi thanh toán cọc bổ sung; trường hợp `delta ≤ 0` cần follow-up reserve riêng.
 - V11 thêm type `DepositSupplement` cho hoá đơn chênh lệch cọc và 2 partial unique index: một `Deposit`
   active (Unpaid/Paid) + một `DepositSupplement` Unpaid trên mỗi đơn.
+- V12 thêm status `Duplicate` cho `payment_transactions` và audit action `PAYMENT_DUPLICATE`; dùng khi
+  một nguồn xác nhận Success thứ hai cho cùng invoice — tiền vào nhưng không ghi Success lần hai.
 
 Các migration khác trên main: V5 seed `order.expiry_days` (luồng convert), V6 bỏ `Expired` khỏi CHECK
 `rental_orders.status` (quá hạn cũng là `Canceled` + `cancel_reason`), V7 thêm 4 action convert vào
