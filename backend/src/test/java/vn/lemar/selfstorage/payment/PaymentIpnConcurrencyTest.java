@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -26,6 +27,8 @@ import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.payment.application.PaymentGateway;
 import vn.lemar.selfstorage.payment.application.PaymentService;
 import vn.lemar.selfstorage.payment.application.dto.IpnResponse;
+import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationOutcome;
+import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationRequest;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
 import vn.lemar.selfstorage.payment.repository.PaymentTransactionRepository;
@@ -105,6 +108,42 @@ class PaymentIpnConcurrencyTest {
         assertThat(responses).extracting(IpnResponse::rspCode)
                 .as("hai IPN khác transaction cùng invoice: %s", responses)
                 .containsExactlyInAnyOrder("00", "02");
+        assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
+        assertThat(countStatus(invoiceId, "Duplicate")).isEqualTo(1);
+    }
+
+    @Test
+    void manualAndIpnRaceForSameInvoiceCreatesOneDuplicate() throws Exception {
+        when(gateway.verifySignature(anyMap())).thenReturn(true);
+
+        long invoiceId = seedInvoice();
+        repository.saveAndFlush(new PaymentTransaction(
+                invoiceId, "TXNRACE-MANUAL", AMOUNT, "coc thue kho"));
+        repository.saveAndFlush(new PaymentTransaction(
+                invoiceId, "TXNRACE-IPN", AMOUNT, "coc thue kho"));
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch startLine = new CountDownLatch(1);
+        try {
+            Future<String> manual = pool.submit(() -> {
+                startLine.await();
+                return service.reconcileManually("TXNRACE-MANUAL",
+                        new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                                "race", Instant.now(), "GW-MANUAL"), "admin@lemar.vn")
+                        .status().name();
+            });
+            Future<IpnResponse> ipn = pool.submit(() -> {
+                startLine.await();
+                return service.handleIpn(ipn("TXNRACE-IPN", "14123459"));
+            });
+
+            startLine.countDown();
+            assertThat(manual.get(30, TimeUnit.SECONDS) + ":" + ipn.get(30, TimeUnit.SECONDS).rspCode())
+                    .isIn("SUCCESS:02", "DUPLICATE:00");
+        } finally {
+            pool.shutdownNow();
+        }
+
         assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
         assertThat(countStatus(invoiceId, "Duplicate")).isEqualTo(1);
     }
