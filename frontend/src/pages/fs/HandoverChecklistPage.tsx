@@ -79,7 +79,11 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
 
   async function removeInspectionPhoto(photo: UploadedMedia) {
     try {
-      await deleteMediaBatch(photo.batchId);
+      const result = await deleteMediaBatch(photo.batchId);
+      if (result.deleted === 0 && result.skipped > 0) {
+        setInspectionUploadError("File đã được gắn với bước trước, không xoá được.");
+        return;
+      }
     } catch (error) {
       if (!(error instanceof ApiError && error.status === 404)) {
         setInspectionUploadError(error instanceof Error ? error.message : "Không xoá được ảnh.");
@@ -93,7 +97,11 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   async function removeContractFile() {
     if (!contractFile) return;
     try {
-      await deleteMediaBatch(contractFile.batchId);
+      const result = await deleteMediaBatch(contractFile.batchId);
+      if (result.deleted === 0 && result.skipped > 0) {
+        setContractUploadError("File đã được gắn với bước trước, không xoá được.");
+        return;
+      }
     } catch (error) {
       if (!(error instanceof ApiError && error.status === 404)) {
         setContractUploadError(

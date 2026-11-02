@@ -38,16 +38,19 @@ export function uploadMedia(
 
 /** DELETE /api/media/uploads/batch/{batchId} — dọn asset chưa attach. */
 export function deleteMediaBatch(batchId: string): Promise<MediaBatchDeleteResult> {
-  return apiRequest<MediaBatchDeleteResult>(`/api/media/batch/${encodeURIComponent(batchId)}`, {
-    method: "DELETE",
-    accessToken: authGateway.getSession()?.token,
-  });
+  return apiRequest<MediaBatchDeleteResult>(
+    `/api/media/uploads/batch/${encodeURIComponent(batchId)}`,
+    {
+      method: "DELETE",
+      accessToken: authGateway.getSession()?.token,
+    },
+  );
 }
 
 /** POST /api/media/uploads/batch/{batchId}/attach — khoá batch sau khi flow submit URL. */
 export function attachMediaBatch(batchId: string): Promise<MediaBatchAttachResult> {
   return apiRequest<MediaBatchAttachResult>(
-    `/api/media/batch/${encodeURIComponent(batchId)}/attach`,
+    `/api/media/uploads/batch/${encodeURIComponent(batchId)}/attach`,
     {
       method: "POST",
       accessToken: authGateway.getSession()?.token,
