@@ -43,16 +43,23 @@ type QueueItem = RentalRequestSummary & {
 const TABS: {
   value: TabValue;
   label: string;
-  matches: (status: RentalRequestStatus) => boolean;
+  matches: (request: QueueItem) => boolean;
 }[] = [
-  { value: "Pending", label: "Chờ xử lý", matches: (status) => status === "Pending" },
+  {
+    value: "Pending",
+    label: "Chờ xử lý",
+    matches: (request) =>
+      request.nextAction === "APPROVE_REQUEST" || request.nextAction === "REPROPOSE_UNIT",
+  },
   {
     value: "Approved",
     label: "Đã duyệt",
-    matches: (status) => status === "Approved" || status === "Converted",
+    matches: (request) =>
+      (request.status === "Approved" || request.status === "Converted") &&
+      request.nextAction !== "REPROPOSE_UNIT",
   },
-  { value: "Rejected", label: "Từ chối", matches: (status) => status === "Rejected" },
-  { value: "Expired", label: "Hết hạn", matches: (status) => status === "Expired" },
+  { value: "Rejected", label: "Từ chối", matches: (request) => request.status === "Rejected" },
+  { value: "Expired", label: "Hết hạn", matches: (request) => request.status === "Expired" },
 ];
 
 const STATUS_LABEL: Record<RentalRequestStatus, string> = {
@@ -161,7 +168,7 @@ export function RentalRequestQueuePage({ navigate }: { navigate: Navigate }) {
   function countsByTab() {
     return TABS.reduce<Record<TabValue, number>>(
       (counts, tab) => {
-        counts[tab.value] = items.filter((item) => tab.matches(item.status)).length;
+        counts[tab.value] = items.filter((item) => tab.matches(item)).length;
         return counts;
       },
       { Pending: 0, Approved: 0, Rejected: 0, Expired: 0 },
@@ -171,7 +178,7 @@ export function RentalRequestQueuePage({ navigate }: { navigate: Navigate }) {
   const counts = countsByTab();
   const activeTab = TABS.find((tab) => tab.value === statusFilter) ?? TABS[0];
   const list = items
-    .filter((request) => activeTab.matches(request.status))
+    .filter((request) => activeTab.matches(request))
     .filter((request) => {
       if (!search.trim()) return true;
       const query = search.trim().toLowerCase();
