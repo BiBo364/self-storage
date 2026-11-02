@@ -6,6 +6,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +35,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import vn.lemar.selfstorage.notification.application.NotificationService;
+import vn.lemar.selfstorage.payment.application.PaymentService;
+import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationOutcome;
+import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationRequest;
+import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
 
 /**
  * Lớp đối soát thủ công: ops tra portal VNPay rồi nhập kết quả cho giao dịch Pending.
@@ -55,6 +65,9 @@ class ManualReconciliationIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private PaymentService paymentService;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -117,8 +130,8 @@ class ManualReconciliationIntegrationTest {
 
         mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
                         {"outcome":"SUCCESS","note":"portal: vnp_TransactionNo 14777001",
-                         "paidAt":"2026-10-30T10:00:00Z","gatewayTransactionNo":"14777001"}
-                        """))
+                         "paidAt":"%s","gatewayTransactionNo":"14777001"}
+                        """.formatted(Instant.now())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.txnRef").value(txnRef))
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
@@ -130,6 +143,102 @@ class ManualReconciliationIntegrationTest {
         assertThat(statusOf("storage_units", unitId)).isEqualTo("Reserved");
         assertThat(jdbc.queryForList("SELECT action FROM audit_logs ORDER BY action", String.class))
                 .containsExactly("PAYMENT_SUCCEEDED", "RENTAL_ORDER_DEPOSITED", "STORAGE_UNIT_RESERVED");
+    }
+
+    @Test
+    void manualSuccessWithoutPaidAtIsRejected() throws Exception {
+        String txnRef = createPendingPayment("INV-MANUAL-NO-PAIDAT");
+
+        mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
+                        {"outcome":"SUCCESS","note":"portal: paid",
+                         "gatewayTransactionNo":"GW-NO-PAIDAT"}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("paidAt")));
+
+        assertThat(paymentStatus(txnRef)).isEqualTo("Pending");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Integer.class)).isZero();
+    }
+
+    @Test
+    void manualSuccessWithoutGatewayTransactionNoIsRejected() throws Exception {
+        String txnRef = createPendingPayment("INV-MANUAL-NO-GATEWAY");
+
+        mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
+                        {"outcome":"SUCCESS","note":"portal: paid",
+                         "paidAt":"%s"}
+                        """.formatted(Instant.now())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("gatewayTransactionNo")));
+
+        assertThat(paymentStatus(txnRef)).isEqualTo("Pending");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Integer.class)).isZero();
+    }
+
+    @Test
+    void invoiceWithExistingSuccessfulPaymentIsAConflict() throws Exception {
+        String txnRef = createPendingPayment("INV-MANUAL-DOUBLE");
+        jdbc.update("INSERT INTO payment_transactions"
+                + " (invoice_id, vnp_txn_ref, amount, direction, status, paid_at)"
+                + " VALUES (?, 'INV-MANUAL-OLD', 10000.00, 'PAY', 'Success', now())", invoiceId);
+
+        mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
+                        {"outcome":"SUCCESS","note":"portal: paid",
+                         "paidAt":"%s","gatewayTransactionNo":"GW-NEW"}
+                        """.formatted(Instant.now())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("đã có giao dịch thanh toán thành công")));
+
+        assertThat(paymentStatus(txnRef)).isEqualTo("Pending");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Integer.class)).isZero();
+    }
+
+    @Test
+    void duplicateGatewayTransactionNoIsAConflict() throws Exception {
+        String txnRef = createPendingPayment("INV-MANUAL-DUP");
+        jdbc.update("INSERT INTO payment_transactions"
+                + " (invoice_id, vnp_txn_ref, amount, direction, status, gateway_transaction_no)"
+                + " VALUES (?, 'INV-MANUAL-DUP-OTHER', 10000.00, 'PAY', 'Pending', 'GW-DUP')",
+                invoiceId);
+
+        mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
+                        {"outcome":"SUCCESS","note":"portal: paid",
+                         "paidAt":"%s","gatewayTransactionNo":"GW-DUP"}
+                        """.formatted(Instant.now())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("đã được dùng cho giao dịch khác")));
+
+        assertThat(paymentStatus(txnRef)).isEqualTo("Pending");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Integer.class)).isZero();
+    }
+
+    @Test
+    void concurrentManualSuccessesOnSameInvoiceOnlyOneWins() throws Exception {
+        String firstRef = createPendingPayment("INV-MANUAL-RACE-A");
+        String secondRef = createPendingPayment("INV-MANUAL-RACE-B");
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<String> first = pool.submit(() -> reconcile(firstRef, ready, start));
+            Future<String> second = pool.submit(() -> reconcile(secondRef, ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder("OK", "CONFLICT");
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment_transactions"
+                + " WHERE invoice_id = ? AND direction = 'PAY' AND status = 'Success'",
+                Integer.class, invoiceId)).isEqualTo(1);
+        assertThat(statusOf("invoices", invoiceId)).isEqualTo("Paid");
     }
 
     @Test
@@ -200,6 +309,25 @@ class ManualReconciliationIntegrationTest {
                 .andExpect(status().isBadRequest());
 
         assertThat(paymentStatus(txnRef)).isEqualTo("Pending");
+    }
+
+    private String reconcile(String txnRef, CountDownLatch ready, CountDownLatch start) {
+        ready.countDown();
+        try {
+            if (!start.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("concurrent reconcile start timed out");
+            }
+            paymentService.reconcileManually(txnRef,
+                    new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                            "concurrent manual", Instant.now(), "GW-" + txnRef),
+                    ADMIN_EMAIL);
+            return "OK";
+        } catch (ManualReconciliationConflictException e) {
+            return "CONFLICT";
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 
     private String createPendingPayment(String txnRef) {

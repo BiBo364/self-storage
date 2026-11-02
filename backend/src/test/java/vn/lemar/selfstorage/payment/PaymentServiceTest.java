@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import vn.lemar.selfstorage.payment.application.PaymentGateway;
@@ -31,9 +32,11 @@ import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationRequest;
 import vn.lemar.selfstorage.payment.application.dto.PaymentRequest;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationNotFoundException;
+import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationValidationException;
 import vn.lemar.selfstorage.payment.application.event.PaymentFailed;
 import vn.lemar.selfstorage.payment.application.event.PaymentSucceeded;
 import vn.lemar.selfstorage.payment.config.VnPayProperties;
+import vn.lemar.selfstorage.payment.domain.PaymentDirection;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
 import vn.lemar.selfstorage.payment.repository.PaymentTransactionRepository;
@@ -252,7 +255,7 @@ class PaymentServiceTest {
     }
     @Test
     void manualSuccessMarksTransactionAndPublishesEvent() {
-        Instant paidAt = Instant.parse("2026-10-30T10:00:00Z");
+        Instant paidAt = Instant.now();
 
         var response = service.reconcileManually(TXN_REF,
                 new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
@@ -263,9 +266,96 @@ class PaymentServiceTest {
         assertThat(transaction.getPaidAt()).isEqualTo(paidAt);
         assertThat(response.txnRef()).isEqualTo(TXN_REF);
         assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
-        verify(events).publishEvent(any(PaymentSucceeded.class));
+        ArgumentCaptor<PaymentSucceeded> event = ArgumentCaptor.forClass(PaymentSucceeded.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().amount()).isEqualByComparingTo(transaction.getAmount());
         verify(audit).record(argThat(entry -> entry.reason() != null
                 && entry.reason().contains("admin@lemar.vn")));
+    }
+
+    @Test
+    void manualSuccessRequiresPaidAt() {
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", null, "GW-NO-PAIDAT"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationValidationException.class)
+                .hasMessageContaining("paidAt");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessRequiresGatewayTransactionNo() {
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "  "), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationValidationException.class)
+                .hasMessageContaining("gatewayTransactionNo");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessRejectsFuturePaidAt() {
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now().plusSeconds(60), "GW-FUTURE"),
+                "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationValidationException.class)
+                .hasMessageContaining("tương lai");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessRejectsPaidAtBeforeTransactionCreation() {
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now().minusSeconds(60), "GW-PAST"),
+                "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationValidationException.class)
+                .hasMessageContaining("trước thời điểm tạo giao dịch");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessRejectsInvoiceThatAlreadyHasSuccessfulPayment() {
+        when(repository.existsByInvoiceIdAndDirectionAndStatus(
+                7L, PaymentDirection.PAY, PaymentStatus.SUCCESS)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "GW-NEW"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationConflictException.class)
+                .hasMessageContaining("đã có giao dịch thanh toán thành công");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessRejectsDuplicateGatewayTransactionNo() {
+        when(repository.existsByGatewayTransactionNo("GW-DUP")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "GW-DUP"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationConflictException.class)
+                .hasMessageContaining("đã được dùng cho giao dịch khác");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
     }
 
     @Test

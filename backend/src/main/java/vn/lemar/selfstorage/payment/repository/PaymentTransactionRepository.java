@@ -6,6 +6,8 @@ import java.util.Collection;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import vn.lemar.selfstorage.payment.domain.PaymentDirection;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
@@ -36,6 +38,16 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     /** Đã có giao dịch thu tiền thành công cho hoá đơn này chưa — chặn mở phiên thứ hai. */
     boolean existsByInvoiceIdAndDirectionAndStatus(
             Long invoiceId, PaymentDirection direction, PaymentStatus status);
+
+    /** Mã giao dịch cổng đã được ghi cho giao dịch khác chưa — chặn đối soát thủ công trùng. */
+    boolean existsByGatewayTransactionNo(String gatewayTransactionNo);
+
+    /**
+     * Khóa theo invoice trong transaction hiện tại. Hai manual request trên hai transaction khác
+     * nhau của cùng invoice phải serialize trước khi kiểm PAY/Success; khóa row đơn lẻ không đủ.
+     */
+    @Query(value = "SELECT pg_advisory_xact_lock(:invoiceId)", nativeQuery = true)
+    void lockInvoiceForPayment(@Param("invoiceId") Long invoiceId);
 
     /** Phiên Pending còn hạn của invoice — dùng để dựng lại URL khi cache mất. */
     Optional<PaymentTransaction> findFirstByInvoiceIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(

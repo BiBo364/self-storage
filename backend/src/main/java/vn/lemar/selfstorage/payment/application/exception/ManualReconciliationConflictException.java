@@ -12,6 +12,11 @@ public class ManualReconciliationConflictException extends RuntimeException {
         this.status = status;
     }
 
+    public ManualReconciliationConflictException(String message) {
+        super(message);
+        this.status = null;
+    }
+
     public PaymentStatus status() {
         return status;
     }

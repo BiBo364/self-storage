@@ -36,13 +36,16 @@ public class AdminPaymentReconciliationController {
 
     @Operation(summary = "Chốt thủ công giao dịch thanh toán Pending",
             description = "ADMIN nhập kết quả tra cứu portal VNPay. Chỉ giao dịch `Pending`; ghi "
-                    + "audit, phát event như IPN. Giao dịch đã chốt trả 409.")
+                    + "audit, phát event như IPN. Giao dịch đã chốt, invoice đã có giao dịch "
+                    + "`PAY/Success`, hoặc `gatewayTransactionNo` trùng trả 409.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Đã chốt giao dịch"),
-            @ApiResponse(responseCode = "400", description = "Thiếu/sai outcome hoặc note"),
+            @ApiResponse(responseCode = "400", description = "Thiếu/sai outcome, note, hoặc "
+                    + "paidAt/gatewayTransactionNo khi SUCCESS"),
             @ApiResponse(responseCode = "403", description = "Không phải ADMIN"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy giao dịch"),
-            @ApiResponse(responseCode = "409", description = "Giao dịch đã chốt trước đó")
+            @ApiResponse(responseCode = "409", description = "Giao dịch đã chốt, invoice đã có "
+                    + "PAY/Success, hoặc gatewayTransactionNo trùng")
     })
     @PostMapping("/{txnRef}/reconcile")
     public ResponseEntity<ApiEnvelope<ManualReconciliationResponse>> reconcile(

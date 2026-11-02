@@ -10,8 +10,9 @@ import java.time.Instant;
  *
  * @param outcome            {@code SUCCESS} hoặc {@code FAILED}
  * @param note               bằng chứng / ghi chú của người đối soát, bắt buộc
- * @param paidAt             thời điểm trả theo portal; bỏ trống thì lấy thời điểm nhập
- * @param gatewayTransactionNo mã giao dịch VNPay ({@code vnp_TransactionNo}) nếu có
+ * @param paidAt             thời điểm trả theo portal; bắt buộc khi {@code outcome=SUCCESS}
+ * @param gatewayTransactionNo mã giao dịch VNPay ({@code vnp_TransactionNo}); bắt buộc khi
+ *                             {@code outcome=SUCCESS}, không được trùng giao dịch khác
  */
 public record ManualReconciliationRequest(
         @NotNull ManualReconciliationOutcome outcome,

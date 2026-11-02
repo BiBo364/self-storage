@@ -101,8 +101,12 @@ Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`
 
 - **Endpoint:** `POST /api/admin/payments/{txnRef}/reconcile`; quyền `ADMIN`; contract chi tiết ở
   [routes/payment/manual-reconcile.md](routes/payment/manual-reconcile.md).
-- **Chỉ giao dịch `Pending`.** Row bị khoá `PESSIMISTIC_WRITE`; giao dịch đã `Success`/`Failed`
-  trả `409`, không ghi thêm.
+- **Chỉ giao dịch `Pending`.** Row bị khoá `PESSIMISTIC_WRITE`; invoice được khoá thêm bằng
+  advisory lock để hai manual request cùng invoice serialize. Giao dịch đã `Success`/`Failed`,
+  invoice đã có `PAY/Success`, hoặc `gatewayTransactionNo` trùng giao dịch khác trả `409`, không
+  ghi thêm. `SUCCESS` bắt buộc `paidAt` (không tương lai, không trước `createdAt`) và
+  `gatewayTransactionNo`; thiếu/sai trả `400`. Amount lấy từ `PaymentTransaction`, không nhận từ
+  request.
 - **Ghi như IPN:** `markSucceeded`/`markFailed`, audit `PAYMENT_SUCCEEDED`/`PAYMENT_FAILED`, phát
   `PaymentSucceeded`/`PaymentFailed`; listener booking cập nhật invoice/order/unit.
 - **Quy trình ops:** lọc `PaymentTransaction(Pending)` quá 15'; tra portal VNPay theo `vnp_TxnRef`;

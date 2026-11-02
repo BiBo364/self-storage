@@ -28,8 +28,10 @@ import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationResponse
 import vn.lemar.selfstorage.payment.application.dto.PaymentRequest;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationNotFoundException;
+import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationValidationException;
 import vn.lemar.selfstorage.payment.application.event.PaymentFailed;
 import vn.lemar.selfstorage.payment.application.event.PaymentSucceeded;
+import vn.lemar.selfstorage.payment.domain.PaymentDirection;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.config.VnPayProperties;
 import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
@@ -182,8 +184,28 @@ public class PaymentService {
 
         String responsePayload = manualPayload(request, actorEmail);
         if (request.outcome() == ManualReconciliationOutcome.SUCCESS) {
-            Instant paidAt = request.paidAt() == null ? Instant.now() : request.paidAt();
-            applySuccess(transaction, request.gatewayTransactionNo(), paidAt,
+            if (request.paidAt() == null) {
+                throw new ManualReconciliationValidationException(
+                        "paidAt bắt buộc khi outcome=SUCCESS");
+            }
+            if (request.paidAt().isAfter(Instant.now())) {
+                throw new ManualReconciliationValidationException(
+                        "paidAt không được ở tương lai");
+            }
+            if (request.paidAt().isBefore(transaction.getCreatedAt())) {
+                throw new ManualReconciliationValidationException(
+                        "paidAt không được trước thời điểm tạo giao dịch");
+            }
+            String gatewayTransactionNo = request.gatewayTransactionNo();
+            if (gatewayTransactionNo == null || gatewayTransactionNo.isBlank()) {
+                throw new ManualReconciliationValidationException(
+                        "gatewayTransactionNo bắt buộc khi outcome=SUCCESS");
+            }
+            gatewayTransactionNo = gatewayTransactionNo.trim();
+            repository.lockInvoiceForPayment(transaction.getInvoiceId());
+            ensureInvoiceHasNoSuccessfulPayment(transaction);
+            ensureGatewayTransactionNoIsUnused(gatewayTransactionNo);
+            applySuccess(transaction, gatewayTransactionNo, request.paidAt(),
                     responsePayload, actorEmail);
         } else {
             applyFailure(transaction, "manual: " + request.note(), responsePayload);
@@ -199,7 +221,7 @@ public class PaymentService {
         payload.put("note", request.note());
         payload.put("actor", actorEmail == null ? "unknown" : actorEmail);
         if (request.gatewayTransactionNo() != null && !request.gatewayTransactionNo().isBlank()) {
-            payload.put("gatewayTransactionNo", request.gatewayTransactionNo());
+            payload.put("gatewayTransactionNo", request.gatewayTransactionNo().trim());
         }
         return toJson(payload);
     }
@@ -217,6 +239,28 @@ public class PaymentService {
                 null));
         events.publishEvent(new PaymentSucceeded(transaction.getInvoiceId(),
                 transaction.getVnpTxnRef(), transaction.getAmount(), transaction.getPaidAt()));
+    }
+
+    /**
+     * Một invoice chỉ được có một giao dịch thu tiền thành công. Các phiên Pending cũ vẫn còn sau
+     * khi invoice đã Paid; ops không được chốt thêm một phiên nữa vì sẽ ghi nhận thanh toán lần hai.
+     */
+    private void ensureInvoiceHasNoSuccessfulPayment(PaymentTransaction transaction) {
+        if (repository.existsByInvoiceIdAndDirectionAndStatus(transaction.getInvoiceId(),
+                PaymentDirection.PAY, PaymentStatus.SUCCESS)) {
+            throw new ManualReconciliationConflictException(
+                    "Hóa đơn " + transaction.getInvoiceId()
+                            + " đã có giao dịch thanh toán thành công, không chốt thêm");
+        }
+    }
+
+    /** Unique constraint bảo vệ DB, nhưng trả 409 thay vì để lỗi ràng buộc thành 500. */
+    private void ensureGatewayTransactionNoIsUnused(String gatewayTransactionNo) {
+        if (gatewayTransactionNo != null && !gatewayTransactionNo.isBlank()
+                && repository.existsByGatewayTransactionNo(gatewayTransactionNo)) {
+            throw new ManualReconciliationConflictException(
+                    "gatewayTransactionNo đã được dùng cho giao dịch khác");
+        }
     }
 
     private void applyFailure(PaymentTransaction transaction, String reason, String responsePayload) {

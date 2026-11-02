@@ -20,26 +20,35 @@ còn `Pending`. Endpoint không sửa DB tay; nó khoá row, ghi audit và phát
 
 - `outcome`: `SUCCESS` hoặc `FAILED`.
 - `note`: bằng chứng/ghi chú, bắt buộc.
-- `paidAt`: thời điểm trả theo portal; bỏ trống thì lấy thời điểm nhập.
-- `gatewayTransactionNo`: mã giao dịch VNPay nếu có.
+- `paidAt`: thời điểm trả theo portal; bắt buộc khi `outcome=SUCCESS`, không được ở tương lai và
+  không được trước `PaymentTransaction.createdAt`.
+- `gatewayTransactionNo`: mã giao dịch VNPay; bắt buộc khi `outcome=SUCCESS`, không được trùng giao
+  dịch khác.
+- `amount` không có trong request: hệ thống dùng `PaymentTransaction.amount`, không nhận từ người
+  nhập.
 
 ## Hành vi
 
 1. Tìm giao dịch theo `txnRef`; không có → `404`.
-2. Khoá row; chỉ nhận `Pending`; đã `Success`/`Failed` → `409`, không ghi thêm.
-3. `SUCCESS` → `markSucceeded`, audit `PAYMENT_SUCCEEDED`, phát `PaymentSucceeded`.
-4. `FAILED` → `markFailed`, audit `PAYMENT_FAILED`, phát `PaymentFailed`.
-5. Listener booking cập nhật invoice/order/unit như IPN; late success vẫn đi nhánh invoice
+2. Khoá row giao dịch, khoá invoice bằng advisory lock; chỉ nhận `Pending`; đã `Success`/`Failed`
+   → `409`, không ghi thêm.
+3. `SUCCESS`: `paidAt` bắt buộc, không tương lai, không trước `PaymentTransaction.createdAt`;
+   thiếu/sai → `400`.
+4. `SUCCESS`: `gatewayTransactionNo` bắt buộc; trùng giao dịch khác → `409`.
+5. `SUCCESS`: invoice chưa có giao dịch `PAY/Success`; nếu đã có → `409`, không ghi thêm.
+6. `SUCCESS` → `markSucceeded`, audit `PAYMENT_SUCCEEDED`, phát `PaymentSucceeded`.
+7. `FAILED` → `markFailed`, audit `PAYMENT_FAILED`, phát `PaymentFailed`.
+8. Listener booking cập nhật invoice/order/unit như IPN; late success vẫn đi nhánh invoice
    `Canceled`/`Expired` để xử lý tay/hoàn tiền.
 
 ## Lỗi
 
 | Status | Khi nào |
 |---|---|
-| 400 | thiếu/sai `outcome`, `note`, JSON sai |
+| 400 | thiếu/sai `outcome`, `note`, `paidAt`/`gatewayTransactionNo` khi `SUCCESS`, hoặc JSON sai |
 | 403 | không phải ADMIN |
 | 404 | không có giao dịch với `txnRef` |
-| 409 | giao dịch đã chốt trước đó |
+| 409 | giao dịch đã chốt, invoice đã có `PAY/Success`, hoặc `gatewayTransactionNo` trùng |
 
 ## Quy trình ops
 
