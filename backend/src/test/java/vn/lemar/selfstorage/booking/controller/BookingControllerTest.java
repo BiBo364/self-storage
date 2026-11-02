@@ -210,7 +210,8 @@ class BookingControllerTest {
     void detailReturnsOrderForFacilityManager() throws Exception {
         authenticate(FM, "FM");
         when(proposalQueryService.orderForFacilityManager(1L)).thenReturn(new FmRentalOrderResponse(1L, "Pending",
-                null, null, null, 1L, new FmRentalOrderResponse.Customer(6L, "Khách", CUSTOMER, "0900000000"),
+                null, null, null, 1L, 10L, "Converted", false,
+                new FmRentalOrderResponse.Customer(6L, "Khách", CUSTOMER, "0900000000"),
                 new FmRentalOrderResponse.Requested(1L, "Small", LocalDate.of(2026, 10, 20), 3), 1, 3,
                 List.of(new FmRentalOrderResponse.Proposal(1L, 2L, "A-01", "Rejected", "Không hợp", Instant.now())),
                 List.of(new FmRentalOrderResponse.AvailableUnit(2L, "A-01", null, new BigDecimal("500000.00"), true))));

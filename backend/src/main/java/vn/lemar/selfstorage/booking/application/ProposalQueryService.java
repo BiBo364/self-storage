@@ -58,8 +58,9 @@ public class ProposalQueryService {
                 .filter(proposal -> ProposalStatus.REJECTED.dbValue().equals(proposal.status()))
                 .count();
         return new FmRentalOrderResponse(order.id(), order.status(), order.cancelReason(), order.expiresAt(),
-                order.unitId(), order.facilityId(), order.customer(), order.requested(), rejections,
-                maxRejection(), proposals,
+                order.unitId(), order.facilityId(), order.requestId(), order.requestStatus(),
+                order.needsReproposal(), order.customer(), order.requested(), rejections, maxRejection(),
+                proposals,
                 readRepository.findAvailableUnits(orderId, order.facilityId(), order.requested().unitTypeId()));
     }
 

@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -32,6 +33,7 @@ import vn.lemar.selfstorage.booking.application.exception.StorageUnitUnavailable
 import vn.lemar.selfstorage.booking.domain.RentalRequest;
 import vn.lemar.selfstorage.booking.domain.RentalRequestRejectReason;
 import vn.lemar.selfstorage.booking.domain.RentalRequestStatus;
+import vn.lemar.selfstorage.booking.repository.BookingReadRepository;
 import vn.lemar.selfstorage.booking.repository.ConversionGuardRepository;
 import vn.lemar.selfstorage.booking.repository.RentalRequestRepository;
 import vn.lemar.selfstorage.facility.application.FacilityAccess;
@@ -69,6 +71,7 @@ public class RentalRequestService {
     private static final DateTimeFormatter VI_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final RentalRequestRepository repository;
+    private final BookingReadRepository bookingReadRepository;
     private final FacilityAccess facilityAccess;
     private final StorageUnitQuery storageUnitQuery;
     private final Access access;
@@ -83,7 +86,9 @@ public class RentalRequestService {
     private final RentalRequestConversionService conversionService;
     private final ConversionGuardRepository conversionGuard;
 
-    public RentalRequestService(RentalRequestRepository repository, FacilityAccess facilityAccess,
+    public RentalRequestService(RentalRequestRepository repository,
+                                BookingReadRepository bookingReadRepository,
+                                FacilityAccess facilityAccess,
                                 StorageUnitQuery storageUnitQuery, Access access,
                                 AccountQueryService accountQueryService,
                                 NotificationService notificationService,
@@ -94,6 +99,7 @@ public class RentalRequestService {
                                 RentalRequestConversionService conversionService,
                                 ConversionGuardRepository conversionGuard) {
         this.repository = repository;
+        this.bookingReadRepository = bookingReadRepository;
         this.facilityAccess = facilityAccess;
         this.storageUnitQuery = storageUnitQuery;
         this.access = access;
@@ -148,9 +154,17 @@ public class RentalRequestService {
         Page<RentalRequest> result = status == null
                 ? repository.findByFacilityId(facilityId, pageable)
                 : repository.findByFacilityIdAndStatus(facilityId, status, pageable);
-        return new RentalRequestPageResponse(
-                result.getContent().stream().map(RentalRequestSummaryResponse::from).toList(), page,
-                size, result.getTotalElements());
+        List<RentalRequest> requests = result.getContent();
+        Map<Long, BookingReadRepository.QueueEnrichment> enrichments = requests.isEmpty()
+                ? Map.of()
+                : bookingReadRepository.findQueueEnrichments(
+                        requests.stream().map(RentalRequest::getId).toList());
+        int maxRejection = requests.isEmpty()
+                ? 0 : pricingQuery.intPolicy(ProposalService.POLICY_MAX_REJECTION);
+        return new RentalRequestPageResponse(requests.stream()
+                .map(request -> RentalRequestSummaryResponse.from(request,
+                        enrichments.get(request.getId()), maxRejection))
+                .toList(), page, size, result.getTotalElements());
     }
 
     /**

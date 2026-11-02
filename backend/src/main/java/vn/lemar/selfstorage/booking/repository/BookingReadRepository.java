@@ -4,9 +4,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Repository;
 import vn.lemar.selfstorage.booking.application.InvoiceListView;
 import vn.lemar.selfstorage.booking.application.dto.CustomerProposalResponse;
@@ -68,16 +72,50 @@ public class BookingReadRepository {
                 customerId);
     }
 
+    /**
+     * Trạng thái đơn/proposal cho từng request trong hàng đợi FM — một query cho cả trang,
+     * không N+1. Request chưa convert không có entry trong map.
+     */
+    public Map<Long, QueueEnrichment> findQueueEnrichments(List<Long> requestIds) {
+        if (requestIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", Collections.nCopies(requestIds.size(), "?"));
+        String sql = "select o.request_id, o.id as order_id, o.status as order_status, o.needs_reproposal, "
+                + "p.id as last_proposal_id, u.code as last_unit_code, p.status as last_proposal_status, "
+                + "p.note as last_note, p.created_at as last_created_at, "
+                + "(select count(*) from proposal_feedbacks x where x.order_id = o.id "
+                + "and x.status = 'Rejected') as rejection_count, "
+                + "(select count(*) from proposal_feedbacks x where x.order_id = o.id "
+                + "and x.status = 'Pending') as pending_count "
+                + "from rental_orders o "
+                + "left join lateral (select p.id, p.unit_id, p.status, p.note, p.created_at "
+                + "from proposal_feedbacks p where p.order_id = o.id "
+                + "order by p.created_at desc, p.id desc limit 1) p on true "
+                + "left join storage_units u on u.id = p.unit_id "
+                + "where o.request_id in (" + placeholders + ")";
+        Map<Long, QueueEnrichment> result = new HashMap<>();
+        jdbc.query(sql, (RowCallbackHandler) rs -> result.put(rs.getLong("request_id"), new QueueEnrichment(
+                rs.getLong("request_id"), rs.getLong("order_id"), rs.getString("order_status"),
+                rs.getBoolean("needs_reproposal"), (Long) rs.getObject("last_proposal_id"),
+                rs.getString("last_unit_code"), rs.getString("last_proposal_status"), rs.getString("last_note"),
+                instant(rs, "last_created_at"), rs.getLong("rejection_count"), rs.getLong("pending_count"))),
+                requestIds.toArray());
+        return result;
+    }
+
     /** Đơn + thông tin form yêu cầu; rỗng nếu đơn không tồn tại. */
     public Optional<OrderRow> findOrder(Long orderId) {
         String sql = "select o.id, o.status, o.cancel_reason, o.expires_at, o.unit_id, o.customer_id, "
-                + "r.facility_id, r.customer_name, r.normalized_customer_email, r.customer_phone, "
-                + "r.unit_type_id, t.name as type_name, r.start_date, r.period "
+                + "o.needs_reproposal, r.id as request_id, r.status as request_status, r.facility_id, r.customer_name, "
+                + "r.normalized_customer_email, r.customer_phone, r.unit_type_id, t.name as type_name, "
+                + "r.start_date, r.period "
                 + "from rental_orders o join rental_requests r on r.id = o.request_id "
                 + "join unit_types t on t.id = r.unit_type_id where o.id = ?";
         return jdbc.query(sql, (rs, rowNum) -> new OrderRow(
                 rs.getLong("id"), rs.getString("status"), rs.getString("cancel_reason"), instant(rs, "expires_at"),
                 (Long) rs.getObject("unit_id"), rs.getLong("customer_id"), rs.getLong("facility_id"),
+                rs.getLong("request_id"), rs.getString("request_status"), rs.getBoolean("needs_reproposal"),
                 new FmRentalOrderResponse.Customer(rs.getLong("customer_id"), rs.getString("customer_name"),
                         rs.getString("normalized_customer_email"), rs.getString("customer_phone")),
                 new FmRentalOrderResponse.Requested(rs.getLong("unit_type_id"), rs.getString("type_name"),
@@ -113,9 +151,17 @@ public class BookingReadRepository {
         return value == null ? null : value.toInstant();
     }
 
-    /** Một dòng đơn thuê đã join form yêu cầu. */
+    /** Một dòng đơn thuê đã join form yêu cầu và trạng thái request. */
     public record OrderRow(Long id, String status, String cancelReason, Instant expiresAt, Long unitId,
-                           Long customerId, Long facilityId, FmRentalOrderResponse.Customer customer,
+                           Long customerId, Long facilityId, Long requestId, String requestStatus,
+                           boolean needsReproposal, FmRentalOrderResponse.Customer customer,
                            FmRentalOrderResponse.Requested requested) {
+    }
+
+    /** Trạng thái đơn/proposal gắn với một request đã convert. */
+    public record QueueEnrichment(Long requestId, Long orderId, String orderStatus, boolean needsReproposal,
+                                  Long lastProposalId, String lastProposalUnitCode, String lastProposalStatus,
+                                  String lastProposalNote, Instant lastProposalCreatedAt, long rejectionCount,
+                                  long pendingProposalCount) {
     }
 }
