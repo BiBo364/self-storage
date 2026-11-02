@@ -174,7 +174,7 @@ public class PaymentService {
         } else {
             String reason = "vnp_ResponseCode=" + params.get("vnp_ResponseCode")
                     + ", vnp_TransactionStatus=" + params.get("vnp_TransactionStatus");
-            applyFailure(transaction, reason, responsePayload);
+            applyFailure(transaction, reason, responsePayload, reason);
         }
         return IpnResponse.success();
     }
@@ -236,7 +236,8 @@ public class PaymentService {
                         "Dữ liệu giao dịch xung đột, không chốt được");
             }
         } else {
-            applyFailure(transaction, "manual: " + request.note(), responsePayload);
+            applyFailure(transaction, "manual: " + request.note(), responsePayload,
+                    actorEmail == null ? "manual reconcile" : "manual reconcile by " + actorEmail);
         }
         return new ManualReconciliationResponse(transaction.getVnpTxnRef(), transaction.getStatus(),
                 transaction.getGatewayTransactionNo(), transaction.getPaidAt());
@@ -298,11 +299,12 @@ public class PaymentService {
         }
     }
 
-    private void applyFailure(PaymentTransaction transaction, String reason, String responsePayload) {
+    private void applyFailure(PaymentTransaction transaction, String reason, String responsePayload,
+            String auditReason) {
         transaction.markFailed(reason, responsePayload);
         audit.record(new AuditEntry(AuditAction.PAYMENT_FAILED,
                 AuditEntityType.PAYMENT_TRANSACTION, String.valueOf(transaction.getId()),
-                Map.of("status", "Pending"), Map.of("status", "Failed"), reason, null));
+                Map.of("status", "Pending"), Map.of("status", "Failed"), auditReason, null));
         events.publishEvent(new PaymentFailed(transaction.getInvoiceId(),
                 transaction.getVnpTxnRef(), transaction.getAmount(), reason));
     }

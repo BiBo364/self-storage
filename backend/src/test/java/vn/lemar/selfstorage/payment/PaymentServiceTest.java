@@ -439,6 +439,18 @@ class PaymentServiceTest {
     }
 
     @Test
+    void manualFailureAuditRecordsTheAdminActor() {
+        service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.FAILED,
+                        "portal says failed", null, null), "admin@lemar.vn");
+
+        ArgumentCaptor<AuditEntry> auditEntry = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(audit).record(auditEntry.capture());
+        assertThat(auditEntry.getValue().action()).isEqualTo(AuditAction.PAYMENT_FAILED);
+        assertThat(auditEntry.getValue().reason()).contains("admin@lemar.vn");
+    }
+
+    @Test
     void manualReconcileRefusesAlreadySettledTransaction() {
         service.reconcileManually(TXN_REF,
                 new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,

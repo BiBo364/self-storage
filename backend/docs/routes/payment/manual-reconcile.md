@@ -41,7 +41,7 @@ còn `Pending`. Endpoint không sửa DB tay; nó khoá row, ghi audit và phát
 6. `SUCCESS`: invoice đã có `PAY/Success` khác → transaction chuyển `DUPLICATE`, audit
    `PAYMENT_DUPLICATE` (ghi `gatewayTransactionNo` + `paidAt`), phát event notify FM; trả `200` với
    status `DUPLICATE`.
-7. `FAILED` → `markFailed`, audit `PAYMENT_FAILED`, phát `PaymentFailed`.
+7. `FAILED` → `markFailed`, audit `PAYMENT_FAILED` (reason ghi email admin), phát `PaymentFailed`.
 8. Listener booking cập nhật invoice/order/unit như IPN; late success vẫn đi nhánh invoice
    `Canceled`/`Expired` để xử lý tay/hoàn tiền. `DUPLICATE` không cập nhật invoice/order/unit.
 
