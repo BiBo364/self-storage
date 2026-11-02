@@ -10,6 +10,7 @@ import { Button } from "../components/ui/Button";
 import { DemoNotice } from "../components/ui/DemoNotice";
 import { DetailPanel } from "../components/ui/DetailPanel";
 import { SurfaceState } from "../components/ui/SurfaceState";
+import { UnitIllustration } from "../components/domain/UnitIllustration";
 
 type Tab = "active" | "pending";
 type LoadState = "loading" | "ready" | "error";
@@ -420,6 +421,19 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
             <SurfaceState variant="loading" title="Đang tải thông tin khoang…" />
           )}
           {detailState === "error" && <DemoNotice tone="error">{detailError}</DemoNotice>}
+          <div className="mt-4">
+            <UnitIllustration
+              unitCode={detailProposal.unitCode}
+              unitTypeName={detailProposal.unitTypeName}
+              area={detailUnitType?.area}
+              width={detailUnitType?.width}
+              depth={detailUnitType?.depth}
+              height={detailUnitType?.height}
+            />
+            <p className="mt-2 text-label text-muted">
+              Hình minh hoạ — khoang thực tế có thể khác.
+            </p>
+          </div>
           <dl className="mt-5 grid gap-2.5">
             <DetailRow label="Mã khoang" value={detailProposal.unitCode} />
             <DetailRow label="Loại khoang" value={detailProposal.unitTypeName} />
