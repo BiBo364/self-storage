@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,17 +16,45 @@ import org.springframework.web.bind.annotation.RestController;
 import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.ApiError;
 import vn.lemar.selfstorage.booking.application.DepositPaymentService;
+import vn.lemar.selfstorage.booking.application.InvoiceQueryService;
+import vn.lemar.selfstorage.booking.application.InvoiceView;
 import vn.lemar.selfstorage.booking.application.dto.StartDepositResponse;
 
-/** Khách tự mở phiên thanh toán cho hóa đơn của mình. */
+/** Khách xem và tự mở phiên thanh toán cho hóa đơn của mình. */
 @RestController
 @RequestMapping("/api/invoices")
 public class InvoicePaymentController {
 
-    private final DepositPaymentService depositPayments;
+    static final String DETAIL_MESSAGE = "Lấy hóa đơn thành công";
 
-    public InvoicePaymentController(DepositPaymentService depositPayments) {
+    private final DepositPaymentService depositPayments;
+    private final InvoiceQueryService invoiceQuery;
+
+    public InvoicePaymentController(DepositPaymentService depositPayments,
+            InvoiceQueryService invoiceQuery) {
         this.depositPayments = depositPayments;
+        this.invoiceQuery = invoiceQuery;
+    }
+
+    @Operation(summary = "Hóa đơn của tôi",
+            description = "Hóa đơn theo id, chỉ chủ hóa đơn đọc được. FE gọi lại đường này sau khi "
+                    + "cổng thanh toán redirect về để lấy trạng thái thật — return URL chỉ nói giao "
+                    + "dịch thành công hay không, trạng thái hóa đơn do IPN chốt ở server.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy hóa đơn thành công"),
+            @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
+            @ApiResponse(responseCode = "403", description = "Tài khoản không còn hoạt động"),
+            @ApiResponse(responseCode = "404",
+                    description = "Hóa đơn không tồn tại, hoặc không thuộc về người gọi",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ApiError.class),
+                            examples = @ExampleObject(value = """
+                                    {"message":"Không tìm thấy hóa đơn",
+                                    "timestamp":"2026-11-02T08:14:28.048550698Z"}""")))
+    })
+    @GetMapping("/{invoiceId}")
+    public ResponseEntity<ApiEnvelope<InvoiceView>> detail(@PathVariable Long invoiceId) {
+        return ResponseEntity.ok(ApiEnvelope.ok(DETAIL_MESSAGE, invoiceQuery.findOwn(invoiceId)));
     }
 
     @Operation(summary = "Mở phiên thanh toán hóa đơn cọc",

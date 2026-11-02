@@ -32,6 +32,7 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | POST | `/api/rental-orders/{orderId}/proposals` | Bearer + `ACCOUNT_ACTIVE`; `proposal_feedback.repropose` (+ `.override`) + facility scope | Đề xuất lại khoang cho đơn | [routes/booking/rental-order-proposals-create.md](routes/booking/rental-order-proposals-create.md) |
 | GET | `/api/payments/vnpay/ipn` | Public (chữ ký VNPay) | VNPay xác nhận thanh toán — nguồn xác nhận duy nhất | [routes/payment/vnpay-ipn.md](routes/payment/vnpay-ipn.md) |
 | GET | `/api/payments/vnpay/return` | Public (redirect VNPay) | Trang kết quả cho khách — không ghi dữ liệu | [routes/payment/vnpay-return.md](routes/payment/vnpay-return.md) |
+| GET | `/api/invoices/{invoiceId}` | Chủ hóa đơn | Xem hóa đơn của mình; FE đọc lại sau khi cổng thanh toán redirect về | [routes/booking/invoice-detail.md](routes/booking/invoice-detail.md) |
 | POST | `/api/invoices/{invoiceId}/pay` | Chủ hóa đơn + đã xác minh email | Mở phiên thanh toán hóa đơn cọc (Flow 1.4) | [routes/booking/invoice-pay.md](routes/booking/invoice-pay.md) |
 | POST | `/api/media/uploads` | Bearer + `ACCOUNT_ACTIVE` | Upload file (ảnh/PDF ≤ 10MB), trả URL dùng lại trong flow | [routes/media/upload.md](routes/media/upload.md) |
 

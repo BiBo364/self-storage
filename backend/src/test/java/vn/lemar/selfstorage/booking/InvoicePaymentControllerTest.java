@@ -8,15 +8,24 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import vn.lemar.selfstorage.booking.application.DepositPaymentService;
+import vn.lemar.selfstorage.booking.application.InvoiceQueryService;
+import vn.lemar.selfstorage.booking.application.InvoiceView;
 import vn.lemar.selfstorage.booking.controller.InvoicePaymentController;
 
-/** VNPay bắt buộc `vnp_IpAddr`, nên lấy IP khách cho đúng kể cả khi đứng sau proxy. */
+/**
+ * Hai đường của controller hóa đơn: mở phiên thanh toán (VNPay bắt buộc `vnp_IpAddr`, nên phải lấy
+ * IP khách cho đúng kể cả khi đứng sau proxy) và đọc lại hóa đơn sau redirect.
+ */
 class InvoicePaymentControllerTest {
 
     private final DepositPaymentService service = mock(DepositPaymentService.class);
-    private final InvoicePaymentController controller = new InvoicePaymentController(service);
+    private final InvoiceQueryService invoiceQuery = mock(InvoiceQueryService.class);
+    private final InvoicePaymentController controller =
+            new InvoicePaymentController(service, invoiceQuery);
     private final HttpServletRequest request = mock(HttpServletRequest.class);
 
     @Test
@@ -45,5 +54,30 @@ class InvoicePaymentControllerTest {
         controller.pay(1L, request);
 
         verify(service).startDeposit(1L, "198.51.100.4");
+    }
+
+    /** FE gọi lại đường này sau redirect, nên response phải chở trạng thái hóa đơn thật. */
+    @Test
+    void detailReturnsTheInvoiceOfTheCaller() {
+        InvoiceView view = new InvoiceView(7L, 3L, "INV-7", "Dat coc khoang A-01", null,
+                "Deposit", "Paid", new BigDecimal("10000.00"), Instant.parse("2026-11-05T00:00:00Z"));
+        when(invoiceQuery.findOwn(7L)).thenReturn(view);
+
+        assertThat(controller.detail(7L).getBody().data()).isSameAs(view);
+    }
+
+    /** Quyền sở hữu kiểm ở service; controller không được tự lọc rồi bỏ sót ca nào. */
+    @Test
+    void detailDelegatesOwnershipToTheService() {
+        when(invoiceQuery.findOwn(anyLong())).thenReturn(unpaidView());
+
+        controller.detail(9L);
+
+        verify(invoiceQuery).findOwn(9L);
+    }
+
+    private static InvoiceView unpaidView() {
+        return new InvoiceView(9L, 3L, "INV-9", "Dat coc khoang A-02", null, "Deposit", "Unpaid",
+                new BigDecimal("10000.00"), Instant.parse("2026-11-05T00:00:00Z"));
     }
 }
