@@ -21,11 +21,15 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | POST | `/api/rental-requests` | Public | Gửi yêu cầu đặt kho (form public) | [routes/booking/rental-request-create.md](routes/booking/rental-request-create.md) |
 | GET | `/api/fm/rental-requests` | Bearer + role `FM`; `rental_request.read` + facility scope | Hàng đợi yêu cầu đặt kho | [routes/booking/fm-rental-request-queue.md](routes/booking/fm-rental-request-queue.md) |
 | GET | `/api/unit-types` | Public | Loại khoang cơ sở cung cấp cho form | [routes/pricing/unit-types.md](routes/pricing/unit-types.md) |
+| GET | `/api/facilities` | Public | Catalog cơ sở đang hoạt động + loại khoang mỗi cơ sở cung cấp | [routes/facility/public-list.md](routes/facility/public-list.md) |
+| GET | `/api/fm/facility` | Bearer + role `FM` | Cơ sở FM hiện tại phụ trách | [routes/booking/fm-facility.md](routes/booking/fm-facility.md) |
+| GET | `/api/fm/storage-units` | Bearer + role `FM`; `facility.access` + facility scope | Khoang của cơ sở, lọc `status`/`unitTypeId` | [routes/booking/fm-storage-units.md](routes/booking/fm-storage-units.md) |
 | POST | `/api/fm/rental-requests/{id}/approve` | Bearer + role `FM`; `rental_request.approve` + facility scope | Duyệt yêu cầu đặt kho, gán khoang; email đã xác minh thì convert ngay (response vẫn `Approved`) | [routes/booking/fm-rental-request-approve.md](routes/booking/fm-rental-request-approve.md) |
 | POST | `/api/fm/rental-requests/{id}/reject` | Bearer + role `FM`; `rental_request.reject` + facility scope | Từ chối yêu cầu đặt kho + mail (dừng ở Rejected) | [routes/booking/fm-rental-request-reject.md](routes/booking/fm-rental-request-reject.md) |
 | PATCH | `/api/notifications/{notificationId}/read` | Chủ tài nguyên | Đánh dấu một thông báo đã đọc | [routes/notification/mark-read.md](routes/notification/mark-read.md) |
 | PATCH | `/api/notifications/read-all` | Bearer + `ACCOUNT_ACTIVE` | Đánh dấu tất cả đã đọc | [routes/notification/read-all.md](routes/notification/read-all.md) |
 | GET | `/api/proposals` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Đề xuất khoang của tôi (lọc `status`) | [routes/booking/proposals-list.md](routes/booking/proposals-list.md) |
+| GET | `/api/invoices` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Hoá đơn của tôi, mới nhất trước | [routes/booking/invoice-list.md](routes/booking/invoice-list.md) |
 | POST | `/api/proposals/{proposalId}/agree` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Đồng ý đề xuất, tạo hoá đơn đặt cọc | [routes/booking/proposal-agree.md](routes/booking/proposal-agree.md) |
 | POST | `/api/proposals/{proposalId}/reject` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Từ chối đề xuất; lần thứ `max_rejection_count` huỷ đơn | [routes/booking/proposal-reject.md](routes/booking/proposal-reject.md) |
 | GET | `/api/fm/rental-orders/{orderId}` | `FM`; `rental_order.read` + facility scope | Chi tiết đơn để đề xuất lại | [routes/booking/fm-rental-order-detail.md](routes/booking/fm-rental-order-detail.md) |
