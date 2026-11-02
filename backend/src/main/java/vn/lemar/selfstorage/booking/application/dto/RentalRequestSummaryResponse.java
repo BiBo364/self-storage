@@ -36,10 +36,6 @@ public record RentalRequestSummaryResponse(
         @Schema(description = "Ngưỡng `proposal.max_rejection_count`", example = "3") int maxRejectionCount
 ) {
 
-    public static RentalRequestSummaryResponse from(RentalRequest request) {
-        return from(request, null, 0);
-    }
-
     public static RentalRequestSummaryResponse from(RentalRequest request,
             BookingReadRepository.QueueEnrichment enrichment, int maxRejection) {
         LastProposal lastProposal = enrichment == null || enrichment.lastProposalId() == null

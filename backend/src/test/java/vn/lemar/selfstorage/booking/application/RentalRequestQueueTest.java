@@ -134,6 +134,22 @@ class RentalRequestQueueTest {
     }
 
     @Test
+    void queueMarksViewWhenOrderClosed() {
+        RentalRequest request = request(RentalRequestStatus.Converted);
+        when(facilityAccess.exists(1L)).thenReturn(true);
+        when(repository.findByFacilityIdAndStatus(eq(1L), eq(RentalRequestStatus.Converted),
+                any(PageRequest.class))).thenReturn(new PageImpl<>(List.of(request)));
+        when(bookingReadRepository.findQueueEnrichments(List.of(1L))).thenReturn(Map.of(1L,
+                new BookingReadRepository.QueueEnrichment(1L, 10L, "Canceled", false, 5L, "A-01",
+                        "Rejected", null, Instant.now(), 1, 0)));
+        when(pricingQuery.intPolicy(ProposalService.POLICY_MAX_REJECTION)).thenReturn(3);
+
+        RentalRequestPageResponse page = service.queue(1L, RentalRequestStatus.Converted, 0, 20);
+
+        assertThat(page.items().get(0).nextAction()).isEqualTo("VIEW");
+    }
+
+    @Test
     void queueMarksApproveForPendingRequestWithoutOrder() {
         RentalRequest request = request(RentalRequestStatus.Pending);
         when(facilityAccess.exists(1L)).thenReturn(true);
