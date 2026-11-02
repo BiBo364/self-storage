@@ -135,7 +135,7 @@ class MediaControllerTest {
         UUID batchId = UUID.randomUUID();
         when(mediaService.deleteBatch(1L, batchId)).thenReturn(new MediaBatchDeleteResult(2, 1));
 
-        mockMvc.perform(delete("/api/media/batch/{batchId}", batchId)
+        mockMvc.perform(delete("/api/media/uploads/batch/{batchId}", batchId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(EMAIL)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Đã huỷ batch"))
@@ -149,7 +149,7 @@ class MediaControllerTest {
         UUID batchId = UUID.randomUUID();
         when(mediaService.attachBatch(1L, batchId)).thenReturn(new MediaBatchAttachResult(2));
 
-        mockMvc.perform(post("/api/media/batch/{batchId}/attach", batchId)
+        mockMvc.perform(post("/api/media/uploads/batch/{batchId}/attach", batchId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(EMAIL)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Đã gắn batch"))

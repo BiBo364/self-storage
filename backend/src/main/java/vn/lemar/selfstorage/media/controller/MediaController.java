@@ -73,7 +73,7 @@ public class MediaController {
             @ApiResponse(responseCode = "403", description = "Batch thuộc tài khoản khác"),
             @ApiResponse(responseCode = "404", description = "Không có asset nào thuộc batch")
     })
-    @DeleteMapping("/batch/{batchId}")
+    @DeleteMapping("/uploads/batch/{batchId}")
     public ApiEnvelope<MediaBatchDeleteResult> deleteBatch(
             @PathVariable UUID batchId, Authentication authentication) {
         Long accountId = accountQueryService.requireIdByEmail(authentication.getName());
@@ -89,7 +89,7 @@ public class MediaController {
             @ApiResponse(responseCode = "404", description = "Không có asset nào thuộc batch"),
             @ApiResponse(responseCode = "409", description = "Batch đã Canceled/Deleted")
     })
-    @PostMapping("/batch/{batchId}/attach")
+    @PostMapping("/uploads/batch/{batchId}/attach")
     public ApiEnvelope<MediaBatchAttachResult> attachBatch(
             @PathVariable UUID batchId, Authentication authentication) {
         Long accountId = accountQueryService.requireIdByEmail(authentication.getName());
