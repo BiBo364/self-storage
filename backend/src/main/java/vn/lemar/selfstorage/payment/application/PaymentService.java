@@ -262,7 +262,8 @@ public class PaymentService {
                 AuditEntityType.PAYMENT_TRANSACTION, String.valueOf(transaction.getId()),
                 Map.of("status", "Pending"),
                 Map.of("status", "Success", "gatewayTransactionNo",
-                        String.valueOf(transaction.getGatewayTransactionNo())),
+                        String.valueOf(transaction.getGatewayTransactionNo()),
+                        "paidAt", String.valueOf(transaction.getPaidAt())),
                 actorEmail == null ? null : "manual reconcile by " + actorEmail,
                 null));
         events.publishEvent(new PaymentSucceeded(transaction.getInvoiceId(),
@@ -280,7 +281,8 @@ public class PaymentService {
         audit.record(new AuditEntry(AuditAction.PAYMENT_DUPLICATE,
                 AuditEntityType.PAYMENT_TRANSACTION, String.valueOf(transaction.getId()),
                 Map.of("status", "Pending"),
-                Map.of("status", "Duplicate", "gatewayTransactionNo", String.valueOf(gatewayTransactionNo)),
+                Map.of("status", "Duplicate", "gatewayTransactionNo", String.valueOf(gatewayTransactionNo),
+                        "paidAt", String.valueOf(transaction.getPaidAt())),
                 actorEmail == null ? "IPN duplicate payment" : "duplicate payment by " + actorEmail,
                 null));
         events.publishEvent(new PaymentDuplicateDetected(transaction.getInvoiceId(),

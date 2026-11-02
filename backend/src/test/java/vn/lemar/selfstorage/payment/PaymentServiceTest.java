@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import vn.lemar.selfstorage.payment.application.PaymentGateway;
+import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.audit.domain.AuditAction;
 import vn.lemar.selfstorage.payment.application.PaymentService;
@@ -274,8 +275,12 @@ class PaymentServiceTest {
         ArgumentCaptor<PaymentSucceeded> event = ArgumentCaptor.forClass(PaymentSucceeded.class);
         verify(events).publishEvent(event.capture());
         assertThat(event.getValue().amount()).isEqualByComparingTo(transaction.getAmount());
-        verify(audit).record(argThat(entry -> entry.reason() != null
-                && entry.reason().contains("admin@lemar.vn")));
+
+        ArgumentCaptor<AuditEntry> auditEntry = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(audit).record(auditEntry.capture());
+        assertThat(auditEntry.getValue().reason()).contains("admin@lemar.vn");
+        assertThat(auditEntry.getValue().newValue().toString())
+                .contains("paidAt", paidAt.toString());
     }
 
     @Test
@@ -370,12 +375,13 @@ class PaymentServiceTest {
 
     @Test
     void manualSuccessMarksDuplicateWhenInvoiceAlreadyHasSuccessfulPayment() {
+        Instant paidAt = Instant.now();
         when(repository.existsByInvoiceIdAndDirectionAndStatus(
                 7L, PaymentDirection.PAY, PaymentStatus.SUCCESS)).thenReturn(true);
 
         var response = service.reconcileManually(TXN_REF,
                 new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
-                        "portal says paid", Instant.now(), "GW-NEW"), "admin@lemar.vn");
+                        "portal says paid", paidAt, "GW-NEW"), "admin@lemar.vn");
 
         assertThat(response.status()).isEqualTo(PaymentStatus.DUPLICATE);
         assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.DUPLICATE);
@@ -383,7 +389,11 @@ class PaymentServiceTest {
         verify(events).publishEvent(event.capture());
         assertThat(event.getValue()).isInstanceOf(
                 vn.lemar.selfstorage.payment.application.event.PaymentDuplicateDetected.class);
-        verify(audit).record(argThat(entry -> entry.action() == AuditAction.PAYMENT_DUPLICATE));
+        ArgumentCaptor<AuditEntry> auditEntry = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(audit).record(auditEntry.capture());
+        assertThat(auditEntry.getValue().action()).isEqualTo(AuditAction.PAYMENT_DUPLICATE);
+        assertThat(auditEntry.getValue().newValue().toString())
+                .contains("paidAt", paidAt.toString());
     }
 
     @Test
