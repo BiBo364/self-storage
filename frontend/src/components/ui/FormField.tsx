@@ -9,6 +9,7 @@ type FieldProps = {
   icon?: ReactNode;
   suffix?: string;
   defaultValue?: string;
+  min?: string;
 };
 
 export const FIELD_GROUP = "mb-4";
@@ -27,6 +28,7 @@ export function FormField({
   icon,
   suffix,
   defaultValue,
+  min,
 }: FieldProps) {
   return (
     <div className={FIELD_GROUP}>
@@ -47,6 +49,7 @@ export function FormField({
           required={required}
           placeholder={placeholder}
           defaultValue={defaultValue}
+          min={min}
           autoComplete={name === "email" ? "email" : undefined}
           className={INPUT_ELEMENT}
         />
@@ -64,6 +67,7 @@ export function SelectField({
   value,
   onChange,
   placeholder = "Chọn một lựa chọn",
+  disabled,
 }: {
   label: string;
   name: string;
@@ -72,6 +76,7 @@ export function SelectField({
   value?: string;
   onChange?: (value: string) => void;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className={FIELD_GROUP}>
@@ -90,7 +95,8 @@ export function SelectField({
           required={required}
           value={value}
           onChange={(event) => onChange?.(event.target.value)}
-          className={`${INPUT_ELEMENT} invalid:text-muted`}
+          disabled={disabled}
+          className={`${INPUT_ELEMENT} invalid:text-muted disabled:cursor-not-allowed disabled:opacity-60`}
         >
           <option value="">{placeholder}</option>
           {options.map((option) => (

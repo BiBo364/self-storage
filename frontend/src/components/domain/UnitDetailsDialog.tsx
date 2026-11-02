@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { ArrowRight, X } from "lucide-react";
-import { formatPrice, UnitType } from "../../mocks/catalog";
+import { formatPrice } from "../../app/format";
+import type { UnitTypeSummary } from "../../app/types";
 import { Navigate } from "../../app/types";
 import { Button } from "../ui/Button";
 
@@ -9,7 +10,7 @@ export function UnitDetailsDialog({
   onClose,
   navigate,
 }: {
-  unit: UnitType;
+  unit: UnitTypeSummary;
   onClose: () => void;
   navigate: Navigate;
 }) {
@@ -49,16 +50,18 @@ export function UnitDetailsDialog({
 
         <div className="mt-5 flex items-stretch gap-5 max-[560px]:block">
           <div className="grid h-24 w-24 shrink-0 place-items-center border-2 border-[#101413] bg-brand text-stat font-semibold text-signal-ink max-[560px]:mb-4 max-[560px]:h-16 max-[560px]:w-16">
-            {unit.area}
+            {unit.area} m²
           </div>
           <div className="grid flex-1 grid-cols-2 gap-3 max-[560px]:grid-cols-1">
             <div>
-              <span className="text-label text-muted">Quy mô</span>
-              <strong className="block text-small font-semibold text-ink">{unit.capacity}</strong>
+              <span className="text-label text-muted">Diện tích</span>
+              <strong className="block text-small font-semibold text-ink">{unit.area} m²</strong>
             </div>
             <div>
-              <span className="text-label text-muted">Thông số mẫu</span>
-              <strong className="block text-small font-semibold text-ink">{unit.size}</strong>
+              <span className="text-label text-muted">Kích thước</span>
+              <strong className="block text-small font-semibold text-ink">
+                {unit.width} × {unit.depth} × {unit.height} m
+              </strong>
             </div>
             <div className="col-span-2 max-[560px]:col-span-1">
               <span className="text-label text-muted">Giá tham khảo</span>
@@ -70,9 +73,8 @@ export function UnitDetailsDialog({
           </div>
         </div>
 
-        <p className="mt-5 text-small leading-relaxed text-muted">{unit.description}</p>
-        <p className="mt-2 text-small leading-relaxed text-ink">
-          Phù hợp: {unit.idealFor.toLowerCase()}.
+        <p className="mt-5 text-small leading-relaxed text-muted">
+          Giá tham khảo theo tháng, có thể thay đổi theo thời điểm ký hợp đồng.
         </p>
 
         <Button

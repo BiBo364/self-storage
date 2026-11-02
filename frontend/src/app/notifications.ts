@@ -56,6 +56,10 @@ export function notificationPath(
       }
       return undefined;
     case "PROPOSAL_REJECTED":
+      if (role === "FM") {
+        return orderId ? `/fm/rental-orders/${orderId}/re-propose` : "/fm/rental-requests";
+      }
+      return role === "CUSTOMER" ? "/my-storage" : undefined;
     case "RENTAL_ORDER_CANCELED":
       if (role === "FM") return "/fm/rental-requests";
       return role === "CUSTOMER" ? "/my-storage" : undefined;
