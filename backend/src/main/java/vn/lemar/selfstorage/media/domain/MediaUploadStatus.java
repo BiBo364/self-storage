@@ -11,8 +11,7 @@ public enum MediaUploadStatus {
     PENDING("Pending"),
     ATTACHED("Attached"),
     CANCELED("Canceled"),
-    DELETED("Deleted"),
-    FAILED("Failed");
+    DELETED("Deleted");
 
     private final String dbValue;
 

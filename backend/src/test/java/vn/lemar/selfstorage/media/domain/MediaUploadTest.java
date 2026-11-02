@@ -20,8 +20,6 @@ class MediaUploadTest {
 
         row.markDeleted();
         assertThat(row.getStatus()).isEqualTo(MediaUploadStatus.DELETED);
-        row.markFailed();
-        assertThat(row.getStatus()).isEqualTo(MediaUploadStatus.DELETED);
     }
 
     @Test

@@ -94,13 +94,6 @@ public class MediaUpload {
         touch();
     }
 
-    public void markFailed() {
-        if (status == MediaUploadStatus.UPLOADING) {
-            this.status = MediaUploadStatus.FAILED;
-            touch();
-        }
-    }
-
     public void markAttached() {
         if (status != MediaUploadStatus.PENDING) {
             throw new IllegalStateException("Media upload " + id + " không attach được ở trạng thái " + status);

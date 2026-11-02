@@ -579,7 +579,7 @@ Các bước:
 - url (nullable)
 - bytes (nullable)
 - format (nullable)
-- status (`Uploading` / `Pending` / `Attached` / `Canceled` / `Deleted` / `Failed`)
+- status (`Uploading` / `Pending` / `Attached` / `Canceled` / `Deleted`)
 - created_at
 - updated_at
 

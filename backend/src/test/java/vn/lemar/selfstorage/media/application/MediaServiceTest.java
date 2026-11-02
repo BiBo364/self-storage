@@ -268,12 +268,4 @@ class MediaServiceTest {
                 .hasMessage("Batch đã bị huỷ");
     }
 
-    @Test
-    void markFailedMovesUploadingToFailed() {
-        MediaUpload row = MediaUpload.uploading(ACCOUNT_ID, UUID.randomUUID());
-
-        row.markFailed();
-
-        assertThat(row.getStatus()).isEqualTo(MediaUploadStatus.FAILED);
-    }
 }

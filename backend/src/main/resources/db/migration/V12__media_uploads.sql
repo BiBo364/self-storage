@@ -11,7 +11,7 @@ CREATE TABLE media_uploads (
     bytes       BIGINT,
     format      VARCHAR(20),
     status      VARCHAR(20) NOT NULL
-                CHECK (status IN ('Uploading', 'Pending', 'Attached', 'Canceled', 'Deleted', 'Failed')),
+                CHECK (status IN ('Uploading', 'Pending', 'Attached', 'Canceled', 'Deleted')),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

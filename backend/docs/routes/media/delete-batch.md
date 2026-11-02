@@ -20,9 +20,11 @@ phase). Không gọi khi rời trang hoặc Hủy upload — batch Pending đư�
 - Row `Uploading` / `Pending` → `Canceled`; nếu đã có `public_id` thì xoá asset trên Cloudinary rồi
   chuyển `Deleted`.
 - Row `Uploading` chưa có `public_id`: giữ `Canceled`; upload completion (sau khi Cloudinary trả về)
-  thấy row `Canceled` sẽ xoá asset vừa lưu.
-- Row `Attached` bỏ qua (phase đã submit, file không được xoá nữa); row `Canceled` / `Deleted` /
-  `Failed` bỏ qua.
+  thấy row `Canceled` sẽ xoá asset vừa lưu. Nhánh này là phòng thủ: row `Uploading` nằm trong
+  transaction upload, delete batch từ transaction khác chỉ thấy row sau khi upload commit. FE chỉ
+  hiện X sau khi upload xong nên flow thực tế không trúng; muốn guarantee xoá giữa lúc upload cần
+  batch marker/table riêng.
+- Row `Attached` bỏ qua (phase đã submit, file không được xoá nữa); row `Canceled` / `Deleted` bỏ qua.
 - Idempotent: gọi lại trả `deleted=0`, `skipped=n`.
 
 ## Ghi chú nghiệp vụ

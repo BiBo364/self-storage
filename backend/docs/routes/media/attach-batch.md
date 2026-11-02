@@ -17,7 +17,7 @@ không còn sửa/xoá từ checklist.
   - batch thuộc account khác → 403;
   - batch không tồn tại → 404.
 - Batch có row `Canceled` / `Deleted` → 409 "Batch đã bị huỷ".
-- Row `Pending` → `Attached`; row đã `Attached` bỏ qua. Row `Uploading` / `Failed` bỏ qua.
+- Row `Pending` → `Attached`; row đã `Attached` bỏ qua. Row `Uploading` bỏ qua.
 - Idempotent: gọi lại trả `attached=0` nếu tất cả đã attach.
 
 ## Ghi chú nghiệp vụ

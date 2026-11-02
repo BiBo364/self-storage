@@ -15,9 +15,10 @@ FE upload ảnh hiện trạng / scan hợp đồng / ảnh giấy tờ trước
 - Nhận `multipart/form-data` field `file`; kiểm loại **hai lớp**: content-type client khai phải nằm
   trong allowlist (JPEG/PNG/WebP/PDF — header kèm tham số như `; charset=binary` vẫn nhận,
   `image/jpg` map về JPEG), và **nội dung phải khớp loại khai báo** theo chữ ký (magic bytes) —
-  khai PDF mà nội dung là ảnh → 400. Kích thước ≤ 10MB — sai trả 400 với message cụ thể.
-- Lưu lên Cloudinary với `resource_type=image` → Cloudinary kiểm nội dung thật; file giả mạo
-  content-type bị từ chối **400** ("File không đọc được hoặc không đúng định dạng ảnh/PDF"),
+  khai PDF mà nội dung là ảnh → 400 "Nội dung file không khớp với định dạng khai báo". Kích thước
+  ≤ 10MB — sai trả 400 với message cụ thể.
+- Lưu lên Cloudinary với `resource_type=image` → Cloudinary kiểm nội dung thật; file hỏng hoặc bị
+  provider từ chối nội dung → **400** ("File không đọc được hoặc không đúng định dạng ảnh/PDF"),
   không lọt thành asset `raw`.
 - File nằm trong folder riêng của account đang đăng nhập: `uploads/acc-{accountId}` — upload mồ côi
   (flow không hoàn tất) vẫn truy vết được chủ sở hữu trong console storage.
@@ -30,7 +31,8 @@ FE upload ảnh hiện trạng / scan hợp đồng / ảnh giấy tờ trước
 - Servlet multipart nhận tới 12MB (`application.yml › spring.servlet.multipart`) để file 10–12MB
   rơi vào validator và có message 400 riêng.
 - Ghi `media_uploads` để dọn theo batch; **không audit** — audit nằm ở flow gắn URL vào entity.
-- Lỗi provider/network → 500 chung, chi tiết chỉ vào log.
+- Lỗi provider/network → 500 chung; transaction rollback row `Uploading`, không có row `Failed`;
+  chi tiết chỉ vào log.
 
 ## Ghi chú nghiệp vụ
 
