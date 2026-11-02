@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import vn.lemar.selfstorage.payment.application.PaymentGateway;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.payment.application.PaymentService;
@@ -271,6 +273,18 @@ class PaymentServiceTest {
         assertThat(event.getValue().amount()).isEqualByComparingTo(transaction.getAmount());
         verify(audit).record(argThat(entry -> entry.reason() != null
                 && entry.reason().contains("admin@lemar.vn")));
+    }
+
+    @Test
+    void manualSuccessMapsGatewayConstraintRaceToConflict() {
+        doThrow(new DataIntegrityViolationException("duplicate gateway no"))
+                .when(repository).flush();
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "GW-RACE"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationConflictException.class)
+                .hasMessageContaining("xung đột");
     }
 
     @Test

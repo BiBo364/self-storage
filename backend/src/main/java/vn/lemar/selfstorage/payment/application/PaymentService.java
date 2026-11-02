@@ -15,6 +15,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.lemar.selfstorage.audit.application.AuditEntry;
@@ -207,6 +208,13 @@ public class PaymentService {
             ensureGatewayTransactionNoIsUnused(gatewayTransactionNo);
             applySuccess(transaction, gatewayTransactionNo, request.paidAt(),
                     responsePayload, actorEmail);
+            try {
+                repository.flush();
+            } catch (DataIntegrityViolationException e) {
+                // Unique constraint là chốt cuối khi hai request vượt qua pre-check cùng lúc.
+                throw new ManualReconciliationConflictException(
+                        "Dữ liệu giao dịch xung đột, không chốt được");
+            }
         } else {
             applyFailure(transaction, "manual: " + request.note(), responsePayload);
         }

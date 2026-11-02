@@ -146,6 +146,38 @@ class ManualReconciliationIntegrationTest {
     }
 
     @Test
+    void manualSuccessOnCanceledInvoiceStillRecordsPayment() throws Exception {
+        jdbc.update("UPDATE invoices SET status = 'Canceled' WHERE id = ?", invoiceId);
+        String txnRef = createPendingPayment("INV-MANUAL-CANCELED");
+
+        mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
+                        {"outcome":"SUCCESS","note":"portal: paid after cancel",
+                         "paidAt":"%s","gatewayTransactionNo":"GW-CANCELED"}
+                        """.formatted(Instant.now())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"));
+
+        assertThat(paymentStatus(txnRef)).isEqualTo("Success");
+        assertThat(statusOf("invoices", invoiceId)).isEqualTo("Canceled");
+    }
+
+    @Test
+    void manualSuccessOnExpiredInvoiceStillRecordsPayment() throws Exception {
+        jdbc.update("UPDATE invoices SET status = 'Expired' WHERE id = ?", invoiceId);
+        String txnRef = createPendingPayment("INV-MANUAL-EXPIRED");
+
+        mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
+                        {"outcome":"SUCCESS","note":"portal: paid after expiry",
+                         "paidAt":"%s","gatewayTransactionNo":"GW-EXPIRED"}
+                        """.formatted(Instant.now())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"));
+
+        assertThat(paymentStatus(txnRef)).isEqualTo("Success");
+        assertThat(statusOf("invoices", invoiceId)).isEqualTo("Expired");
+    }
+
+    @Test
     void manualSuccessWithoutPaidAtIsRejected() throws Exception {
         String txnRef = createPendingPayment("INV-MANUAL-NO-PAIDAT");
 
