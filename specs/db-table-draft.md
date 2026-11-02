@@ -569,3 +569,24 @@ Các bước:
 | `DEPOSIT_REFUND_PENDING` | Cọc dư sẽ được hoàn | Customer |
 | `HANDOVER_COMPLETED` | Hoàn tất check-in và bàn giao khoang | Customer |
 | `OTHER` | Thông báo khẩn cấp thủ công khi chưa có type phù hợp | Recipient do người tạo chọn |
+
+# MediaUpload
+
+- id
+- account_id (N - 1: Account)
+- batch_id (UUID; các file cùng một đợt upload dùng chung)
+- public_id (nullable)
+- url (nullable)
+- bytes (nullable)
+- format (nullable)
+- status (`Uploading` / `Pending` / `Attached` / `Canceled` / `Deleted`)
+- created_at
+- updated_at
+
+**NOTES:**
+- Row `Uploading` tạo trước khi gọi storage; `Pending` sau khi lưu xong.
+- `DELETE /api/media/uploads/batch/{batchId}` mark `Canceled` + xoá asset `Uploading`/`Pending`;
+  `POST .../attach` mark `Attached` để Hủy không xoá.
+- Row `Uploading` chưa có `public_id`: upload completion thấy `Canceled` thì xoá asset vừa lưu.
+- Unique `public_id` khi khác null; index `(account_id, batch_id, status)`. Không audit upload/delete;
+  audit nằm ở flow gắn URL vào entity.
