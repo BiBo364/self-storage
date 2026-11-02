@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, Check, MapPin, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, MapPin, Maximize2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../app/api";
 import { formatDate, formatMoney } from "../app/format";
@@ -11,6 +11,7 @@ import { DemoNotice } from "../components/ui/DemoNotice";
 import { DetailPanel } from "../components/ui/DetailPanel";
 import { SurfaceState } from "../components/ui/SurfaceState";
 import { UnitIllustration } from "../components/domain/UnitIllustration";
+import { UnitIllustrationLightbox } from "../components/domain/UnitIllustrationLightbox";
 
 type Tab = "active" | "pending";
 type LoadState = "loading" | "ready" | "error";
@@ -48,6 +49,7 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
   const [detailUnitType, setDetailUnitType] = useState<UnitTypeSummary | null>(null);
   const [detailState, setDetailState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [detailError, setDetailError] = useState("");
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const detailRequest = useRef(0);
 
   const applyLoad = useCallback((result: LoadResult) => {
@@ -83,6 +85,7 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
     setDetailUnitType(null);
     setDetailState("loading");
     setDetailError("");
+    setLightboxOpen(false);
     try {
       const types = await listUnitTypes(proposal.facilityId);
       if (detailRequest.current !== requestId) return;
@@ -101,6 +104,7 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
     setDetailUnitType(null);
     setDetailState("idle");
     setDetailError("");
+    setLightboxOpen(false);
   }
 
   const awaitingCount = items.filter((proposal) => !outcomes[proposal.id]).length;
@@ -412,63 +416,87 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
         ))}
 
       {detailProposal && (
-        <DetailPanel
-          title={`Khoang ${detailProposal.unitCode}`}
-          eyebrow={`${detailProposal.facilityName} · ${detailProposal.unitTypeName}`}
-          onClose={closeUnitDetail}
-        >
-          {detailState === "loading" && (
-            <SurfaceState variant="loading" title="Đang tải thông tin khoang…" />
-          )}
-          {detailState === "error" && <DemoNotice tone="error">{detailError}</DemoNotice>}
-          <div className="mt-4">
-            <UnitIllustration
+        <>
+          <DetailPanel
+            title={`Khoang ${detailProposal.unitCode}`}
+            eyebrow={`${detailProposal.facilityName} · ${detailProposal.unitTypeName}`}
+            onClose={closeUnitDetail}
+          >
+            {detailState === "loading" && (
+              <SurfaceState variant="loading" title="Đang tải thông tin khoang…" />
+            )}
+            {detailState === "error" && <DemoNotice tone="error">{detailError}</DemoNotice>}
+            <div className="mt-4">
+              <button
+                type="button"
+                className="group relative block w-full cursor-zoom-in border-0 bg-transparent p-0 text-left"
+                onClick={() => setLightboxOpen(true)}
+                aria-label={`Phóng to hình minh hoạ khoang ${detailProposal.unitCode}`}
+              >
+                <UnitIllustration
+                  unitCode={detailProposal.unitCode}
+                  unitTypeName={detailProposal.unitTypeName}
+                  area={detailUnitType?.area}
+                  width={detailUnitType?.width}
+                  depth={detailUnitType?.depth}
+                  height={detailUnitType?.height}
+                />
+                <span className="absolute right-2 top-2 inline-flex items-center gap-1 bg-[rgba(16,20,19,0.82)] px-2 py-1 text-label font-semibold text-white">
+                  <Maximize2 size={13} /> Phóng to
+                </span>
+              </button>
+              <p className="mt-2 text-label text-muted">
+                Hình minh hoạ — khoang thực tế có thể khác.
+              </p>
+            </div>
+            <dl className="mt-5 grid gap-2.5">
+              <DetailRow label="Mã khoang" value={detailProposal.unitCode} />
+              <DetailRow label="Loại khoang" value={detailProposal.unitTypeName} />
+              <DetailRow label="Kích thước khoang" value={detailProposal.unitSize ?? "—"} />
+              {detailUnitType && (
+                <>
+                  <DetailRow label="Diện tích" value={`${detailUnitType.area} m²`} />
+                  <DetailRow
+                    label="Kích thước loại"
+                    value={`${detailUnitType.width} × ${detailUnitType.depth} × ${detailUnitType.height} m`}
+                  />
+                </>
+              )}
+              <DetailRow label="Cơ sở" value={detailProposal.facilityName} />
+              <DetailRow label="Địa chỉ" value={detailProposal.facilityAddress ?? "—"} />
+              <DetailRow
+                label="Giá thuê"
+                value={`${formatMoney(detailProposal.monthlyPrice)} / tháng`}
+              />
+              <DetailRow label="Ngày đề xuất" value={formatDate(detailProposal.createdAt)} />
+              <DetailRow
+                label="Đã từ chối"
+                value={`${detailProposal.rejectionCount}/${detailProposal.maxRejectionCount} lần`}
+              />
+            </dl>
+            {detailState === "error" && (
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={() => void openUnitDetail(detailProposal)}
+              >
+                Thử lại
+              </Button>
+            )}
+          </DetailPanel>
+
+          {lightboxOpen && (
+            <UnitIllustrationLightbox
               unitCode={detailProposal.unitCode}
               unitTypeName={detailProposal.unitTypeName}
               area={detailUnitType?.area}
               width={detailUnitType?.width}
               depth={detailUnitType?.depth}
               height={detailUnitType?.height}
+              onClose={() => setLightboxOpen(false)}
             />
-            <p className="mt-2 text-label text-muted">
-              Hình minh hoạ — khoang thực tế có thể khác.
-            </p>
-          </div>
-          <dl className="mt-5 grid gap-2.5">
-            <DetailRow label="Mã khoang" value={detailProposal.unitCode} />
-            <DetailRow label="Loại khoang" value={detailProposal.unitTypeName} />
-            <DetailRow label="Kích thước khoang" value={detailProposal.unitSize ?? "—"} />
-            {detailUnitType && (
-              <>
-                <DetailRow label="Diện tích" value={`${detailUnitType.area} m²`} />
-                <DetailRow
-                  label="Kích thước loại"
-                  value={`${detailUnitType.width} × ${detailUnitType.depth} × ${detailUnitType.height} m`}
-                />
-              </>
-            )}
-            <DetailRow label="Cơ sở" value={detailProposal.facilityName} />
-            <DetailRow label="Địa chỉ" value={detailProposal.facilityAddress ?? "—"} />
-            <DetailRow
-              label="Giá thuê"
-              value={`${formatMoney(detailProposal.monthlyPrice)} / tháng`}
-            />
-            <DetailRow label="Ngày đề xuất" value={formatDate(detailProposal.createdAt)} />
-            <DetailRow
-              label="Đã từ chối"
-              value={`${detailProposal.rejectionCount}/${detailProposal.maxRejectionCount} lần`}
-            />
-          </dl>
-          {detailState === "error" && (
-            <Button
-              variant="secondary"
-              className="mt-4"
-              onClick={() => void openUnitDetail(detailProposal)}
-            >
-              Thử lại
-            </Button>
           )}
-        </DetailPanel>
+        </>
       )}
     </div>
   );
