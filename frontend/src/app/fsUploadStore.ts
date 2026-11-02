@@ -3,6 +3,7 @@ export type UploadedMedia = {
   publicId: string;
   name: string;
   format: string;
+  batchId: string;
 };
 
 export type FsUploadState = {
@@ -10,7 +11,7 @@ export type FsUploadState = {
   contractFile: UploadedMedia | null;
 };
 
-const PREFIX = "kho-moc-fs-upload:";
+const PREFIX = "kho-moc-fs-upload-v2:";
 
 function emptyState(): FsUploadState {
   return { inspectionPhotos: [], contractFile: null };

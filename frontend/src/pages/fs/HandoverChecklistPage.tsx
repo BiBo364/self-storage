@@ -1,7 +1,8 @@
-import { ArrowLeft, Check, Upload } from "lucide-react";
+import { ArrowLeft, Check, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { ApiError } from "../../app/api";
 import { readFsUploadState, writeFsUploadState, type UploadedMedia } from "../../app/fsUploadStore";
-import { uploadMedia } from "../../app/media";
+import { attachMediaBatch, deleteMediaBatch, uploadMedia } from "../../app/media";
 import type { Navigate } from "../../app/types";
 import { Button, buttonClassName } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
@@ -45,16 +46,21 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   const [contractGenerated, setContractGenerated] = useState(false);
   const [accessType, setAccessType] = useState("PhysicalKey");
   const [quantity, setQuantity] = useState(1);
+  const initialUploads = readFsUploadState(appointmentId);
   const [inspectionPhotos, setInspectionPhotos] = useState<UploadedMedia[]>(
-    () => readFsUploadState(appointmentId).inspectionPhotos,
+    initialUploads.inspectionPhotos,
   );
   const [inspectionUploading, setInspectionUploading] = useState(false);
   const [inspectionUploadError, setInspectionUploadError] = useState<string | null>(null);
+  const [inspectionAttaching, setInspectionAttaching] = useState(false);
+  const [inspectionAttachError, setInspectionAttachError] = useState<string | null>(null);
   const [contractFile, setContractFile] = useState<UploadedMedia | null>(
-    () => readFsUploadState(appointmentId).contractFile,
+    initialUploads.contractFile,
   );
   const [contractUploading, setContractUploading] = useState(false);
   const [contractUploadError, setContractUploadError] = useState<string | null>(null);
+  const [contractAttaching, setContractAttaching] = useState(false);
+  const [contractAttachError, setContractAttachError] = useState<string | null>(null);
 
   const inspectionUploadController = useRef<AbortController | null>(null);
   const contractUploadController = useRef<AbortController | null>(null);
@@ -62,6 +68,99 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   useEffect(() => {
     writeFsUploadState(appointmentId, { inspectionPhotos, contractFile });
   }, [appointmentId, inspectionPhotos, contractFile]);
+
+  function cancelInspectionUpload() {
+    inspectionUploadController.current?.abort();
+  }
+
+  function cancelContractUpload() {
+    contractUploadController.current?.abort();
+  }
+
+  async function removeInspectionPhoto(photo: UploadedMedia) {
+    try {
+      const result = await deleteMediaBatch(photo.batchId);
+      if (result.deleted === 0 && result.skipped > 0) {
+        setInspectionUploadError("File đã được gắn với bước trước, không xoá được.");
+        return;
+      }
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 404)) {
+        setInspectionUploadError(error instanceof Error ? error.message : "Không xoá được ảnh.");
+        return;
+      }
+    }
+    setInspectionPhotos((current) => current.filter((item) => item.url !== photo.url));
+    setInspectionUploadError(null);
+  }
+
+  async function removeContractFile() {
+    if (!contractFile) return;
+    try {
+      const result = await deleteMediaBatch(contractFile.batchId);
+      if (result.deleted === 0 && result.skipped > 0) {
+        setContractUploadError("File đã được gắn với bước trước, không xoá được.");
+        return;
+      }
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 404)) {
+        setContractUploadError(
+          error instanceof Error ? error.message : "Không xoá được file hợp đồng.",
+        );
+        return;
+      }
+    }
+    setContractFile(null);
+    setContractUploadError(null);
+  }
+
+  async function attachInspectionBatches() {
+    const batchIds = [...new Set(inspectionPhotos.map((photo) => photo.batchId))];
+    if (batchIds.length === 0) return true;
+    setInspectionAttaching(true);
+    setInspectionAttachError(null);
+    try {
+      await Promise.all(batchIds.map((batchId) => attachMediaBatch(batchId)));
+      return true;
+    } catch (error) {
+      setInspectionAttachError(
+        error instanceof Error ? error.message : "Không gắn được batch ảnh.",
+      );
+      return false;
+    } finally {
+      setInspectionAttaching(false);
+    }
+  }
+
+  async function acceptInspection() {
+    if (await attachInspectionBatches()) {
+      setInspection("Agreed");
+    }
+  }
+
+  async function rejectInspection() {
+    const batchIds = [...new Set(inspectionPhotos.map((photo) => photo.batchId))];
+    await Promise.allSettled(batchIds.map((batchId) => attachMediaBatch(batchId)));
+    setInspection("Rejected");
+  }
+
+  async function signContract() {
+    if (contractFile) {
+      setContractAttaching(true);
+      setContractAttachError(null);
+      try {
+        await attachMediaBatch(contractFile.batchId);
+      } catch (error) {
+        setContractAttachError(
+          error instanceof Error ? error.message : "Không gắn được batch hợp đồng.",
+        );
+        return;
+      } finally {
+        setContractAttaching(false);
+      }
+    }
+    setContract("Signed");
+  }
 
   async function uploadInspectionPhotos(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
@@ -75,12 +174,13 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
     try {
       const results = await Promise.allSettled(
         files.map(async (file) => {
-          const result = await uploadMedia(file, controller.signal);
+          const result = await uploadMedia(file, undefined, controller.signal);
           return {
             url: result.url,
             publicId: result.publicId,
             name: file.name,
             format: result.format,
+            batchId: result.batchId,
           };
         }),
       );
@@ -131,12 +231,13 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
     setContractUploading(true);
     setContractUploadError(null);
     try {
-      const result = await uploadMedia(file, controller.signal);
+      const result = await uploadMedia(file, undefined, controller.signal);
       const uploaded = {
         url: result.url,
         publicId: result.publicId,
         name: file.name,
         format: result.format,
+        batchId: result.batchId,
       };
       setContractFile(uploaded);
       const stored = readFsUploadState(appointmentId);
@@ -414,7 +515,7 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                     <button
                       type="button"
                       className="border-0 bg-transparent p-0 text-label font-semibold text-danger hover:underline"
-                      onClick={() => inspectionUploadController.current?.abort()}
+                      onClick={cancelInspectionUpload}
                     >
                       Hủy
                     </button>
@@ -428,29 +529,41 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                 {inspectionPhotos.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {inspectionPhotos.map((photo) => (
-                      <a
-                        key={photo.url}
-                        href={photo.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block h-20 w-20 border border-border"
-                      >
-                        {photo.format === "pdf" ? (
-                          <span className="grid h-full w-full place-items-center bg-surface text-label text-muted">
-                            PDF
-                          </span>
-                        ) : (
-                          <img
-                            src={photo.url}
-                            alt={photo.name}
-                            className="h-full w-full object-cover"
-                          />
-                        )}
-                      </a>
+                      <div key={photo.url} className="relative h-20 w-20">
+                        <a
+                          href={photo.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block h-full w-full border border-border"
+                        >
+                          {photo.format === "pdf" ? (
+                            <span className="grid h-full w-full place-items-center bg-surface text-label text-muted">
+                              PDF
+                            </span>
+                          ) : (
+                            <img
+                              src={photo.url}
+                              alt={photo.name}
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </a>
+                        <button
+                          type="button"
+                          className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center border border-border bg-surface text-danger hover:border-danger"
+                          onClick={() => removeInspectionPhoto(photo)}
+                          aria-label={`Xoá ảnh ${photo.name}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
+              {inspectionAttachError && (
+                <DemoNotice tone="error">{inspectionAttachError}</DemoNotice>
+              )}
               {rejectOpen ? (
                 <div className="mt-4 border border-border bg-surface-subtle p-4">
                   <label className="grid gap-1.5 text-label text-muted">
@@ -466,7 +579,7 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                     <Button
                       variant="danger"
                       disabled={!rejectReason.trim()}
-                      onClick={() => setInspection("Rejected")}
+                      onClick={rejectInspection}
                     >
                       Xác nhận từ chối
                     </Button>
@@ -477,7 +590,7 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                 </div>
               ) : (
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <Button onClick={() => setInspection("Agreed")}>
+                  <Button pending={inspectionAttaching} onClick={acceptInspection}>
                     <Check size={16} /> Khách đồng ý
                   </Button>
                   <Button variant="secondary" onClick={() => setRejectOpen(true)}>
@@ -544,7 +657,7 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                         <button
                           type="button"
                           className="border-0 bg-transparent p-0 text-label font-semibold text-danger hover:underline"
-                          onClick={() => contractUploadController.current?.abort()}
+                          onClick={cancelContractUpload}
                         >
                           Hủy
                         </button>
@@ -556,20 +669,34 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                       </p>
                     )}
                     {contractFile && (
-                      <a
-                        href={contractFile.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 flex items-center gap-2 text-label font-semibold text-accent hover:underline"
-                      >
-                        <Upload size={14} /> {contractFile.name}
-                      </a>
+                      <div className="mt-3 flex items-center gap-2">
+                        <a
+                          href={contractFile.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 text-label font-semibold text-accent hover:underline"
+                        >
+                          <Upload size={14} /> {contractFile.name}
+                        </a>
+                        <button
+                          type="button"
+                          className="grid h-7 w-7 place-items-center border border-border bg-surface text-danger hover:border-danger"
+                          onClick={removeContractFile}
+                          aria-label="Xoá file hợp đồng"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
                     )}
                   </div>
+                  {contractAttachError && (
+                    <DemoNotice tone="error">{contractAttachError}</DemoNotice>
+                  )}
                   <Button
                     className="mt-4"
-                    disabled={!contractFile}
-                    onClick={() => setContract("Signed")}
+                    disabled={!contractFile || contractAttaching}
+                    pending={contractAttaching}
+                    onClick={signContract}
                   >
                     <Check size={16} /> Xác nhận đã ký
                   </Button>

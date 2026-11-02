@@ -1,5 +1,5 @@
 type ApiRequestOptions = {
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   accessToken?: string;
   dispatchAuthExpired?: boolean;
@@ -80,9 +80,13 @@ export async function apiUpload<T>(
   file: File,
   accessToken?: string,
   signal?: AbortSignal,
+  fields?: Record<string, string>,
 ): Promise<T> {
   const formData = new FormData();
   formData.append("file", file);
+  if (fields) {
+    Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
+  }
 
   const headers = new Headers({ Accept: "application/json" });
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
