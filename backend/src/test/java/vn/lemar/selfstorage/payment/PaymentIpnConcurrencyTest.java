@@ -22,6 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.payment.application.PaymentGateway;
 import vn.lemar.selfstorage.payment.application.PaymentService;
 import vn.lemar.selfstorage.payment.application.dto.IpnResponse;
@@ -58,6 +59,9 @@ class PaymentIpnConcurrencyTest {
     @MockBean
     private PaymentGateway gateway;
 
+    @MockBean
+    private NotificationService notifications;
+
     @Autowired
     private PaymentService service;
 
@@ -87,24 +91,48 @@ class PaymentIpnConcurrencyTest {
         assertThat(countSuccessRows()).isEqualTo(1);
     }
 
-    private List<IpnResponse> callIpnConcurrently(int threads) throws Exception {
-        Map<String, String> ipn = Map.of(
-                "vnp_TxnRef", TXN_REF,
-                "vnp_TmnCode", TMN_CODE,
-                "vnp_Amount", "1000000",
-                "vnp_ResponseCode", "00",
-                "vnp_TransactionStatus", "00",
-                "vnp_TransactionNo", "14123456",
-                "vnp_PayDate", "20260930163700",
-                "vnp_SecureHash", "khong-dung-toi-vi-gateway-da-mock");
+    @Test
+    void twoConcurrentIpnsForDifferentTransactionsOfSameInvoiceRecordOneDuplicate() throws Exception {
+        when(gateway.verifySignature(anyMap())).thenReturn(true);
 
+        long invoiceId = seedInvoice();
+        repository.saveAndFlush(new PaymentTransaction(invoiceId, "TXNDUP001", AMOUNT, "coc thue kho"));
+        repository.saveAndFlush(new PaymentTransaction(invoiceId, "TXNDUP002", AMOUNT, "coc thue kho"));
+
+        List<IpnResponse> responses = callIpnConcurrently(
+                List.of("TXNDUP001", "TXNDUP002"), List.of("14123456", "14123457"));
+
+        assertThat(responses).extracting(IpnResponse::rspCode)
+                .as("hai IPN khác transaction cùng invoice: %s", responses)
+                .containsExactlyInAnyOrder("00", "02");
+        assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
+        assertThat(countStatus(invoiceId, "Duplicate")).isEqualTo(1);
+    }
+
+    private List<IpnResponse> callIpnConcurrently(int threads) throws Exception {
+        return callIpnConcurrently(
+                java.util.Collections.nCopies(threads, TXN_REF),
+                java.util.Collections.nCopies(threads, "14123458"));
+    }
+
+    private List<IpnResponse> callIpnConcurrently(List<String> txnRefs, List<String> transactionNos)
+            throws Exception {
+        if (txnRefs.size() != transactionNos.size()) {
+            throw new IllegalArgumentException("txnRefs/transactionNos phải cùng kích thước");
+        }
+        int threads = txnRefs.size();
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         CountDownLatch startLine = new CountDownLatch(1);
         try {
-            List<Callable<IpnResponse>> calls = java.util.Collections.nCopies(threads, () -> {
-                startLine.await();
-                return service.handleIpn(ipn);
-            });
+            List<Callable<IpnResponse>> calls = new java.util.ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                String txnRef = txnRefs.get(i);
+                String transactionNo = transactionNos.get(i);
+                calls.add(() -> {
+                    startLine.await();
+                    return service.handleIpn(ipn(txnRef, transactionNo));
+                });
+            }
             List<Future<IpnResponse>> futures = calls.stream().map(pool::submit).toList();
 
             startLine.countDown(); // thả cả hai cùng lúc
@@ -116,6 +144,25 @@ class PaymentIpnConcurrencyTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    private Map<String, String> ipn(String txnRef, String transactionNo) {
+        return Map.of(
+                "vnp_TxnRef", txnRef,
+                "vnp_TmnCode", TMN_CODE,
+                "vnp_Amount", "1000000",
+                "vnp_ResponseCode", "00",
+                "vnp_TransactionStatus", "00",
+                "vnp_TransactionNo", transactionNo,
+                "vnp_PayDate", "20260930163700",
+                "vnp_SecureHash", "khong-dung-toi-vi-gateway-da-mock");
+    }
+
+    private int countStatus(long invoiceId, String status) {
+        Integer count = jdbc.queryForObject(
+                "SELECT count(*) FROM payment_transactions WHERE invoice_id = ? AND status = ?",
+                Integer.class, invoiceId, status);
+        return count == null ? 0 : count;
     }
 
     private String statusInDb() {
@@ -153,9 +200,9 @@ class PaymentIpnConcurrencyTest {
 
         Long invoiceId = jdbc.queryForObject(
                 "INSERT INTO invoices (order_id, customer_id, code, title, type, status, amount)"
-                        + " VALUES (?, ?, 'INV-RACE-0001', 'Coc thue kho', 'Deposit', 'Unpaid', ?)"
+                        + " VALUES (?, ?, ?, 'Coc thue kho', 'Deposit', 'Unpaid', ?)"
                         + " RETURNING id",
-                Long.class, orderId, customerId, AMOUNT);
+                Long.class, orderId, customerId, "INV-RACE-" + System.nanoTime(), AMOUNT);
 
         return invoiceId;
     }
