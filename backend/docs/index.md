@@ -20,7 +20,7 @@ mỗi package con trực tiếp là một module độc lập (`identity`, `book
 
 Hiện tại `identity` xử lý xác thực/RBAC; `facility` cung cấp public API kiểm tra facility tồn tại
 và FM phụ trách facility; `audit` ghi vết thao tác nghiệp vụ nhạy cảm; `media` upload file
-(ảnh/PDF) lên Cloudinary; `booking` có luồng nội bộ convert request đã duyệt thành đơn + proposal
+(ảnh/PDF) lên Cloudinary và dọn asset theo batch; `booking` có luồng nội bộ convert request đã duyệt thành đơn + proposal
 ([booking/conversion.md](booking/conversion.md)).
 
 Layout trong một module:
@@ -91,7 +91,7 @@ hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V10__unit_change_release_audit.sql`.
+Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V12__media_uploads.sql`.
 V1/V2 có mirror ở `backend/sql/`
 — sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -114,6 +114,8 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
   khoang mới chưa reserve cho tới khi thanh toán (B4); trường hợp `delta ≤ 0` cần follow-up reserve riêng.
 - V11 thêm type `DepositSupplement` cho hoá đơn chênh lệch cọc và 2 partial unique index: một `Deposit`
   active (Unpaid/Paid) + một `DepositSupplement` Unpaid trên mỗi đơn.
+- V12 thêm `media_uploads` — theo dõi upload theo batch, dọn asset chưa attach khi Hủy (chi tiết ở
+  [routes/media/delete-batch.md](routes/media/delete-batch.md)).
 
 Các migration khác trên main: V5 seed `order.expiry_days` (luồng convert), V6 bỏ `Expired` khỏi CHECK
 `rental_orders.status` (quá hạn cũng là `Canceled` + `cancel_reason`), V7 thêm 4 action convert vào
@@ -170,14 +172,22 @@ chạy tay `backend/sql/dev/proposal-sample.sql` — **không** phải migration
 
 ## Upload file (module media)
 
-- FE upload qua `POST /api/media/uploads` (multipart, field `file`) → `{url, publicId, bytes, format}`;
-  URL dùng lại khi submit flow (ảnh hiện trạng, scan hợp đồng, ảnh giấy tờ).
+- FE upload qua `POST /api/media/uploads` (multipart, field `file`, `batchId` tuỳ chọn) →
+  `{url, publicId, bytes, format, batchId}`; URL dùng lại khi submit flow (ảnh hiện trạng,
+  scan hợp đồng, ảnh giấy tờ).
 - Validate JPEG/PNG/WebP/PDF ≤ 10MB (khớp cap free plan Cloudinary); sai → 400 message cụ thể.
 - Storage sau interface `FileStorage` (impl Cloudinary) — đổi provider chỉ thay impl.
 - File lưu theo folder `uploads/acc-{accountId}` — upload mồ côi vẫn truy vết được chủ sở hữu.
+- Mỗi upload ghi row `media_uploads` (`Uploading` → `Pending`). `DELETE /batch/{batchId}` dọn asset
+  chưa attach; `POST /batch/{batchId}/attach` đánh dấu `Attached` để không xoá nữa.
+- **Xoá media:** chỉ khi người dùng bấm X trên file đã upload **trong phase hiện tại**. Hủy/rời trang
+  không xoá; batch `Pending` được giữ để quay lại. Sau khi phase submit, file `Attached` — delete batch
+  bỏ qua. Order `Canceled` không xoá media (giữ evidence); order hard-delete/retention xử lý riêng.
 - Creds `CLOUDINARY_NAME/KEY/SECRET` để `@NotBlank` — thiếu là app chết lúc boot; test/CI dùng
   giá trị giả, không gọi mạng.
-- Chi tiết route: [routes/media/upload.md](routes/media/upload.md).
+- Chi tiết route: [routes/media/upload.md](routes/media/upload.md),
+  [routes/media/delete-batch.md](routes/media/delete-batch.md),
+  [routes/media/attach-batch.md](routes/media/attach-batch.md).
 
 ## Chạy & kiểm thử
 
@@ -241,3 +251,5 @@ bấm **Authorize** và dán token (không cần prefix `Bearer `) để gọi A
 | [routes/auth/login.md](routes/auth/login.md) | `POST /api/auth/login` |
 | [routes/auth/me.md](routes/auth/me.md) | `GET /api/auth/me` |
 | [routes/media/upload.md](routes/media/upload.md) | `POST /api/media/uploads` |
+| [routes/media/delete-batch.md](routes/media/delete-batch.md) | `DELETE /api/media/uploads/batch/{batchId}` |
+| [routes/media/attach-batch.md](routes/media/attach-batch.md) | `POST /api/media/uploads/batch/{batchId}/attach` |

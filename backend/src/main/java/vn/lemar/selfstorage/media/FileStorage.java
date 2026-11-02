@@ -17,4 +17,11 @@ public interface FileStorage {
      * @throws vn.lemar.selfstorage.media.application.exception.MediaStorageException lỗi provider
      */
     StoredFile store(byte[] content, String originalFilename, String contentType, String folder);
+
+    /**
+     * Xoá file theo {@code publicId}; idempotent khi asset không còn tồn tại.
+     *
+     * @throws vn.lemar.selfstorage.media.application.exception.MediaStorageException lỗi provider
+     */
+    void delete(String publicId);
 }

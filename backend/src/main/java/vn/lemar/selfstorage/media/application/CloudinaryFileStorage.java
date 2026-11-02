@@ -51,4 +51,29 @@ public class CloudinaryFileStorage implements FileStorage {
                 ((Number) result.get("bytes")).longValue(),
                 (String) result.get("format"));
     }
+
+    @Override
+    public void delete(String publicId) {
+        if (publicId == null || publicId.isBlank()) {
+            return;
+        }
+        Map<?, ?> result;
+        try {
+            result = cloudinary.uploader().destroy(publicId, Map.of("resource_type", "image"));
+        } catch (IOException e) {
+            LOG.error("Xoá Cloudinary thất bại (network), publicId={}", publicId, e);
+            throw new MediaStorageException("Không xoá được file trên storage", e);
+        } catch (RuntimeException e) {
+            if (e instanceof MediaStorageException storageException) {
+                throw storageException;
+            }
+            LOG.warn("Cloudinary từ chối xoá publicId={}: {}", publicId, e.getMessage());
+            throw new MediaStorageException("Không xoá được file trên storage", e);
+        }
+        Object outcome = result == null ? null : result.get("result");
+        if (!"ok".equals(outcome) && !"not found".equals(outcome)) {
+            LOG.warn("Cloudinary trả kết quả xoá lạ publicId={}: {}", publicId, outcome);
+            throw new MediaStorageException("Không xoá được file trên storage");
+        }
+    }
 }

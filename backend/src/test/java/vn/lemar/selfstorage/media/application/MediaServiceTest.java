@@ -5,14 +5,28 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import vn.lemar.selfstorage.media.FileStorage;
+import vn.lemar.selfstorage.media.application.dto.MediaBatchDeleteResult;
+import vn.lemar.selfstorage.media.application.dto.MediaUploadResult;
 import vn.lemar.selfstorage.media.application.exception.InvalidUploadException;
+import vn.lemar.selfstorage.media.application.exception.MediaBatchConflictException;
+import vn.lemar.selfstorage.media.application.exception.MediaBatchForbiddenException;
+import vn.lemar.selfstorage.media.application.exception.MediaBatchNotFoundException;
+import vn.lemar.selfstorage.media.domain.MediaUpload;
+import vn.lemar.selfstorage.media.domain.MediaUploadStatus;
+import vn.lemar.selfstorage.media.repository.MediaUploadRepository;
 
 class MediaServiceTest {
 
@@ -23,7 +37,15 @@ class MediaServiceTest {
     private static final long ACCOUNT_ID = 7L;
 
     private final FileStorage fileStorage = mock(FileStorage.class);
-    private final MediaService service = new MediaService(fileStorage);
+    private final MediaUploadRepository mediaUploads = mock(MediaUploadRepository.class);
+    private final MediaService service = new MediaService(fileStorage, mediaUploads);
+
+    @BeforeEach
+    void stubRowLifecycle() {
+        when(mediaUploads.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mediaUploads.findByIdForUpdate(any()))
+                .thenAnswer(invocation -> Optional.of(MediaUpload.uploading(ACCOUNT_ID, UUID.randomUUID())));
+    }
 
     private void stubStore() {
         when(fileStorage.store(any(), any(), any(), any()))
@@ -135,5 +157,123 @@ class MediaServiceTest {
         service.upload(max, "a.png", "image/png", ACCOUNT_ID);
 
         verify(fileStorage).store(max, "a.png", "image/png", "uploads/acc-7");
+    }
+
+    @Test
+    void uploadUsesProvidedBatchId() {
+        stubStore();
+        UUID batchId = UUID.randomUUID();
+
+        MediaUploadResult result = service.upload(PNG, "a.png", "image/png", ACCOUNT_ID, batchId);
+
+        assertThat(result.batchId()).isEqualTo(batchId);
+        ArgumentCaptor<MediaUpload> rowCaptor = ArgumentCaptor.forClass(MediaUpload.class);
+        verify(mediaUploads, times(2)).save(rowCaptor.capture());
+        assertThat(rowCaptor.getAllValues().get(0).getBatchId()).isEqualTo(batchId);
+    }
+
+    @Test
+    void uploadDeletesStoredFileWhenBatchWasCanceled() {
+        stubStore();
+        MediaUpload canceled = MediaUpload.uploading(ACCOUNT_ID, UUID.randomUUID());
+        canceled.markCanceled();
+        when(mediaUploads.findByIdForUpdate(any())).thenReturn(Optional.of(canceled));
+
+        service.upload(PNG, "a.png", "image/png", ACCOUNT_ID, UUID.randomUUID());
+
+        verify(fileStorage).delete("p");
+        assertThat(canceled.getStatus()).isEqualTo(MediaUploadStatus.DELETED);
+    }
+
+    @Test
+    void deleteBatchDeletesPendingAndSkipsAttached() {
+        UUID batchId = UUID.randomUUID();
+        MediaUpload pending = MediaUpload.uploading(ACCOUNT_ID, batchId);
+        pending.markPending("u1", "p1", 1, "png");
+        MediaUpload attached = MediaUpload.uploading(ACCOUNT_ID, batchId);
+        attached.markPending("u2", "p2", 1, "png");
+        attached.markAttached();
+        when(mediaUploads.findByAccountIdAndBatchIdForUpdate(ACCOUNT_ID, batchId))
+                .thenReturn(List.of(pending, attached));
+
+        MediaBatchDeleteResult result = service.deleteBatch(ACCOUNT_ID, batchId);
+
+        assertThat(result.deleted()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(1);
+        verify(fileStorage).delete("p1");
+        assertThat(pending.getStatus()).isEqualTo(MediaUploadStatus.DELETED);
+        assertThat(attached.getStatus()).isEqualTo(MediaUploadStatus.ATTACHED);
+    }
+
+    @Test
+    void deleteBatchMarksUploadingWithoutPublicIdCanceled() {
+        UUID batchId = UUID.randomUUID();
+        MediaUpload uploading = MediaUpload.uploading(ACCOUNT_ID, batchId);
+        when(mediaUploads.findByAccountIdAndBatchIdForUpdate(ACCOUNT_ID, batchId))
+                .thenReturn(List.of(uploading));
+
+        MediaBatchDeleteResult result = service.deleteBatch(ACCOUNT_ID, batchId);
+
+        assertThat(result.deleted()).isEqualTo(1);
+        verify(fileStorage, never()).delete(any());
+        assertThat(uploading.getStatus()).isEqualTo(MediaUploadStatus.CANCELED);
+    }
+
+    @Test
+    void deleteBatchUnknownThrowsNotFound() {
+        UUID batchId = UUID.randomUUID();
+        when(mediaUploads.findByAccountIdAndBatchIdForUpdate(ACCOUNT_ID, batchId)).thenReturn(List.of());
+        when(mediaUploads.existsByBatchId(batchId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteBatch(ACCOUNT_ID, batchId))
+                .isInstanceOf(MediaBatchNotFoundException.class)
+                .hasMessage("Không tìm thấy batch");
+    }
+
+    @Test
+    void deleteBatchOfAnotherAccountThrowsForbidden() {
+        UUID batchId = UUID.randomUUID();
+        when(mediaUploads.findByAccountIdAndBatchIdForUpdate(ACCOUNT_ID, batchId)).thenReturn(List.of());
+        when(mediaUploads.existsByBatchId(batchId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteBatch(ACCOUNT_ID, batchId))
+                .isInstanceOf(MediaBatchForbiddenException.class)
+                .hasMessage("Batch thuộc tài khoản khác");
+    }
+
+    @Test
+    void attachBatchMarksPendingRows() {
+        UUID batchId = UUID.randomUUID();
+        MediaUpload pending = MediaUpload.uploading(ACCOUNT_ID, batchId);
+        pending.markPending("u", "p", 1, "png");
+        when(mediaUploads.findByAccountIdAndBatchIdForUpdate(ACCOUNT_ID, batchId))
+                .thenReturn(List.of(pending));
+
+        var result = service.attachBatch(ACCOUNT_ID, batchId);
+
+        assertThat(result.attached()).isEqualTo(1);
+        assertThat(pending.getStatus()).isEqualTo(MediaUploadStatus.ATTACHED);
+    }
+
+    @Test
+    void attachBatchCanceledThrowsConflict() {
+        UUID batchId = UUID.randomUUID();
+        MediaUpload canceled = MediaUpload.uploading(ACCOUNT_ID, batchId);
+        canceled.markCanceled();
+        when(mediaUploads.findByAccountIdAndBatchIdForUpdate(ACCOUNT_ID, batchId))
+                .thenReturn(List.of(canceled));
+
+        assertThatThrownBy(() -> service.attachBatch(ACCOUNT_ID, batchId))
+                .isInstanceOf(MediaBatchConflictException.class)
+                .hasMessage("Batch đã bị huỷ");
+    }
+
+    @Test
+    void markFailedMovesUploadingToFailed() {
+        MediaUpload row = MediaUpload.uploading(ACCOUNT_ID, UUID.randomUUID());
+
+        row.markFailed();
+
+        assertThat(row.getStatus()).isEqualTo(MediaUploadStatus.FAILED);
     }
 }
