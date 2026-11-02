@@ -429,7 +429,7 @@ Các bước:
 - failure_reason
 - paid_at
 - created_at
-- status (Pending/Failed/Success)
+- status (Pending/Failed/Success/Duplicate)
 # AuditLog
 **Overview:** lưu lịch sử các thao tác nghiệp vụ nhạy cảm để đối chiếu khi có tranh chấp hoặc lỗi.
 
@@ -465,8 +465,9 @@ Các bước:
 | `PROPOSAL_CANCELED` | Proposal bị huỷ do khoang hết khả dụng lúc khách đồng ý hoặc đơn bị huỷ | `ProposalFeedback` | Customer/System |
 | `INVOICE_CREATED` | Hệ thống tạo hóa đơn cọc | `Invoice` | Customer/FM |
 | `INVOICE_CANCELED` | Hóa đơn bị vô hiệu hóa | `Invoice` | Customer/FM |
-| `PAYMENT_SUCCEEDED` | Thanh toán được xác nhận | `PaymentTransaction` | System/IPN |
-| `PAYMENT_FAILED` | Thanh toán thất bại | `PaymentTransaction` | System/IPN |
+| `PAYMENT_SUCCEEDED` | Thanh toán được xác nhận | `PaymentTransaction` | System/IPN/Admin |
+| `PAYMENT_FAILED` | Thanh toán thất bại | `PaymentTransaction` | System/IPN/Admin |
+| `PAYMENT_DUPLICATE` | Giao dịch Success thứ hai cho cùng invoice; không ghi Success lần hai | `PaymentTransaction` | System/IPN/Admin |
 | `RENTAL_ORDER_DEPOSITED` | Đơn chuyển sang đã đặt cọc | `RentalOrder` | System |
 | `STORAGE_UNIT_RESERVED` | Khoang chuyển sang Reserved | `StorageUnit` | System |
 | `MANUAL_REFUND_RECORDED` | Ghi nhận hoàn tiền thủ công | `PaymentTransaction` | Admin/FM |
@@ -556,6 +557,7 @@ Các bước:
 | `PROPOSAL_REPROPOSAL_REQUIRED` | FM cần đề xuất lại khoang khác (nội dung gồm mã đơn và mã khoang cũ) | FM |
 | `PROPOSAL_REPROPOSED` | FM tạo proposal mới, nội dung gồm link xác nhận | Customer |
 | `DEPOSIT_PAYMENT_SUCCEEDED` | Đặt cọc thành công | Customer |
+| `PAYMENT_DUPLICATE_REFUND_REQUIRED` | Giao dịch Success thứ hai cho cùng invoice — FM cần hoàn tiền thủ công | FM |
 | `APPOINTMENT_CREATED` | Tạo lịch hẹn check-in, nội dung khác nhau theo recipient (xem NOTES) | Customer, FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron hủy lịch do khách không đến (nội dung gồm thời gian hẹn cũ và link đặt lịch mới) | Customer |
 | `FS_ASSIGNED` | FM phân công FS cho lịch hẹn, nội dung gồm thông tin lịch hẹn | FS |
