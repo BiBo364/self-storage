@@ -17,8 +17,8 @@ import vn.lemar.selfstorage.payment.application.event.PaymentSucceeded;
  * lỗi sau khi IPN commit, invoice vẫn {@code Unpaid}. Job quét invoice Unpaid có giao dịch thành
  * công và gọi lại listener (idempotent) — không cần querydr, không thêm bảng outbox.
  *
- * <p>Không cứu được IPN mất hẳn (giao dịch còn Pending); ca đó vẫn cần querydr/report. Một instance,
- * chưa cần ShedLock.
+ * <p>Không cứu được IPN mất hẳn (giao dịch còn Pending); ca đó vẫn cần đối soát thủ công. Một
+ * instance, chưa cần ShedLock.
  */
 @Component
 public class DepositStateRepairJob {

@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -278,14 +279,26 @@ class PaymentServiceTest {
 
     @Test
     void manualSuccessMapsGatewayConstraintRaceToConflict() {
-        doThrow(new DataIntegrityViolationException("duplicate gateway no"))
-                .when(repository).flush();
+        doThrow(new DataIntegrityViolationException("duplicate gateway no",
+                new SQLException("duplicate", "23505"))).when(repository).flush();
 
         assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
                 new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
                         "portal says paid", Instant.now(), "GW-RACE"), "admin@lemar.vn"))
                 .isInstanceOf(ManualReconciliationConflictException.class)
                 .hasMessageContaining("xung đột");
+    }
+
+    @Test
+    void manualSuccessDoesNotMaskNonUniqueConstraintFailure() {
+        DataIntegrityViolationException failure = new DataIntegrityViolationException(
+                "check violation", new SQLException("check", "23514"));
+        doThrow(failure).when(repository).flush();
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "GW-CHECK"), "admin@lemar.vn"))
+                .isSameAs(failure);
     }
 
     @Test
@@ -414,6 +427,17 @@ class PaymentServiceTest {
                         "second", Instant.now(), "GW-2"), "admin@lemar.vn"))
                 .isInstanceOf(ManualReconciliationConflictException.class);
         verify(events, never()).publishEvent(any());
+    }
+
+    @Test
+    void manualReconcileRefusesDuplicateTransaction() {
+        transaction.markDuplicate("GW-OLD", Instant.now(), "duplicate", "{}");
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "retry", Instant.now(), "GW-NEW"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationConflictException.class)
+                .hasMessageContaining("Duplicate");
     }
 
     @Test

@@ -29,6 +29,7 @@ import vn.lemar.selfstorage.payment.application.PaymentService;
 import vn.lemar.selfstorage.payment.application.dto.IpnResponse;
 import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationOutcome;
 import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationRequest;
+import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
 import vn.lemar.selfstorage.payment.repository.PaymentTransactionRepository;
@@ -110,6 +111,8 @@ class PaymentIpnConcurrencyTest {
                 .containsExactlyInAnyOrder("00", "02");
         assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
         assertThat(countStatus(invoiceId, "Duplicate")).isEqualTo(1);
+        assertThat(invoiceStatus(invoiceId)).isEqualTo("Unpaid");
+        assertThat(orderStatus(invoiceId)).isEqualTo("Pending");
     }
 
     @Test
@@ -146,6 +149,46 @@ class PaymentIpnConcurrencyTest {
 
         assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
         assertThat(countStatus(invoiceId, "Duplicate")).isEqualTo(1);
+        assertThat(invoiceStatus(invoiceId)).isEqualTo("Unpaid");
+        assertThat(orderStatus(invoiceId)).isEqualTo("Pending");
+    }
+
+    @Test
+    void manualAndIpnOnSameTransactionSerializeWithoutDuplicate() throws Exception {
+        when(gateway.verifySignature(anyMap())).thenReturn(true);
+
+        long invoiceId = seedInvoice();
+        repository.saveAndFlush(new PaymentTransaction(
+                invoiceId, "TXNRACE-SAME", AMOUNT, "coc thue kho"));
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch startLine = new CountDownLatch(1);
+        try {
+            Future<String> manual = pool.submit(() -> {
+                startLine.await();
+                try {
+                    return service.reconcileManually("TXNRACE-SAME",
+                            new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                                    "race", Instant.now(), "GW-SAME"), "admin@lemar.vn")
+                            .status().name();
+                } catch (ManualReconciliationConflictException e) {
+                    return "CONFLICT";
+                }
+            });
+            Future<IpnResponse> ipn = pool.submit(() -> {
+                startLine.await();
+                return service.handleIpn(ipn("TXNRACE-SAME", "14123460"));
+            });
+
+            startLine.countDown();
+            assertThat(manual.get(30, TimeUnit.SECONDS) + ":" + ipn.get(30, TimeUnit.SECONDS).rspCode())
+                    .isIn("SUCCESS:02", "CONFLICT:00");
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
+        assertThat(countStatus(invoiceId, "Duplicate")).isZero();
     }
 
     private List<IpnResponse> callIpnConcurrently(int threads) throws Exception {
@@ -195,6 +238,18 @@ class PaymentIpnConcurrencyTest {
                 "vnp_TransactionNo", transactionNo,
                 "vnp_PayDate", "20260930163700",
                 "vnp_SecureHash", "khong-dung-toi-vi-gateway-da-mock");
+    }
+
+    private String invoiceStatus(long invoiceId) {
+        return jdbc.queryForObject(
+                "SELECT status FROM invoices WHERE id = ?", String.class, invoiceId);
+    }
+
+    private String orderStatus(long invoiceId) {
+        return jdbc.queryForObject(
+                "SELECT o.status FROM rental_orders o JOIN invoices i ON i.order_id = o.id"
+                        + " WHERE i.id = ?",
+                String.class, invoiceId);
     }
 
     private int countStatus(long invoiceId, String status) {

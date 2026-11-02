@@ -3,6 +3,7 @@ package vn.lemar.selfstorage.payment.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -156,8 +157,9 @@ public class PaymentService {
         }
 
         String responsePayload = toJson(params);
-        // Hai event dưới đây publish TRƯỚC khi transaction này commit — listener phải đăng ký
-        // @TransactionalEventListener(AFTER_COMMIT); xem javadoc PaymentSucceeded/PaymentFailed.
+        // Các event dưới đây publish TRƯỚC khi transaction này commit — listener phải đăng ký
+        // @TransactionalEventListener(AFTER_COMMIT); xem javadoc PaymentSucceeded/PaymentFailed/
+        // PaymentDuplicateDetected.
         if (gatewayReportedSuccess(params)) {
             repository.lockInvoiceForPayment(transaction.getInvoiceId());
             if (repository.existsByInvoiceIdAndDirectionAndStatus(transaction.getInvoiceId(),
@@ -225,6 +227,9 @@ public class PaymentService {
             try {
                 repository.flush();
             } catch (DataIntegrityViolationException e) {
+                if (!isUniqueViolation(e)) {
+                    throw e;
+                }
                 // Unique constraint là chốt cuối khi hai request vượt qua pre-check cùng lúc.
                 throw new ManualReconciliationConflictException(
                         "Dữ liệu giao dịch xung đột, không chốt được");
@@ -303,6 +308,11 @@ public class PaymentService {
     private boolean gatewayReportedSuccess(Map<String, String> params) {
         return SUCCESS_CODE.equals(params.get("vnp_ResponseCode"))
                 && SUCCESS_CODE.equals(params.get("vnp_TransactionStatus"));
+    }
+
+    private boolean isUniqueViolation(DataIntegrityViolationException exception) {
+        return exception.getMostSpecificCause() instanceof SQLException sql
+                && "23505".equals(sql.getSQLState());
     }
 
     private boolean amountMatches(String rawAmount, BigDecimal expected) {

@@ -71,8 +71,10 @@ class PaymentSessionQueryServiceTest {
         var payment = service.findSuccessfulPayment(1L);
 
         assertThat(payment).hasValueSatisfying(found -> {
+            assertThat(found.invoiceId()).isEqualTo(1L);
             assertThat(found.vnpTxnRef()).isEqualTo("TXN1");
             assertThat(found.amount()).isEqualByComparingTo(new BigDecimal("10000"));
+            assertThat(found.paidAt()).isEqualTo(Instant.parse("2026-10-28T12:00:00Z"));
         });
     }
 

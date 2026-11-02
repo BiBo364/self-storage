@@ -193,6 +193,36 @@ class ManualReconciliationIntegrationTest {
     }
 
     @Test
+    void futurePaidAtIsRejected() throws Exception {
+        String txnRef = createPendingPayment("INV-MANUAL-FUTURE");
+
+        mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
+                        {"outcome":"SUCCESS","note":"future","paidAt":"2999-01-01T00:00:00Z",
+                         "gatewayTransactionNo":"GW-FUTURE"}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("tương lai")));
+
+        assertThat(paymentStatus(txnRef)).isEqualTo("Pending");
+    }
+
+    @Test
+    void paidAtBeforeTransactionCreationIsRejected() throws Exception {
+        String txnRef = createPendingPayment("INV-MANUAL-PAST");
+
+        mockMvc.perform(reconcileAs(ADMIN_EMAIL, txnRef, """
+                        {"outcome":"SUCCESS","note":"past","paidAt":"2000-01-01T00:00:00Z",
+                         "gatewayTransactionNo":"GW-PAST"}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("trước thời điểm tạo giao dịch")));
+
+        assertThat(paymentStatus(txnRef)).isEqualTo("Pending");
+    }
+
+    @Test
     void manualSuccessWithoutGatewayTransactionNoIsRejected() throws Exception {
         String txnRef = createPendingPayment("INV-MANUAL-NO-GATEWAY");
 

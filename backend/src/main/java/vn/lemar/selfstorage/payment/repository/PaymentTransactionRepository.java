@@ -22,8 +22,8 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
      * constraint {@code vnp_txn_ref} không chặn được vì cả hai update cùng một row, không sinh row
      * thứ hai. Khoá ở đây buộc IPN thứ hai đợi, đọc lại thấy {@code Success} và trả về {@code 02}.
      *
-     * <p>Phải gọi trong transaction. Hiện chỉ có luồng IPN dùng; thêm chỗ đọc thuần sau này thì
-     * tách method riêng không khoá.
+     * <p>Phải gọi trong transaction. IPN và đối soát thủ công đều dùng; thêm chỗ đọc thuần sau này
+     * thì tách method riêng không khoá.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PaymentTransaction> findByVnpTxnRef(String vnpTxnRef);
