@@ -21,7 +21,8 @@ còn `Pending`. Endpoint không sửa DB tay; nó khoá row, ghi audit và phát
 - `outcome`: `SUCCESS` hoặc `FAILED`.
 - `note`: bằng chứng/ghi chú, bắt buộc.
 - `paidAt`: thời điểm trả theo portal; bắt buộc khi `outcome=SUCCESS`, không được ở tương lai và
-  không được trước `PaymentTransaction.createdAt`.
+  không được trước `PaymentTransaction.createdAt`. So sánh `createdAt` ở độ chính xác giây để khớp
+  timestamp của portal; cùng giây là hợp lệ.
 - `gatewayTransactionNo`: mã giao dịch VNPay; bắt buộc khi `outcome=SUCCESS`, không được trùng giao
   dịch khác.
 - `amount` không có trong request: hệ thống dùng `PaymentTransaction.amount`, không nhận từ người
@@ -32,8 +33,8 @@ còn `Pending`. Endpoint không sửa DB tay; nó khoá row, ghi audit và phát
 1. Tìm giao dịch theo `txnRef`; không có → `404`.
 2. Khoá row giao dịch, khoá invoice bằng advisory lock; chỉ nhận `Pending`; đã
    `Success`/`Failed`/`Duplicate` → `409`, không ghi thêm.
-3. `SUCCESS`: `paidAt` bắt buộc, không tương lai, không trước `PaymentTransaction.createdAt`;
-   thiếu/sai → `400`.
+3. `SUCCESS`: `paidAt` bắt buộc, không tương lai, không trước `PaymentTransaction.createdAt`
+   (so sánh tới giây); thiếu/sai → `400`.
 4. `SUCCESS`: `gatewayTransactionNo` bắt buộc; trùng giao dịch khác → `409`.
 5. `SUCCESS`: invoice chưa có giao dịch `PAY/Success` → `markSucceeded`, audit
    `PAYMENT_SUCCEEDED`, phát `PaymentSucceeded`.

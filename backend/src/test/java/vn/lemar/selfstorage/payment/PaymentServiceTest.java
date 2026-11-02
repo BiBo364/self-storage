@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -275,6 +276,18 @@ class PaymentServiceTest {
         assertThat(event.getValue().amount()).isEqualByComparingTo(transaction.getAmount());
         verify(audit).record(argThat(entry -> entry.reason() != null
                 && entry.reason().contains("admin@lemar.vn")));
+    }
+
+    @Test
+    void manualSuccessAcceptsPaidAtTruncatedToTheTransactionSecond() {
+        Instant paidAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        var response = service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", paidAt, "GW-SAME-SECOND"), "admin@lemar.vn");
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(transaction.getPaidAt()).isEqualTo(paidAt);
     }
 
     @Test

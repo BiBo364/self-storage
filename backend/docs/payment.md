@@ -125,7 +125,8 @@ Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`
 - **Chỉ giao dịch `Pending`.** Row bị khoá `PESSIMISTIC_WRITE`; invoice được khoá thêm bằng
   advisory lock để hai manual request cùng invoice serialize. Giao dịch đã `Success`/`Failed`,
   invoice đã có `PAY/Success`, hoặc `gatewayTransactionNo` trùng giao dịch khác trả `409`, không
-  ghi thêm. `SUCCESS` bắt buộc `paidAt` (không tương lai, không trước `createdAt`) và
+  ghi thêm. `SUCCESS` bắt buộc `paidAt` (không tương lai, không trước `createdAt` — so sánh tới
+  giây) và
   `gatewayTransactionNo`; thiếu/sai trả `400`. Amount lấy từ `PaymentTransaction`, không nhận từ
   request.
 - **Ghi như IPN:** `markSucceeded`/`markFailed`, audit `PAYMENT_SUCCEEDED`/`PAYMENT_FAILED`, phát

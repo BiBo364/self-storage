@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -203,7 +204,7 @@ public class PaymentService {
                 throw new ManualReconciliationValidationException(
                         "paidAt không được ở tương lai");
             }
-            if (request.paidAt().isBefore(transaction.getCreatedAt())) {
+            if (request.paidAt().isBefore(transaction.getCreatedAt().truncatedTo(ChronoUnit.SECONDS))) {
                 throw new ManualReconciliationValidationException(
                         "paidAt không được trước thời điểm tạo giao dịch");
             }
