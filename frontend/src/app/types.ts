@@ -21,7 +21,10 @@ export type View =
   | "fm-staff"
   | "fm-reports"
   | "fm-invoices"
-  | "fm-contracts";
+  | "fm-contracts"
+  | "fm-orders"
+  | "fs-schedule"
+  | "fs-handover";
 export type Navigate = (path: string) => void;
 export type NoticeTone = "info" | "success" | "error" | "pending";
 export type Notice = { tone: NoticeTone; message: string } | null;

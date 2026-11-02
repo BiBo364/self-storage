@@ -3,6 +3,8 @@ import { useState } from "react";
 import { formatPrice } from "../../mocks/catalog";
 import { fmInvoices, type InvoiceStatus, type InvoiceType } from "../../mocks/fm";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { FilterSelect } from "../../components/ui/FilterSelect";
+import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 type TypeFilter = "all" | InvoiceType;
@@ -22,14 +24,11 @@ const STATUS_LABEL: Record<InvoiceStatus, string> = {
   Canceled: "Đã huỷ",
 };
 
-const STATUS_BADGE: Record<InvoiceStatus, string> = {
-  Unpaid: "bg-warning/14 text-warning",
-  Paid: "bg-success/14 text-success",
-  Canceled: "bg-surface-subtle text-muted",
+const STATUS_TONE: Record<InvoiceStatus, "warning" | "success" | "neutral"> = {
+  Unpaid: "warning",
+  Paid: "success",
+  Canceled: "neutral",
 };
-
-const FILTER_SELECT =
-  "min-w-[170px] rounded-sm border border-border bg-surface px-[11px] py-[10px] pr-[30px] text-[12px] font-semibold text-ink";
 
 export function FacilityInvoicesPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -51,47 +50,49 @@ export function FacilityInvoicesPage() {
     .reduce((sum, invoice) => sum + invoice.amount, 0);
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Quản lý hóa đơn cơ sở</h1>
-        <p className="mt-2 text-[13px] text-muted">
-          Hóa đơn phát sinh từ khách hàng thuộc cơ sở của bạn — chỉ xem, hệ thống tự tạo hóa đơn
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Quản lý hoá đơn cơ sở</h1>
+        <p className="mt-1.5 text-small text-muted">
+          Hoá đơn phát sinh từ khách hàng thuộc cơ sở của bạn — chỉ xem, hệ thống tự tạo hoá đơn
           theo từng flow (đặt cọc, gia hạn, trả kho, sự cố).
         </p>
       </div>
 
-      <div className="mb-8 grid grid-cols-2 gap-4 max-[520px]:grid-cols-1">
-        <div className="border border-border bg-surface p-5">
-          <p className="m-0 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-warning">
+      <div className="grid grid-cols-2 gap-2 max-[520px]:grid-cols-1">
+        <div className="bg-surface p-5">
+          <span className="flex items-center gap-1.5 text-label text-muted">
             <Wallet size={13} /> Tổng công nợ chưa thu
-          </p>
-          <p className="m-0 mt-2 text-[22px] font-bold text-ink">{formatPrice(totalUnpaid)}đ</p>
+          </span>
+          <strong className="mt-2 block text-stat text-warning">
+            {formatPrice(totalUnpaid)} đ
+          </strong>
         </div>
-        <div className="border border-border bg-surface p-5">
-          <p className="m-0 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-success">
+        <div className="bg-surface p-5">
+          <span className="flex items-center gap-1.5 text-label text-muted">
             <CircleDollarSign size={13} /> Tổng đã thu
-          </p>
-          <p className="m-0 mt-2 text-[22px] font-bold text-ink">{formatPrice(totalPaid)}đ</p>
+          </span>
+          <strong className="mt-2 block text-stat text-success">{formatPrice(totalPaid)} đ</strong>
         </div>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <select
-          className={FILTER_SELECT}
+      <div className="grid grid-cols-2 items-end gap-3 max-[760px]:grid-cols-1">
+        <FilterSelect
+          label="Loại hoá đơn"
           value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
+          onChange={(value) => setTypeFilter(value as TypeFilter)}
         >
-          <option value="all">Tất cả loại hóa đơn</option>
+          <option value="all">Tất cả loại hoá đơn</option>
           {(Object.keys(TYPE_LABEL) as InvoiceType[]).map((type) => (
             <option key={type} value={type}>
               {TYPE_LABEL[type]}
             </option>
           ))}
-        </select>
-        <select
-          className={FILTER_SELECT}
+        </FilterSelect>
+        <FilterSelect
+          label="Trạng thái"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          onChange={(value) => setStatusFilter(value as StatusFilter)}
         >
           <option value="all">Tất cả trạng thái</option>
           {(Object.keys(STATUS_LABEL) as InvoiceStatus[]).map((status) => (
@@ -99,43 +100,36 @@ export function FacilityInvoicesPage() {
               {STATUS_LABEL[status]}
             </option>
           ))}
-        </select>
+        </FilterSelect>
       </div>
 
       {list.length === 0 ? (
-        <SurfaceState variant="empty" title="Không có hóa đơn nào phù hợp bộ lọc" />
+        <SurfaceState variant="empty" title="Không có hoá đơn nào phù hợp bộ lọc" />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {list.map((invoice) => (
             <button
               key={invoice.id}
-              className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col"
+              className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,0.7fr)_auto] items-center gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle max-[900px]:grid-cols-1 max-[900px]:gap-2"
               onClick={() => setOpenId(invoice.id)}
             >
               <div>
-                <div className="flex items-center gap-2.5">
-                  <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-bold text-brand">
-                    {TYPE_LABEL[invoice.type]}
-                  </span>
-                  <p className="m-0 font-mono text-[13px] font-bold text-ink">{invoice.code}</p>
-                </div>
-                <p className="mb-0 mt-1.5 flex items-center gap-1.5 text-[13px] text-muted">
-                  <UserRound size={13} /> {invoice.customerName} · Khoang {invoice.unitCode}
-                </p>
-                <p className="mb-0 mt-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
-                  Hạn thanh toán {invoice.dueDate}
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className="text-[14px] font-bold text-ink">
-                  {formatPrice(invoice.amount)}đ
+                <span className="text-label text-muted">
+                  {TYPE_LABEL[invoice.type]} · {invoice.code}
                 </span>
-                <span
-                  className={`whitespace-nowrap rounded-full px-[9px] py-[6px] text-[11px] font-extrabold ${STATUS_BADGE[invoice.status]}`}
-                >
-                  {STATUS_LABEL[invoice.status]}
-                </span>
+                <strong className="mt-1 block text-small font-semibold text-ink">
+                  {invoice.customerName} · Khoang {invoice.unitCode}
+                </strong>
               </div>
+              <span className="flex items-center gap-1.5 text-label text-muted">
+                <UserRound size={13} /> Hạn {invoice.dueDate}
+              </span>
+              <strong className="text-[18px] font-semibold text-ink">
+                {formatPrice(invoice.amount)} đ
+              </strong>
+              <StatusTag tone={STATUS_TONE[invoice.status]}>
+                {STATUS_LABEL[invoice.status]}
+              </StatusTag>
             </button>
           ))}
         </div>
@@ -147,29 +141,29 @@ export function FacilityInvoicesPage() {
           eyebrow={TYPE_LABEL[openInvoice.type]}
           onClose={() => setOpenId(null)}
         >
-          <div className="grid gap-2.5 text-[13px] text-muted">
+          <div className="grid gap-2 text-small text-muted">
             <span className="flex items-center gap-2">
               <UserRound size={14} /> {openInvoice.customerName}
             </span>
             <span>Khoang: {openInvoice.unitCode}</span>
             <span>Hạn thanh toán: {openInvoice.dueDate}</span>
           </div>
-          <div className="mt-4 grid gap-2 border border-border bg-surface-subtle p-3.5 text-[12px]">
-            <div className="flex items-center justify-between">
+          <div className="mt-4 bg-surface-subtle p-3.5">
+            <div className="flex items-center justify-between gap-4 text-small">
               <span className="text-muted">Số tiền</span>
-              <strong className="text-[15px]">{formatPrice(openInvoice.amount)}đ</strong>
+              <strong className="text-[18px] font-semibold text-ink">
+                {formatPrice(openInvoice.amount)} đ
+              </strong>
             </div>
-            <div className="flex items-center justify-between border-t border-border pt-2">
+            <div className="mt-2 flex items-center justify-between gap-4 text-small">
               <span className="text-muted">Trạng thái</span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${STATUS_BADGE[openInvoice.status]}`}
-              >
+              <StatusTag tone={STATUS_TONE[openInvoice.status]}>
                 {STATUS_LABEL[openInvoice.status]}
-              </span>
+              </StatusTag>
             </div>
           </div>
         </DetailPanel>
       )}
-    </main>
+    </div>
   );
 }

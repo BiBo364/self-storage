@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowRight, LogOut, Menu, X } from "lucide-react";
 import { Navigate, View } from "../../app/types";
 import { PAGE_CONTAINER } from "../../app/layout";
 import { ROLE_HOME } from "../../app/routes";
 import { authGateway, type AuthSession } from "../../app/auth";
 import { Brand } from "../ui/Brand";
+import { Button } from "../ui/Button";
 import type { Theme } from "../ui/ThemeToggle";
 import { ThemeToggle } from "../ui/ThemeToggle";
 
@@ -22,17 +23,6 @@ export function PublicHeader({
   session: AuthSession | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
-
-  useEffect(() => {
-    function handleScroll() {
-      setIsScrolled(window.scrollY > 24);
-    }
-
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   function go(path: string) {
     setOpen(false);
@@ -45,22 +35,18 @@ export function PublicHeader({
   }
   const homePath = session ? (ROLE_HOME[session.user.role] ?? "/") : "/";
   const navLink =
-    "border-0 bg-transparent text-[13px] font-[650] text-muted transition-colors duration-[180ms] ease hover:text-brand max-[760px]:p-3 max-[760px]:text-left";
+    "border-0 bg-transparent p-0 text-left text-small font-semibold text-muted transition-colors duration-150 hover:text-ink max-[760px]:p-2.5";
+  const activeLink =
+    "border-0 bg-brand px-2 py-1 text-left text-small font-semibold text-signal-ink hover:text-signal-ink";
 
   return (
-    <header
-      className={`sticky top-3 z-10 mx-auto w-[min(100%,1320px)] rounded-none border border-transparent bg-[var(--header-surface)] transition-[width,background,border-color,border-radius,box-shadow] duration-[220ms] ease max-[760px]:top-2 max-[760px]:w-[calc(100%-16px)] max-[760px]:rounded-md ${
-        isScrolled
-          ? "w-[min(calc(100%-32px),1080px)] rounded-md border-border bg-[var(--header-surface-scrolled)] shadow-[var(--header-shadow-scrolled)] max-[760px]:w-[calc(100%-24px)]"
-          : ""
-      }`}
-    >
+    <header className="sticky top-0 z-20 bg-surface">
       <div
-        className={`${PAGE_CONTAINER} flex min-h-[68px] items-center justify-between ${isScrolled ? "min-h-[56px]" : ""}`}
+        className={`${PAGE_CONTAINER} flex min-h-[74px] items-center justify-between gap-6 max-[760px]:min-h-[64px]`}
       >
-        <Brand onClick={() => go("/")} compact={isScrolled} />
+        <Brand onClick={() => go("/")} />
         <button
-          className="hidden h-[38px] w-[38px] place-items-center rounded-sm border border-border bg-surface text-ink max-[760px]:inline-grid"
+          className="hidden h-9 w-9 place-items-center border-0 bg-transparent text-ink max-[760px]:grid"
           onClick={() => setOpen((current) => !current)}
           aria-label={open ? "Đóng menu" : "Mở menu"}
           aria-expanded={open}
@@ -68,47 +54,33 @@ export function PublicHeader({
           {open ? <X size={21} /> : <Menu size={21} />}
         </button>
         <nav
-          className={`flex items-center gap-6 max-[760px]:absolute max-[760px]:left-4 max-[760px]:right-4 max-[760px]:flex-col max-[760px]:items-stretch max-[760px]:rounded-[4px] max-[760px]:border max-[760px]:border-border max-[760px]:bg-surface max-[760px]:p-[9px] max-[760px]:shadow-[0_14px_32px_rgba(0,0,0,0.3)] ${
-            isScrolled ? "gap-[18px] max-[760px]:top-[56px]" : "max-[760px]:top-[68px]"
-          } ${open ? "max-[760px]:flex" : "max-[760px]:hidden"}`}
+          className={`flex items-center gap-6 max-[760px]:absolute max-[760px]:left-4 max-[760px]:right-4 max-[760px]:top-[64px] max-[760px]:flex-col max-[760px]:items-stretch max-[760px]:gap-1 max-[760px]:border max-[760px]:border-border max-[760px]:bg-surface max-[760px]:p-2 ${
+            open ? "max-[760px]:flex" : "max-[760px]:hidden"
+          }`}
           aria-label="Điều hướng chính"
         >
-          <button
-            className={`${navLink} ${view === "units" ? "text-brand" : ""}`}
-            onClick={() => go("/units")}
-          >
-            Phương án kho
+          <button className={view === "units" ? activeLink : navLink} onClick={() => go("/units")}>
+            Tìm kho
           </button>
-          <a className={navLink} href="/#how-it-works" onClick={() => setOpen(false)}>
-            Quy trình
-          </a>
-          <a className={navLink} href="/#support" onClick={() => setOpen(false)}>
-            Điểm kho
-          </a>
-          <ThemeToggle
-            theme={theme}
-            onToggle={onThemeToggle}
-            className="max-[760px]:w-full max-[760px]:flex-row-reverse max-[760px]:justify-between max-[760px]:rounded-[4px] max-[760px]:p-[8px_12px]"
-          />
+          <ThemeToggle theme={theme} onToggle={onThemeToggle} />
           {session ? (
             <>
-              <button
-                className="inline-flex items-center gap-2 rounded-[4px] border border-brand bg-transparent px-[17px] py-[11px] text-[13px] font-[650] text-brand transition-colors duration-[180ms] ease hover:bg-brand hover:text-background max-[760px]:mt-1 max-[760px]:justify-between max-[760px]:p-3 max-[760px]:text-left"
-                onClick={() => go(homePath)}
-              >
+              <Button className="max-[760px]:w-full" onClick={() => go(homePath)}>
                 Không gian của bạn <ArrowRight size={16} />
-              </button>
-              <button className={navLink} onClick={logout}>
-                <LogOut size={15} className="mr-1.5 inline align-[-2px]" /> Đăng xuất
+              </Button>
+              <button className={`${navLink} inline-flex items-center gap-1.5`} onClick={logout}>
+                <LogOut size={15} /> Đăng xuất
               </button>
             </>
           ) : (
-            <button
-              className="inline-flex items-center gap-2 rounded-[4px] border border-brand bg-transparent px-[17px] py-[11px] text-[13px] font-[650] text-brand transition-colors duration-[180ms] ease hover:bg-brand hover:text-background max-[760px]:mt-1 max-[760px]:justify-between max-[760px]:p-3 max-[760px]:text-left"
-              onClick={() => go("/login")}
-            >
-              Đăng nhập <ArrowRight size={16} />
-            </button>
+            <>
+              <button className={navLink} onClick={() => go("/login")}>
+                Đăng nhập
+              </button>
+              <Button className="max-[760px]:w-full" onClick={() => go("/rental-requests/new")}>
+                Gửi nhu cầu <ArrowRight size={16} />
+              </Button>
+            </>
           )}
         </nav>
       </div>

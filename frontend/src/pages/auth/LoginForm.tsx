@@ -1,8 +1,9 @@
 import { FormEvent, useState } from "react";
-import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { Navigate, Notice } from "../../app/types";
 import { ROLE_HOME } from "../../app/routes";
 import { authGateway, type UserRole } from "../../app/auth";
+import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import {
   FIELD_GROUP,
@@ -21,9 +22,14 @@ const ROLE_PAGE_NAMES: Record<UserRole, string> = {
 };
 
 export function LoginForm({ navigate }: { navigate: Navigate }) {
-  const [notice, setNotice] = useState<Notice>(null);
+  const [notice, setNotice] = useState<Notice>(
+    new URLSearchParams(window.location.search).get("verified") === "1"
+      ? { tone: "success", message: "Email đã được xác minh. Đăng nhập để tiếp tục." }
+      : null,
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -52,11 +58,12 @@ export function LoginForm({ navigate }: { navigate: Navigate }) {
       setIsSubmitting(false);
     }
   }
+
   return (
     <>
       <div className="mb-6">
-        <h1 className="m-0 text-[32px] leading-tight tracking-[-0.045em] text-ink">Đăng nhập</h1>
-        <p className="mt-3 text-[13px] text-muted">Quản lý nhu cầu lưu trữ của bạn tại Kho Mộc.</p>
+        <h1 className="m-0 text-section text-ink">Đăng nhập</h1>
+        <p className="mt-2 text-small text-muted">Quản lý nhu cầu lưu trữ của bạn tại Kho Mộc.</p>
       </div>
       <form className="grid gap-0" onSubmit={submit}>
         <FormField
@@ -74,7 +81,7 @@ export function LoginForm({ navigate }: { navigate: Navigate }) {
             </label>
             <button
               type="button"
-              className="self-start border-0 bg-transparent p-0 text-[10px] font-extrabold text-brand"
+              className="self-start border-0 bg-transparent p-0 text-label font-semibold text-accent hover:text-ink"
               onClick={() =>
                 setNotice({
                   tone: "info",
@@ -97,7 +104,7 @@ export function LoginForm({ navigate }: { navigate: Navigate }) {
             />
             <button
               type="button"
-              className="grid place-items-center border-0 bg-transparent p-[3px] text-muted"
+              className="grid place-items-center border-0 bg-transparent p-[3px] text-muted hover:text-ink"
               onClick={() => setShowPassword((current) => !current)}
               aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
             >
@@ -105,28 +112,21 @@ export function LoginForm({ navigate }: { navigate: Navigate }) {
             </button>
           </div>
         </div>
-        <button
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm border-0 bg-brand px-[18px] text-label text-background transition-colors hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
-          type="submit"
-          disabled={isSubmitting}
-        >
+        <Button type="submit" pending={isSubmitting} className="mt-1 w-full">
           {isSubmitting ? (
-            <>
-              <LoaderCircle size={17} className="animate-spin" aria-hidden="true" />
-              Đang kiểm tra…
-            </>
+            "Đang kiểm tra…"
           ) : (
             <>
               Đăng nhập <ArrowRight size={17} />
             </>
           )}
-        </button>
+        </Button>
         {notice && <DemoNotice tone={notice.tone}>{notice.message}</DemoNotice>}
       </form>
-      <p className="mt-5 text-center text-xs text-muted">
+      <p className="mt-5 text-center text-small text-muted">
         Bạn chưa có tài khoản?{" "}
         <button
-          className="border-0 bg-transparent p-0 font-bold text-brand"
+          className="border-0 bg-transparent p-0 font-semibold text-accent hover:text-ink"
           onClick={() => navigate("/register")}
         >
           Đăng ký miễn phí

@@ -114,14 +114,14 @@ export function NotificationBell({ onNavigate }: { onNavigate: (path: string) =>
       >
         <Bell size={18} />
         {unreadCount > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-dark">
+          <span className="absolute -right-1.5 -top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-none bg-brand px-1 text-label font-semibold text-signal-ink">
             {unreadCount}
           </span>
         )}
       </button>
       {open && (
         <div
-          className="absolute top-[calc(100%+10px)] z-40 w-[min(360px,calc(100vw-32px))] animate-[notification-panel-in_240ms_cubic-bezier(0.22,1,0.36,1)] rounded-[6px] border border-border bg-surface p-2 shadow-[var(--shadow-soft),0_0_18px_rgba(53,133,142,0.18)]"
+          className="absolute top-[calc(100%+10px)] z-40 w-[min(360px,calc(100vw-32px))] animate-[notification-panel-in_240ms_cubic-bezier(0.22,1,0.36,1)] rounded-none border border-[var(--container-border)] bg-surface p-2 shadow-[var(--shadow-soft)]"
           role="menu"
           style={
             {
@@ -130,36 +130,36 @@ export function NotificationBell({ onNavigate }: { onNavigate: (path: string) =>
             } as CSSProperties
           }
         >
-          <div className="flex items-center justify-between border-b border-border p-2.5">
-            <strong className="text-[12px]">Thông báo</strong>
+          <div className="flex items-center justify-between p-2.5">
+            <strong className="text-small font-semibold text-ink">Thông báo</strong>
             {unreadCount > 0 && (
-              <span className="text-[11px] text-muted">{unreadCount} chưa đọc</span>
+              <span className="text-label text-muted">{unreadCount} chưa đọc</span>
             )}
           </div>
           {isLoading && !items ? (
-            <p className="m-0 p-3 text-[12px] text-muted">Đang tải thông báo…</p>
+            <p className="m-0 p-3 text-small text-muted">Đang tải thông báo…</p>
           ) : loadError && !items ? (
-            <p className="m-0 p-3 text-[12px] text-danger">Không tải được thông báo.</p>
+            <p className="m-0 p-3 text-small text-danger">Không tải được thông báo.</p>
           ) : latest.length === 0 ? (
-            <p className="m-0 p-3 text-[12px] text-muted">Chưa có thông báo nào.</p>
+            <p className="m-0 p-3 text-small text-muted">Chưa có thông báo nào.</p>
           ) : (
             latest.map((notification) => {
               const isRead = !!notification.readAt;
               return (
                 <button
                   key={notification.id}
-                  className="flex w-full items-start gap-2.5 border-0 border-b border-border bg-transparent px-2.5 py-3 text-left last:border-b-0 hover:bg-brand-soft"
+                  className="flex w-full items-start gap-2.5 border-0 bg-transparent px-2.5 py-3 text-left hover:bg-surface-subtle"
                   role="menuitem"
                   onClick={() => void openNotification(notification)}
                 >
                   <span
-                    className={`mt-[6px] h-2 w-2 shrink-0 rounded-full ${isRead ? "bg-border" : "bg-brand"}`}
+                    className={`mt-[6px] h-2 w-2 shrink-0 ${isRead ? "bg-border" : "bg-brand"}`}
                   />
                   <span className="min-w-0">
-                    <span className="block text-[12px] font-bold text-ink">
+                    <span className="block text-small font-semibold text-ink">
                       {notification.title}
                     </span>
-                    <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
+                    <span className="mt-1 block text-label text-muted">
                       {formatNotificationTime(notification.createdAt)}
                     </span>
                   </span>
@@ -168,7 +168,7 @@ export function NotificationBell({ onNavigate }: { onNavigate: (path: string) =>
             })
           )}
           <button
-            className="mt-1 flex w-full items-center justify-center gap-[9px] border-0 bg-transparent px-2.5 py-[11px] text-[12px] font-bold text-brand hover:bg-brand-soft"
+            className="mt-1 flex w-full items-center justify-center gap-2 border-0 bg-transparent px-2.5 py-2.5 text-small font-semibold text-accent hover:bg-surface-subtle hover:text-ink"
             role="menuitem"
             onClick={() => {
               setOpen(false);

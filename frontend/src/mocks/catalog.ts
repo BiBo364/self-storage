@@ -1,6 +1,7 @@
 export type UnitType = {
   id: string;
   name: string;
+  area: string;
   size: string;
   capacity: string;
   capacityShort: string;
@@ -26,6 +27,7 @@ export const unitTypes: UnitType[] = [
   {
     id: "basic",
     name: "Kho cơ bản",
+    area: "4 m²",
     size: "Thông số mẫu A",
     capacity: "Quy mô nhỏ",
     capacityShort: "A",
@@ -37,6 +39,7 @@ export const unitTypes: UnitType[] = [
   {
     id: "flexible",
     name: "Kho linh hoạt",
+    area: "8 m²",
     size: "Thông số mẫu B",
     capacity: "Quy mô vừa",
     capacityShort: "B",
@@ -49,6 +52,7 @@ export const unitTypes: UnitType[] = [
   {
     id: "extended",
     name: "Kho mở rộng",
+    area: "15 m²",
     size: "Thông số mẫu C",
     capacity: "Quy mô lớn",
     capacityShort: "C",

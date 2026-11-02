@@ -14,20 +14,18 @@ import {
 import { Button } from "../components/ui/Button";
 import { DemoNotice } from "../components/ui/DemoNotice";
 import { DetailPanel } from "../components/ui/DetailPanel";
+import { FilterSelect } from "../components/ui/FilterSelect";
+import { StatusTag } from "../components/ui/StatusTag";
 import { SurfaceState } from "../components/ui/SurfaceState";
 
-const STATUS_BADGE: Record<InvoiceStatus, string> = {
-  Unpaid: "bg-warning/18 text-warning",
-  Paid: "bg-success/18 text-success",
-  Canceled: "bg-surface-subtle text-muted",
+const STATUS_META: Record<
+  InvoiceStatus,
+  { label: string; tone: "warning" | "success" | "neutral" }
+> = {
+  Unpaid: { label: "Chưa thanh toán", tone: "warning" },
+  Paid: { label: "Đã thanh toán", tone: "success" },
+  Canceled: { label: "Đã huỷ", tone: "neutral" },
 };
-const STATUS_LABEL: Record<InvoiceStatus, string> = {
-  Unpaid: "Chưa thanh toán",
-  Paid: "Đã thanh toán",
-  Canceled: "Đã huỷ",
-};
-const FILTER_SELECT =
-  "min-w-[170px] rounded-sm border border-border bg-surface px-[11px] py-[10px] pr-[30px] text-[12px] font-semibold text-ink max-[760px]:w-full";
 
 function effectiveStatus(invoice: Invoice): InvoiceStatus {
   if (invoice.status === "Canceled") return "Canceled";
@@ -66,19 +64,19 @@ export function InvoicesPage({ navigate }: { navigate: Navigate }) {
   }
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Hóa đơn &amp; thanh toán</h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Hoá đơn &amp; thanh toán</h1>
+        <p className="mt-1.5 text-small text-muted">
           Theo dõi và thanh toán mọi khoản phát sinh trong suốt vòng đời thuê kho.
         </p>
       </div>
 
-      <div className="mb-6 flex items-center gap-2.5 max-[760px]:flex-col max-[760px]:items-stretch">
-        <select
-          className={FILTER_SELECT}
+      <div className="grid grid-cols-2 items-end gap-3 max-[760px]:grid-cols-1">
+        <FilterSelect
+          label="Loại hoá đơn"
           value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value as "all" | InvoiceType)}
+          onChange={(value) => setTypeFilter(value as "all" | InvoiceType)}
         >
           <option value="all">Tất cả loại hoá đơn</option>
           {Object.entries(INVOICE_TYPE_LABEL).map(([value, label]) => (
@@ -86,51 +84,48 @@ export function InvoicesPage({ navigate }: { navigate: Navigate }) {
               {label}
             </option>
           ))}
-        </select>
-        <select
-          className={FILTER_SELECT}
+        </FilterSelect>
+        <FilterSelect
+          label="Trạng thái"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as "all" | InvoiceStatus)}
+          onChange={(value) => setStatusFilter(value as "all" | InvoiceStatus)}
         >
           <option value="all">Tất cả trạng thái</option>
           <option value="Unpaid">Chưa thanh toán</option>
           <option value="Paid">Đã thanh toán</option>
           <option value="Canceled">Đã huỷ</option>
-        </select>
+        </FilterSelect>
       </div>
 
       {list.length === 0 ? (
         <SurfaceState variant="empty" title="Không có hoá đơn phù hợp bộ lọc" />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {list.map((invoice) => {
             const status = effectiveStatus(invoice);
+            const meta = STATUS_META[status];
             return (
               <button
                 key={invoice.id}
-                className="flex items-center justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col max-[760px]:items-stretch"
+                className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_auto] items-center gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle max-[760px]:grid-cols-1 max-[760px]:gap-2"
                 onClick={() => {
                   setOpenId(invoice.id);
                   setOutcome(null);
                 }}
               >
                 <div>
-                  <p className="m-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-brand">
+                  <span className="text-label text-muted">
                     {invoice.code} · {INVOICE_TYPE_LABEL[invoice.type]}
-                  </p>
-                  <h3 className="mb-0 mt-1 text-[16px] tracking-[-0.02em]">{invoice.title}</h3>
-                  <p className="mb-0 mt-1.5 flex items-center gap-[6px] text-[12px] text-muted">
-                    <CalendarClock size={14} /> Hạn thanh toán {invoice.dueDate}
-                  </p>
-                </div>
-                <div className="flex items-center gap-5 max-[760px]:justify-between">
-                  <strong className="text-[16px]">{formatPrice(invoice.amount)}đ</strong>
-                  <span
-                    className={`whitespace-nowrap rounded-full px-[9px] py-[6px] text-[11px] font-extrabold ${STATUS_BADGE[status]}`}
-                  >
-                    {STATUS_LABEL[status]}
                   </span>
+                  <h2 className="mt-1 text-section text-ink">{invoice.title}</h2>
                 </div>
+                <span className="flex items-center gap-1.5 text-label text-muted">
+                  <CalendarClock size={14} /> Hạn {invoice.dueDate}
+                </span>
+                <strong className="text-[18px] font-semibold text-ink">
+                  {formatPrice(invoice.amount)} đ
+                </strong>
+                <StatusTag tone={meta.tone}>{meta.label}</StatusTag>
               </button>
             );
           })}
@@ -143,34 +138,24 @@ export function InvoicesPage({ navigate }: { navigate: Navigate }) {
           eyebrow={`${openInvoice.code} · ${INVOICE_TYPE_LABEL[openInvoice.type]}`}
           onClose={() => setOpenId(null)}
         >
-          <p className="m-0 text-[13px] leading-[1.6] text-muted">{openInvoice.description}</p>
-          <dl className="mt-5 grid gap-3">
-            <div className="flex items-center justify-between gap-4 text-[13px]">
-              <dt className="text-muted">Khoang liên quan</dt>
-              <dd className="m-0 font-bold text-ink">{openInvoice.unitCode}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-4 text-[13px]">
-              <dt className="text-muted">Cơ sở</dt>
-              <dd className="m-0 font-bold text-ink">
-                {facilities.find((facility) => facility.id === openInvoice.facilityId)?.name ?? "—"}
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-4 text-[13px]">
-              <dt className="text-muted">Số tiền</dt>
-              <dd className="m-0 font-bold text-ink">{formatPrice(openInvoice.amount)}đ</dd>
-            </div>
+          <p className="text-small leading-relaxed text-muted">{openInvoice.description}</p>
+          <dl className="mt-5 grid gap-2.5">
+            <DetailRow label="Khoang liên quan" value={openInvoice.unitCode} />
+            <DetailRow
+              label="Cơ sở"
+              value={
+                facilities.find((facility) => facility.id === openInvoice.facilityId)?.name ?? "—"
+              }
+            />
+            <DetailRow label="Số tiền" value={`${formatPrice(openInvoice.amount)} đ`} />
             {openInvoice.discountAmount > 0 && (
-              <div className="flex items-center justify-between gap-4 text-[13px]">
-                <dt className="text-muted">Giảm giá</dt>
-                <dd className="m-0 font-bold text-success">
-                  -{formatPrice(openInvoice.discountAmount)}đ
-                </dd>
-              </div>
+              <DetailRow
+                label="Giảm giá"
+                value={`-${formatPrice(openInvoice.discountAmount)} đ`}
+                tone="success"
+              />
             )}
-            <div className="flex items-center justify-between gap-4 text-[13px]">
-              <dt className="text-muted">Hạn thanh toán</dt>
-              <dd className="m-0 font-bold text-ink">{openInvoice.dueDate}</dd>
-            </div>
+            <DetailRow label="Hạn thanh toán" value={openInvoice.dueDate} />
           </dl>
 
           {outcome?.id === openInvoice.id && outcome.ok && (
@@ -178,7 +163,7 @@ export function InvoicesPage({ navigate }: { navigate: Navigate }) {
               <DemoNotice tone="success">Thanh toán thành công.</DemoNotice>
               {openInvoice.type === "Deposit" && (
                 <Button
-                  className="mt-3.5"
+                  className="mt-3"
                   onClick={() => navigate(`/appointments/new?orderId=${openInvoice.orderId}`)}
                 >
                   Đặt lịch check-in <ArrowRight size={16} />
@@ -209,6 +194,25 @@ export function InvoicesPage({ navigate }: { navigate: Navigate }) {
           )}
         </DetailPanel>
       )}
-    </main>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "success";
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 text-small">
+      <dt className="text-muted">{label}</dt>
+      <dd className={`m-0 font-semibold ${tone === "success" ? "text-success" : "text-ink"}`}>
+        {value}
+      </dd>
+    </div>
   );
 }
