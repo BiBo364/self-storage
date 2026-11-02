@@ -18,10 +18,10 @@ Kiến trúc **modular monolith**: `vn.lemar.selfstorage` là package gốc,
 mỗi package con trực tiếp là một module độc lập (`identity`, `booking`, `facility`, ...).
 `ModuleStructureTest` chặn việc gọi sai chiều giữa các module ngay lúc build.
 
-Hiện tại `identity` xử lý xác thực/RBAC; `facility` cung cấp public API kiểm tra facility tồn tại
-và FM phụ trách facility; `audit` ghi vết thao tác nghiệp vụ nhạy cảm; `media` upload file
-(ảnh/PDF) lên Cloudinary và dọn asset theo batch; `booking` có luồng nội bộ convert request đã duyệt thành đơn + proposal
-([booking/conversion.md](booking/conversion.md)).
+Hiện tại `identity` xử lý xác thực/RBAC; `facility` cung cấp public API kiểm tra facility tồn tại,
+catalog cơ sở public và đọc khoang theo cơ sở; `audit` ghi vết thao tác nghiệp vụ nhạy cảm; `media`
+upload file (ảnh/PDF) lên Cloudinary và dọn asset theo batch; `booking` có luồng nội bộ convert
+request đã duyệt thành đơn + proposal ([booking/conversion.md](booking/conversion.md)).
 
 Layout trong một module:
 
@@ -250,6 +250,10 @@ bấm **Authorize** và dán token (không cần prefix `Bearer `) để gọi A
 | [routes/health.md](routes/health.md) | `GET /api/health` |
 | [routes/auth/login.md](routes/auth/login.md) | `POST /api/auth/login` |
 | [routes/auth/me.md](routes/auth/me.md) | `GET /api/auth/me` |
+| [routes/booking/invoice-list.md](routes/booking/invoice-list.md) | `GET /api/invoices` |
+| [routes/facility/public-list.md](routes/facility/public-list.md) | `GET /api/facilities` |
+| [routes/booking/fm-facility.md](routes/booking/fm-facility.md) | `GET /api/fm/facility` |
+| [routes/booking/fm-storage-units.md](routes/booking/fm-storage-units.md) | `GET /api/fm/storage-units` |
 | [routes/media/upload.md](routes/media/upload.md) | `POST /api/media/uploads` |
 | [routes/media/delete-batch.md](routes/media/delete-batch.md) | `DELETE /api/media/uploads/batch/{batchId}` |
 | [routes/media/attach-batch.md](routes/media/attach-batch.md) | `POST /api/media/uploads/batch/{batchId}/attach` |
