@@ -20,6 +20,10 @@ Trả cơ sở gắn với `facilities.fm_account_id` của account đang đăng
 
 - Không dùng `facility.access` vì tài khoản chỉ có tối đa một cơ sở; route đã role-bound `FM`.
 - Đây là nguồn để FE lấy `facilityId` cho các màn FM khác, thay vì hardcode.
+- Account FM bị `BANNED` hoặc chưa xác minh bị chặn ở authentication (`403`), nên endpoint không
+  được gọi. `facilities.fm_account_id` không tự xóa: cơ sở không còn FM vận hành, FM khác không
+  thuộc assignment nhận `404`. Chưa có API gán lại FM — reassign hiện thủ công/Flow 5.
+- Endpoint không lọc `facilities.status`: cơ sở `Inactive` vẫn trả nếu `fm_account_id` khớp.
 
 ## Ví dụ
 

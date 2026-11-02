@@ -21,6 +21,8 @@ Trả các cơ sở đang hoạt động, kèm loại khoang mỗi cơ sở cung
 
 - Catalog public không thay đổi quyền đọc dữ liệu vận hành; thông tin nhạy cảm (FM phụ trách,
   trạng thái nội bộ) không nằm trong response.
+- Catalog chỉ lọc `facilities.status`; không kiểm account FM. Cơ sở `Active` vẫn hiện dù FM bị
+  `BANNED`, chưa xác minh hoặc chưa được gán.
 - Cơ sở `Inactive` vẫn tồn tại trong DB và vẫn dùng được cho dữ liệu lịch sử; chỉ bị ẩn khỏi catalog.
 
 ## Ví dụ
