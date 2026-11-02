@@ -322,6 +322,31 @@ class DepositPaymentIntegrationTest {
                         "đã được thanh toán thành công")));
     }
 
+    /**
+     * FE đọc lại hóa đơn sau khi cổng redirect về. Trạng thái phải là trạng thái IPN đã chốt, không
+     * phải trạng thái FE suy từ tham số trên URL.
+     */
+    @Test
+    void theCustomerReadsBackTheStatusTheIpnSettled() throws Exception {
+        confirmByIpn(openSessionAndReadTxnRef());
+
+        mockMvc.perform(readInvoiceAs(CUSTOMER_EMAIL))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(invoiceId))
+                .andExpect(jsonPath("$.data.orderId").value(orderId))
+                .andExpect(jsonPath("$.data.status").value("Paid"))
+                .andExpect(jsonPath("$.data.type").value("Deposit"));
+    }
+
+    /** Hóa đơn của người khác phải trả 404 như hóa đơn không tồn tại, không phải 403. */
+    @Test
+    void readingSomeoneElsesInvoiceIsNotFound() throws Exception {
+        mockMvc.perform(readInvoiceAs("fm1@lemar.vn"))
+                .andExpect(status().isNotFound());
+
+        assertThat(statusOf("invoices", invoiceId)).isEqualTo("Unpaid");
+    }
+
     /** Token thật do JwtEncoder của app ký — đi qua đúng đường xác thực mà request thường đi. */
     private String tokenFor(String email) {
         Instant now = Instant.now();
@@ -334,6 +359,12 @@ class DepositPaymentIntegrationTest {
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder payAs(String email) {
         return post("/api/invoices/{id}/pay", invoiceId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(email));
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder readInvoiceAs(
+            String email) {
+        return get("/api/invoices/{id}", invoiceId)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(email));
     }
 
