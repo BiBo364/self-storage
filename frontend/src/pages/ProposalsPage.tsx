@@ -1,12 +1,14 @@
 import { AlertTriangle, ArrowRight, Check, MapPin, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../app/api";
 import { formatDate, formatMoney } from "../app/format";
 import { agreeProposal, fetchMyProposals, rejectProposal } from "../app/proposals";
-import type { CustomerProposal, DepositInvoice, Navigate } from "../app/types";
+import { listUnitTypes } from "../app/unitTypes";
+import type { CustomerProposal, DepositInvoice, Navigate, UnitTypeSummary } from "../app/types";
 import { rentedStorage } from "../mocks/customer";
 import { Button } from "../components/ui/Button";
 import { DemoNotice } from "../components/ui/DemoNotice";
+import { DetailPanel } from "../components/ui/DetailPanel";
 import { SurfaceState } from "../components/ui/SurfaceState";
 
 type Tab = "active" | "pending";
@@ -41,6 +43,11 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectNote, setRejectNote] = useState("");
+  const [detailProposal, setDetailProposal] = useState<CustomerProposal | null>(null);
+  const [detailUnitType, setDetailUnitType] = useState<UnitTypeSummary | null>(null);
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [detailError, setDetailError] = useState("");
+  const detailRequest = useRef(0);
 
   const applyLoad = useCallback((result: LoadResult) => {
     if (result.ok) {
@@ -67,6 +74,32 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
   async function reload() {
     setLoadState("loading");
     applyLoad(await loadPendingProposals());
+  }
+
+  async function openUnitDetail(proposal: CustomerProposal) {
+    const requestId = ++detailRequest.current;
+    setDetailProposal(proposal);
+    setDetailUnitType(null);
+    setDetailState("loading");
+    setDetailError("");
+    try {
+      const types = await listUnitTypes(proposal.facilityId);
+      if (detailRequest.current !== requestId) return;
+      setDetailUnitType(types.find((type) => type.name === proposal.unitTypeName) ?? null);
+      setDetailState("ready");
+    } catch (error) {
+      if (detailRequest.current !== requestId) return;
+      setDetailError(error instanceof Error ? error.message : "Không tải được thông tin khoang.");
+      setDetailState("error");
+    }
+  }
+
+  function closeUnitDetail() {
+    detailRequest.current += 1;
+    setDetailProposal(null);
+    setDetailUnitType(null);
+    setDetailState("idle");
+    setDetailError("");
   }
 
   const awaitingCount = items.filter((proposal) => !outcomes[proposal.id]).length;
@@ -299,6 +332,13 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
 
                   {!outcome && (
                     <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void openUnitDetail(proposal)}
+                      >
+                        Xem khoang
+                      </Button>
                       <Button pending={isBusy} onClick={() => agree(proposal)}>
                         {!isBusy && <Check size={16} />}
                         Đồng ý
@@ -369,6 +409,62 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
             )}
           </div>
         ))}
+
+      {detailProposal && (
+        <DetailPanel
+          title={`Khoang ${detailProposal.unitCode}`}
+          eyebrow={`${detailProposal.facilityName} · ${detailProposal.unitTypeName}`}
+          onClose={closeUnitDetail}
+        >
+          {detailState === "loading" && (
+            <SurfaceState variant="loading" title="Đang tải thông tin khoang…" />
+          )}
+          {detailState === "error" && <DemoNotice tone="error">{detailError}</DemoNotice>}
+          <dl className="mt-5 grid gap-2.5">
+            <DetailRow label="Mã khoang" value={detailProposal.unitCode} />
+            <DetailRow label="Loại khoang" value={detailProposal.unitTypeName} />
+            <DetailRow label="Kích thước khoang" value={detailProposal.unitSize ?? "—"} />
+            {detailUnitType && (
+              <>
+                <DetailRow label="Diện tích" value={`${detailUnitType.area} m²`} />
+                <DetailRow
+                  label="Kích thước loại"
+                  value={`${detailUnitType.width} × ${detailUnitType.depth} × ${detailUnitType.height} m`}
+                />
+              </>
+            )}
+            <DetailRow label="Cơ sở" value={detailProposal.facilityName} />
+            <DetailRow label="Địa chỉ" value={detailProposal.facilityAddress ?? "—"} />
+            <DetailRow
+              label="Giá thuê"
+              value={`${formatMoney(detailProposal.monthlyPrice)} / tháng`}
+            />
+            <DetailRow label="Ngày đề xuất" value={formatDate(detailProposal.createdAt)} />
+            <DetailRow
+              label="Đã từ chối"
+              value={`${detailProposal.rejectionCount}/${detailProposal.maxRejectionCount} lần`}
+            />
+          </dl>
+          {detailState === "error" && (
+            <Button
+              variant="secondary"
+              className="mt-4"
+              onClick={() => void openUnitDetail(detailProposal)}
+            >
+              Thử lại
+            </Button>
+          )}
+        </DetailPanel>
+      )}
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 text-small">
+      <dt className="shrink-0 text-muted">{label}</dt>
+      <dd className="m-0 max-w-[62%] break-words text-right font-semibold text-ink">{value}</dd>
     </div>
   );
 }
