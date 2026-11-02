@@ -82,10 +82,11 @@ chốt đơn và khoang theo loại hoá đơn (routes/booking/invoice-pay.md �
 - **Không mở phiên mới khi đã có giao dịch `PAY/Success`.** IPN ghi giao dịch trước khi listener
   booking chạy; nếu listener chưa chạy/lỗi, invoice vẫn `Unpaid`. `/pay` kiểm giao dịch thành công
   và trả 409, không thu lần hai; local repair hoặc đối soát thủ công chốt phần còn lại.
-- **Một invoice tối đa một `PAY/Success`.** Nếu một nguồn xác nhận thành công thứ hai cho cùng
-  invoice, transaction thứ hai chuyển `Duplicate` — không phát `PaymentSucceeded`, không đụng
-  invoice/order/unit. Ghi audit `PAYMENT_DUPLICATE`, notify FM để hoàn tiền thủ công. IPN trả `02`;
-  manual trả `200` với status `DUPLICATE`.
+- **Một invoice tối đa một `PAY/Success`.** Advisory lock theo invoice là lớp chính; partial unique
+  index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'` (V13) là chốt cuối ở DB.
+  Nếu một nguồn xác nhận thành công thứ hai cho cùng invoice, transaction thứ hai chuyển `Duplicate`
+  — không phát `PaymentSucceeded`, không đụng invoice/order/unit. Ghi audit `PAYMENT_DUPLICATE`,
+  notify FM để hoàn tiền thủ công. IPN trả `02`; manual trả `200` với status `DUPLICATE`.
 - **Ranh giới module:** `PaymentTransaction.invoiceId` là `Long`, không quan hệ JPA với bảng
   `invoices`; module khác giao tiếp qua event, không import chéo.
 - **Listener event bắt buộc `AFTER_COMMIT`.** `PaymentSucceeded`/`PaymentFailed` được publish
@@ -108,7 +109,8 @@ chốt đơn và khoang theo loại hoá đơn (routes/booking/invoice-pay.md �
 - **Chưa có hoàn tiền tự động** (Flow 4). Tiền vào invoice đã `Canceled`/`Expired`, hoặc khoang đã mất,
   chỉ log ERROR; hoàn tiền thủ công.
 - **Chỉ VNPay.** Chưa provider-neutral; `PaymentTransaction` chưa có cột provider; chưa có ZaloPay/payOS.
-- **Chưa có ShedLock/multi-instance** cho job tương lai; hiện luồng này chưa có job định kỳ.
+- **Giả định một instance.** `DepositStateRepairJob` chạy mỗi 5 phút; chưa cấu hình ShedLock vì
+  deployment hiện tại chỉ một instance. Nếu scale ngang phải bổ sung khóa job.
 
 ## Cấu hình
 

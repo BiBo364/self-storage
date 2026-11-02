@@ -50,4 +50,19 @@ class SchemaValidationTest {
         assertThat(paymentStatusCheck).contains("Duplicate");
         assertThat(auditActionCheck).contains("PAYMENT_DUPLICATE");
     }
+
+    @Test
+    void v13EnforcesOneSuccessfulPayPerInvoice() {
+        String indexDefinition = jdbc.queryForObject(
+                "select indexdef from pg_indexes"
+                        + " where schemaname = 'public'"
+                        + " and indexname = 'uq_payment_transactions_one_success_per_invoice'",
+                String.class);
+
+        assertThat(indexDefinition)
+                .contains("UNIQUE INDEX")
+                .contains("(invoice_id)")
+                .contains("'Success'")
+                .contains("'PAY'");
+    }
 }
