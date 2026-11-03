@@ -12,6 +12,7 @@ const TIME_FORMAT = new Intl.DateTimeFormat("vi-VN", {
 });
 
 const STATUS: Record<string, { label: string; tone: "success" | "warning" | "neutral" }> = {
+  Pending: { label: "Đang chờ", tone: "warning" },
   Done: { label: "Đã đến", tone: "success" },
   Canceled: { label: "Đã huỷ", tone: "neutral" },
 };
@@ -48,7 +49,6 @@ function typeLabel(type: string) {
 }
 
 function statusOf(status: string) {
-  if (status === "Pending") return null;
   return STATUS[status] ?? { label: status, tone: "neutral" as const };
 }
 
@@ -129,7 +129,7 @@ export function DailySchedulePage() {
         </div>
         <div className="bg-surface p-4">
           <strong className="block text-stat text-ink">{String(pending).padStart(2, "0")}</strong>
-          <span className="text-label text-muted">Chưa đến</span>
+          <span className="text-label text-muted">Đang chờ</span>
         </div>
         <div className="bg-surface p-4">
           <strong className="block text-stat text-ink">{String(done).padStart(2, "0")}</strong>
