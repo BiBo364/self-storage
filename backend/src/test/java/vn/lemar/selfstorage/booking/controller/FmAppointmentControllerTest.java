@@ -124,8 +124,8 @@ class FmAppointmentControllerTest {
     @Test
     void staffListReturnsFacilityStaff() throws Exception {
         authenticate(FM, "FM");
-        when(queryService.staffOfFacility(1L))
-                .thenReturn(List.of(new FmFacilityStaffResponse(4L, "FS Quận 7", "fs1@lemar.vn")));
+        when(queryService.staffOfFacility(1L)).thenReturn(List.of(new FmFacilityStaffResponse(4L, "FS Quận 7",
+                "fs1@lemar.vn", "0901234567", Instant.parse("2026-11-01T00:00:00Z"))));
 
         mockMvc.perform(as(get("/api/fm/facilities/1/staff"), FM))
                 .andExpect(status().isOk())
