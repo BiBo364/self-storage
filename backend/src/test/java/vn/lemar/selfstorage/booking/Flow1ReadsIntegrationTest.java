@@ -123,13 +123,14 @@ class Flow1ReadsIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Lấy danh sách hoá đơn cơ sở thành công"))
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].code").value("INV-FM-PENDING"))
-                .andExpect(jsonPath("$.data[0].customerName").value("Khách test"))
-                .andExpect(jsonPath("$.data[0].unitCode").value("A-01"))
-                .andExpect(jsonPath("$.data[0].paymentStatus").value("Pending"))
-                .andExpect(jsonPath("$.data[0].needsReconciliation").value(true))
-                .andExpect(jsonPath("$.data[0].pendingAgeMinutes")
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].code").value("INV-FM-PENDING"))
+                .andExpect(jsonPath("$.data.items[0].customerName").value("Khách test"))
+                .andExpect(jsonPath("$.data.items[0].unitCode").value("A-01"))
+                .andExpect(jsonPath("$.data.items[0].paymentStatus").value("Pending"))
+                .andExpect(jsonPath("$.data.items[0].needsReconciliation").value(true))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.items[0].pendingAgeMinutes")
                         .value(org.hamcrest.Matchers.greaterThanOrEqualTo(15)));
     }
 
@@ -150,7 +151,61 @@ class Flow1ReadsIntegrationTest {
                         .param("olderThanMinutes", "15")
                         .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
+                .andExpect(jsonPath("$.data.items.length()").value(0))
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+    }
+
+    @Test
+    void fmInvoiceListPaginatesAndIncludesContractInvoices() throws Exception {
+        long order3 = insertOrder(customer1, unitA01, "Deposited");
+        insertInvoice(order3, customer1, "INV-FM-PAGE-3", "Đặt cọc 3", "Deposit", "Unpaid", "500000",
+                "3 minutes");
+        long order2 = insertOrder(customer1, unitA01, "Deposited");
+        insertInvoice(order2, customer1, "INV-FM-PAGE-2", "Đặt cọc 2", "Deposit", "Unpaid", "500000",
+                "2 minutes");
+        long order1 = insertOrder(customer1, unitA01, "Deposited");
+        insertInvoice(order1, customer1, "INV-FM-PAGE-1", "Đặt cọc 1", "Deposit", "Unpaid", "500000",
+                "1 minute");
+        long contractOrder = insertOrder(customer1, unitA01, "Deposited");
+        long contractId = jdbc.queryForObject("""
+                insert into rental_contracts (order_id, customer_id, unit_id, code, terms_version,
+                    monthly_price, deposit_amount, period, start_date, status)
+                values (?, 6, ?, 'CT-FM-1', 'v1', 500000, 500000, 6, current_date, 'Active')
+                returning id
+                """, Long.class, contractOrder, unitA01);
+        jdbc.update("""
+                insert into invoices (contract_id, customer_id, code, title, type, status, amount,
+                    created_at, due_date)
+                values (?, 6, 'INV-FM-CONTRACT', 'Tiền thuê hợp đồng', 'Rental', 'Unpaid', 500000,
+                    now() - interval '4 minutes', now() + interval '2 days')
+                """, contractId);
+
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(q7))
+                        .param("page", "0")
+                        .param("size", "2")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.totalElements").value(4))
+                .andExpect(jsonPath("$.data.totalPages").value(2));
+
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(q7))
+                        .param("page", "1")
+                        .param("size", "2")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[1].code").value("INV-FM-CONTRACT"));
+
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(q7))
+                        .param("type", "Rental")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].code").value("INV-FM-CONTRACT"));
     }
 
     @Test

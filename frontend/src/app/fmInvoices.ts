@@ -35,12 +35,32 @@ export type FmInvoice = {
   duplicateRefundRequired: boolean;
 };
 
+export type FmInvoicePage = {
+  items: FmInvoice[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
+export type FmInvoiceFilters = {
+  status?: FmInvoiceStatus;
+  type?: FmInvoiceType;
+  paymentStatus?: FmPaymentStatus;
+  olderThanMinutes?: number;
+  page: number;
+  size: number;
+};
+
 type ManagedFacility = {
   id: number;
 };
 
-/** Hoá đơn của cơ sở FM hiện tại; backend tự chặn nếu facility ngoài phạm vi. */
-export async function loadFacilityInvoices(signal?: AbortSignal): Promise<FmInvoice[]> {
+/** Một trang hoá đơn của cơ sở FM hiện tại; backend tự chặn nếu facility ngoài phạm vi. */
+export async function loadFacilityInvoices(
+  filters: FmInvoiceFilters,
+  signal?: AbortSignal,
+): Promise<FmInvoicePage> {
   const accessToken = authGateway.getSession()?.token;
   if (!accessToken) {
     throw new Error("Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.");
@@ -50,7 +70,19 @@ export async function loadFacilityInvoices(signal?: AbortSignal): Promise<FmInvo
     accessToken,
     signal,
   });
-  return apiRequest<FmInvoice[]>(`/api/fm/invoices?facilityId=${facility.id}`, {
+  const params = new URLSearchParams({
+    facilityId: String(facility.id),
+    page: String(filters.page),
+    size: String(filters.size),
+  });
+  if (filters.status) params.set("status", filters.status);
+  if (filters.type) params.set("type", filters.type);
+  if (filters.paymentStatus) params.set("paymentStatus", filters.paymentStatus);
+  if (filters.olderThanMinutes !== undefined) {
+    params.set("olderThanMinutes", String(filters.olderThanMinutes));
+  }
+
+  return apiRequest<FmInvoicePage>(`/api/fm/invoices?${params.toString()}`, {
     accessToken,
     signal,
   });

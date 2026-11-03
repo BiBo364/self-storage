@@ -4,18 +4,23 @@ import { ApiError } from "../../app/api";
 import {
   loadFacilityInvoices,
   type FmInvoice,
+  type FmInvoicePage,
   type FmInvoiceStatus,
   type FmInvoiceType,
+  type FmPaymentStatus,
 } from "../../app/fmInvoices";
-import { formatPrice } from "../../mocks/catalog";
+import { Button } from "../../components/ui/Button";
 import { DetailPanel } from "../../components/ui/DetailPanel";
 import { FilterSelect } from "../../components/ui/FilterSelect";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
+import { formatPrice } from "../../mocks/catalog";
 
 type TypeFilter = "all" | FmInvoiceType;
 type StatusFilter = "all" | FmInvoiceStatus;
 type PaymentFilter = "all" | "needs-reconciliation" | "duplicate";
+
+const PAGE_SIZE = 20;
 
 const TYPE_LABEL: Record<FmInvoiceType, string> = {
   Deposit: "Đặt cọc",
@@ -40,8 +45,8 @@ const STATUS_TONE: Record<FmInvoiceStatus, "warning" | "success" | "neutral" | "
   Expired: "danger",
 };
 
-const PAYMENT_LABEL: Record<string, string> = {
-  Pending: "Cổng đang chờ",
+const PAYMENT_LABEL: Record<FmPaymentStatus, string> = {
+  Pending: "Chưa có kết quả từ cổng",
   Success: "Cổng xác nhận",
   Failed: "Cổng báo thất bại",
   Duplicate: "Thanh toán trùng",
@@ -56,8 +61,7 @@ function formatDate(value: string | null) {
 }
 
 function paymentTone(invoice: FmInvoice): "neutral" | "warning" | "success" | "danger" {
-  if (invoice.duplicateRefundRequired) return "danger";
-  if (invoice.needsReconciliation) return "danger";
+  if (invoice.duplicateRefundRequired || invoice.needsReconciliation) return "danger";
   if (invoice.paymentStatus === "Pending") return "warning";
   if (invoice.paymentStatus === "Success") return "success";
   return "neutral";
@@ -67,17 +71,43 @@ export function FacilityInvoicesPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
+  const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState<number | null>(null);
-  const [invoices, setInvoices] = useState<FmInvoice[]>([]);
+  const [data, setData] = useState<FmInvoicePage>({
+    items: [],
+    page: 0,
+    size: PAGE_SIZE,
+    totalElements: 0,
+    totalPages: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    loadFacilityInvoices(controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) setInvoices(data);
+    const paymentStatus =
+      paymentFilter === "needs-reconciliation"
+        ? ("Pending" as const)
+        : paymentFilter === "duplicate"
+          ? ("Duplicate" as const)
+          : undefined;
+    loadFacilityInvoices(
+      {
+        status: statusFilter === "all" ? undefined : statusFilter,
+        type: typeFilter === "all" ? undefined : typeFilter,
+        paymentStatus,
+        olderThanMinutes: paymentFilter === "needs-reconciliation" ? 15 : undefined,
+        page,
+        size: PAGE_SIZE,
+      },
+      controller.signal,
+    )
+      .then((result) => {
+        if (!controller.signal.aborted) {
+          setData(result);
+          setOpenId(null);
+        }
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
@@ -91,7 +121,7 @@ export function FacilityInvoicesPage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [typeFilter, statusFilter, paymentFilter, page, reloadKey]);
 
   function reload() {
     setLoading(true);
@@ -99,15 +129,35 @@ export function FacilityInvoicesPage() {
     setReloadKey((key) => key + 1);
   }
 
-  const list = invoices.filter((invoice) => {
-    if (typeFilter !== "all" && invoice.type !== typeFilter) return false;
-    if (statusFilter !== "all" && invoice.status !== statusFilter) return false;
-    if (paymentFilter === "needs-reconciliation" && !invoice.needsReconciliation) return false;
-    if (paymentFilter === "duplicate" && !invoice.duplicateRefundRequired) return false;
-    return true;
-  });
-  const openInvoice = invoices.find((invoice) => invoice.id === openId) ?? null;
+  function changeType(value: TypeFilter) {
+    setTypeFilter(value);
+    setPage(0);
+    setLoading(true);
+    setError(null);
+  }
 
+  function changeStatus(value: StatusFilter) {
+    setStatusFilter(value);
+    setPage(0);
+    setLoading(true);
+    setError(null);
+  }
+
+  function changePayment(value: PaymentFilter) {
+    setPaymentFilter(value);
+    setPage(0);
+    setLoading(true);
+    setError(null);
+  }
+
+  function changePage(next: number) {
+    setPage(next);
+    setLoading(true);
+    setError(null);
+  }
+
+  const invoices = data.items;
+  const openInvoice = invoices.find((invoice) => invoice.id === openId) ?? null;
   const totalUnpaid = invoices
     .filter((invoice) => invoice.status === "Unpaid")
     .reduce((sum, invoice) => sum + invoice.amount, 0);
@@ -128,7 +178,7 @@ export function FacilityInvoicesPage() {
       <div className="grid grid-cols-2 gap-2 max-[520px]:grid-cols-1">
         <div className="bg-surface p-5">
           <span className="flex items-center gap-1.5 text-label text-muted">
-            <Wallet size={13} /> Tổng công nợ chưa thu
+            <Wallet size={13} /> Công nợ chưa thu trong trang
           </span>
           <strong className="mt-2 block text-stat text-warning">
             {formatPrice(totalUnpaid)} đ
@@ -136,7 +186,7 @@ export function FacilityInvoicesPage() {
         </div>
         <div className="bg-surface p-5">
           <span className="flex items-center gap-1.5 text-label text-muted">
-            <CircleDollarSign size={13} /> Tổng đã thu
+            <CircleDollarSign size={13} /> Đã thu trong trang
           </span>
           <strong className="mt-2 block text-stat text-success">{formatPrice(totalPaid)} đ</strong>
         </div>
@@ -146,7 +196,7 @@ export function FacilityInvoicesPage() {
         <FilterSelect
           label="Loại hoá đơn"
           value={typeFilter}
-          onChange={(value) => setTypeFilter(value as TypeFilter)}
+          onChange={(value) => changeType(value as TypeFilter)}
         >
           <option value="all">Tất cả loại hoá đơn</option>
           {(Object.keys(TYPE_LABEL) as FmInvoiceType[]).map((type) => (
@@ -158,7 +208,7 @@ export function FacilityInvoicesPage() {
         <FilterSelect
           label="Trạng thái"
           value={statusFilter}
-          onChange={(value) => setStatusFilter(value as StatusFilter)}
+          onChange={(value) => changeStatus(value as StatusFilter)}
         >
           <option value="all">Tất cả trạng thái</option>
           {(Object.keys(STATUS_LABEL) as FmInvoiceStatus[]).map((status) => (
@@ -170,7 +220,7 @@ export function FacilityInvoicesPage() {
         <FilterSelect
           label="Đối soát"
           value={paymentFilter}
-          onChange={(value) => setPaymentFilter(value as PaymentFilter)}
+          onChange={(value) => changePayment(value as PaymentFilter)}
         >
           <option value="all">Tất cả giao dịch</option>
           <option value="needs-reconciliation">Pending quá 15 phút</option>
@@ -187,11 +237,11 @@ export function FacilityInvoicesPage() {
           description={error}
           action={{ label: "Thử lại", onClick: reload }}
         />
-      ) : list.length === 0 ? (
+      ) : invoices.length === 0 ? (
         <SurfaceState variant="empty" title="Không có hoá đơn nào phù hợp bộ lọc" />
       ) : (
         <div className="grid gap-2">
-          {list.map((invoice) => (
+          {invoices.map((invoice) => (
             <button
               key={invoice.id}
               className={`grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,0.7fr)_auto] items-center gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle max-[900px]:grid-cols-1 max-[900px]:gap-2 ${
@@ -240,6 +290,29 @@ export function FacilityInvoicesPage() {
           ))}
         </div>
       )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-label text-muted">
+          Trang {Math.min(page + 1, Math.max(1, data.totalPages))} / {Math.max(1, data.totalPages)}{" "}
+          · {data.totalElements} hoá đơn
+        </span>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            disabled={loading || page === 0}
+            onClick={() => changePage(page - 1)}
+          >
+            Trang trước
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={loading || page + 1 >= data.totalPages}
+            onClick={() => changePage(page + 1)}
+          >
+            Trang sau
+          </Button>
+        </div>
+      </div>
 
       {openInvoice && (
         <DetailPanel
