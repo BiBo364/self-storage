@@ -36,6 +36,7 @@ import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationE
 import vn.lemar.selfstorage.identity.application.AccountJwtAuthenticationConverter;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
 import vn.lemar.selfstorage.identity.application.FacilityStaffQuery.StaffView;
+import vn.lemar.selfstorage.identity.application.exception.FacilityNotFoundException;
 import vn.lemar.selfstorage.identity.application.exception.ForbiddenException;
 import vn.lemar.selfstorage.identity.config.JwtConfiguration;
 import vn.lemar.selfstorage.identity.domain.Account;
@@ -80,6 +81,17 @@ class FmAppointmentControllerTest {
     }
 
     @Test
+    void staffCannotUseFmRoutes() throws Exception {
+        authenticate("fs@example.com", "FS");
+
+        mockMvc.perform(as(get("/api/fm/appointments?facilityId=1&date=2026-11-02"), "fs@example.com"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(as(post("/api/fm/appointments/1/staff"), "fs@example.com")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"staffId\":4}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void dayListReturnsAppointments() throws Exception {
         authenticate(FM, "FM");
         when(queryService.listForFacility(1L, DAY)).thenReturn(List.of(appointment(null)));
@@ -89,6 +101,15 @@ class FmAppointmentControllerTest {
                 .andExpect(jsonPath("$.message").value(FmAppointmentController.LIST_MESSAGE))
                 .andExpect(jsonPath("$.data[0].unitCode").value("A-01"))
                 .andExpect(jsonPath("$.data[0].staffId").doesNotExist());
+    }
+
+    @Test
+    void unknownFacilityMapsToNotFound() throws Exception {
+        authenticate(FM, "FM");
+        when(queryService.listForFacility(99L, DAY)).thenThrow(new FacilityNotFoundException());
+
+        mockMvc.perform(as(get("/api/fm/appointments?facilityId=99&date=2026-11-02"), FM))
+                .andExpect(status().isNotFound());
     }
 
     @Test

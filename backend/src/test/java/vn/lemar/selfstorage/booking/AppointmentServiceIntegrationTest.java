@@ -27,6 +27,7 @@ import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictExc
 import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationException;
 import vn.lemar.selfstorage.identity.application.FacilityStaffQuery.StaffView;
+import vn.lemar.selfstorage.identity.application.exception.FacilityNotFoundException;
 import vn.lemar.selfstorage.identity.application.exception.ForbiddenException;
 
 /**
@@ -219,6 +220,31 @@ class AppointmentServiceIntegrationTest {
     }
 
     @Test
+    void nonCheckinAppointmentCannotBeAssigned() {
+        jdbc.update("update appointments set type = 'HANDOVER' where id = ?", appointmentId);
+        loginAs("fm1@lemar.vn");
+
+        assertThatThrownBy(() -> service.assignStaff(appointmentId, fsId, fmId))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessage("Chỉ phân công FS cho lịch check-in");
+        assertThat(jdbc.queryForObject("select staff_id from appointments where id = ?", Long.class, appointmentId))
+                .isNull();
+    }
+
+    @Test
+    void appointmentWithoutRentalOrderConflicts() {
+        long orphanId = jdbc.queryForObject("""
+                insert into appointments (customer_id, facility_id, type, date, status)
+                values (?, ?, 'CHECKIN', ?, 'Pending') returning id""",
+                Long.class, accountId("customer1@lemar.vn"), q7, day);
+        loginAs("fm1@lemar.vn");
+
+        assertThatThrownBy(() -> service.assignStaff(orphanId, fsId, fmId))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessage("Lịch hẹn không gắn với đơn thuê");
+    }
+
+    @Test
     void unknownAppointmentIsNotFound() {
         loginAs("fm1@lemar.vn");
 
@@ -250,10 +276,30 @@ class AppointmentServiceIntegrationTest {
     }
 
     @Test
+    void dayListOnlyContainsCheckinAppointments() {
+        jdbc.update("""
+                insert into appointments (customer_id, facility_id, type, date, status)
+                values (?, ?, 'HANDOVER', ?, 'Pending')""",
+                accountId("customer1@lemar.vn"), q7, day);
+        loginAs("fm1@lemar.vn");
+
+        assertThat(queryService.listForFacility(q7, day)).extracting(FmAppointmentResponse::id)
+                .containsExactly(appointmentId);
+    }
+
+    @Test
     void dayListIsScopedToTheFacility() {
         loginAs("fm2@lemar.vn");
 
         assertThatThrownBy(() -> queryService.listForFacility(q7, day)).isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void unknownFacilityIsNotFound() {
+        loginAs("fm1@lemar.vn");
+
+        assertThatThrownBy(() -> queryService.listForFacility(-1L, day))
+                .isInstanceOf(FacilityNotFoundException.class);
     }
 
     @Test

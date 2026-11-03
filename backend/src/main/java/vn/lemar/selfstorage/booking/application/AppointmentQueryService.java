@@ -28,7 +28,7 @@ public class AppointmentQueryService {
         this.access = access;
     }
 
-    /** Lịch hẹn của cơ sở trong ngày — quyền {@code appointment.read} theo cơ sở. */
+    /** Lịch check-in của cơ sở trong ngày — quyền {@code appointment.read} theo cơ sở. */
     @Transactional(readOnly = true)
     public List<FmAppointmentResponse> listForFacility(Long facilityId, LocalDate date) {
         access.can(PERMISSION_READ, facilityId);

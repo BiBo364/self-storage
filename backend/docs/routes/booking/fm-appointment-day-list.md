@@ -1,11 +1,12 @@
 ---
 auth-model: role-bound
-purpose: Lịch hẹn của một cơ sở trong một ngày cho màn "Lịch hẹn & phân công FS" của FM.
+purpose: Lịch check-in của một cơ sở trong một ngày cho màn "Lịch hẹn & phân công FS" của FM.
 ---
 
 # GET /api/fm/appointments
 
-Lịch hẹn của cơ sở trong ngày, xếp theo giờ bắt đầu, kèm đơn thuê, khách, khoang và FS phụ trách.
+Lịch check-in (`type = CHECKIN`) của cơ sở trong ngày, xếp theo giờ bắt đầu, kèm đơn thuê, khách, khoang và FS
+phụ trách.
 
 - **Actor / quyền:** role-bound `FM` (`/api/fm/**`) + permission `appointment.read` theo cơ sở qua
   `Access.can(permission, facilityId)`.
@@ -15,6 +16,7 @@ Lịch hẹn của cơ sở trong ngày, xếp theo giờ bắt đầu, kèm đ�
 ## Luồng / hành vi
 
 - Query bắt buộc: `facilityId`, `date` (ISO `yyyy-MM-dd`). Thiếu → 400.
+- Chỉ trả lịch `type = CHECKIN`; lịch bàn giao / trả kho (`HANDOVER`, `RETURN`) không thuộc màn này.
 - Ngoài phạm vi cơ sở / thiếu quyền → 403; cơ sở không tồn tại → 404 (theo `Access`).
 - Mỗi dòng: `id`, `type`, `status`, `date`, `startedAt`, `endAt`, `orderId`, `orderStatus`, `unitCode`,
   `customerEmail`, `staffId`, `staffEmail` (hai trường cuối `null` khi chưa phân công). Lịch chưa có giờ bắt đầu

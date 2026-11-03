@@ -128,7 +128,7 @@ Chi tiết: [error-handling.md](error-handling.md).
 
 - UI quản trị gán permission cho role (Flow 5): mapping hiện sửa qua seed/SQL.
 - Namespace `/api/fm/**` có các màn của FM: hàng đợi + duyệt/từ chối yêu cầu đặt kho, xem đơn để đề xuất
-  lại (`GET /api/fm/rental-orders/{orderId}`, role FM **cộng** facility scope); lịch hẹn theo ngày, danh sách FS
+  lại (`GET /api/fm/rental-orders/{orderId}`, role FM **cộng** facility scope); lịch check-in theo ngày, danh sách FS
   của cơ sở và phân công FS (`appointment.read` / `appointment.assign` theo cơ sở). Thao tác đề xuất khoang theo
   quy tắc đặt route ở trên: `/api/proposals/**` (ownership) và `/api/rental-orders/{orderId}/proposals`
   (permission `proposal_feedback.repropose` theo cơ sở) nằm trong `/api/**` chung. `/api/bom/**`… vẫn chưa có.
