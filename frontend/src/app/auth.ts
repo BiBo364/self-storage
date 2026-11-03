@@ -6,6 +6,7 @@ export type AuthUser = {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: UserRole;
 };
 
@@ -39,6 +40,8 @@ type LoginResponse = {
 type CurrentUserResponse = {
   email: string;
   role: UserRole;
+  name?: string | null;
+  phone?: string | null;
 };
 
 function readSession(): AuthSession | null {
@@ -83,8 +86,9 @@ export const authGateway: AuthGateway = {
       const session: AuthSession = {
         user: {
           id: String(loginResponse.accountId),
-          name: currentUser.email.split("@")[0],
+          name: currentUser.name ?? currentUser.email.split("@")[0],
           email: currentUser.email,
+          phone: currentUser.phone ?? undefined,
           role: currentUser.role,
         },
         issuedAt: new Date().toISOString(),
@@ -124,8 +128,9 @@ export const authGateway: AuthGateway = {
       const session: AuthSession = {
         user: {
           id: cachedSession?.user.id ?? currentUser.email,
-          name: currentUser.email.split("@")[0],
+          name: currentUser.name ?? currentUser.email.split("@")[0],
           email: currentUser.email,
+          phone: currentUser.phone ?? undefined,
           role: currentUser.role,
         },
         issuedAt: cachedSession?.issuedAt ?? new Date().toISOString(),
@@ -182,8 +187,13 @@ async function authPost(path: string, body: unknown): Promise<AuthActionResult> 
 }
 
 export const authApi = {
-  register(email: string, password: string) {
-    return authPost("/api/auth/register", { email, password });
+  register(name: string, email: string, phone: string | undefined, password: string) {
+    return authPost("/api/auth/register", {
+      name,
+      email,
+      password,
+      ...(phone ? { phone } : {}),
+    });
   },
   verifyEmail(email: string, code: string) {
     return authPost("/api/auth/verify-email", { email, code });
