@@ -1,11 +1,13 @@
-import { Check, Lock, User } from "lucide-react";
-import { useState } from "react";
+import { Check, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ApiError } from "../../app/api";
 import {
   assignAppointmentStaff,
-  fmAppointments,
-  fsStaff,
+  fetchFmAppointments,
   type FmAppointment,
-} from "../../mocks/fm";
+} from "../../app/appointments";
+import { fetchCurrentFmFacility, type FmFacility } from "../../app/fmFacility";
+import { fetchFacilityStaff, type FmStaff } from "../../app/fmStaff";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
@@ -13,51 +15,155 @@ import { FilterSelect } from "../../components/ui/FilterSelect";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
-const TYPE_LABEL: Record<FmAppointment["type"], string> = {
-  CHECKIN: "Check-in",
-  RETURN: "Trả kho",
-};
+const TIME_FORMAT = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
-function staffName(staffId: string | null) {
-  return fsStaff.find((staff) => staff.id === staffId)?.name ?? null;
+function pad(value: number) {
+  return String(value).padStart(2, "0");
 }
 
-function groupByDate(items: FmAppointment[]) {
-  const groups = new Map<string, FmAppointment[]>();
-  for (const item of items) {
-    const bucket = groups.get(item.date) ?? [];
-    bucket.push(item);
-    groups.set(item.date, bucket);
-  }
-  return Array.from(groups.entries());
+function todayIso() {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function formatDateVN(value: string) {
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function formatTimeRange(appointment: FmAppointment) {
+  if (!appointment.startedAt) return formatDateVN(appointment.date);
+  const start = TIME_FORMAT.format(new Date(appointment.startedAt));
+  if (!appointment.endAt) return start;
+  return `${start}–${TIME_FORMAT.format(new Date(appointment.endAt))}`;
+}
+
+function staffLabel(staff: FmStaff) {
+  return staff.name ?? staff.email;
 }
 
 export function AppointmentSchedulePage() {
-  const [, refresh] = useState(0);
+  const [facility, setFacility] = useState<FmFacility | null>(null);
+  const [date, setDate] = useState(todayIso);
+  const [appointments, setAppointments] = useState<FmAppointment[]>([]);
+  const [staff, setStaff] = useState<FmStaff[]>([]);
   const [unassignedOnly, setUnassignedOnly] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
   const [selectedStaffId, setSelectedStaffId] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<{ status: number; message: string } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const openAppointment = fmAppointments.find((item) => item.id === openId) ?? null;
+  useEffect(() => {
+    let active = true;
 
-  const list = fmAppointments.filter((item) => !unassignedOnly || item.staffId === null);
-  const groups = groupByDate(list);
+    (async () => {
+      try {
+        const current = await fetchCurrentFmFacility();
+        const [dayAppointments, facilityStaff] = await Promise.all([
+          fetchFmAppointments(current.id, date),
+          fetchFacilityStaff(current.id),
+        ]);
+        if (!active) return;
+        setFacility(current);
+        setAppointments(dayAppointments);
+        setStaff(facilityStaff);
+      } catch (caught) {
+        if (!active) return;
+        setError(
+          caught instanceof ApiError
+            ? { status: caught.status, message: caught.message }
+            : { status: 0, message: "Không thể kết nối tới máy chủ." },
+        );
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [date, reloadKey]);
+
+  const staffById = new Map(staff.map((member) => [member.id, member]));
+  const openAppointment = appointments.find((item) => item.id === openId) ?? null;
+  const filtered = unassignedOnly
+    ? appointments.filter((item) => item.staffId === null)
+    : appointments;
+
+  function assignedStaffName(appointment: FmAppointment) {
+    if (appointment.staffId === null) return null;
+    return staffById.get(appointment.staffId)?.name ?? appointment.staffEmail;
+  }
+
+  function changeDate(next: string) {
+    setDate(next);
+    setIsLoading(true);
+    setError(null);
+    setOpenId(null);
+    setAssignError(null);
+  }
+
+  function retry() {
+    setIsLoading(true);
+    setError(null);
+    setReloadKey((key) => key + 1);
+  }
 
   function openDetails(appointment: FmAppointment) {
     setOpenId(appointment.id);
     setSelectedStaffId("");
+    setAssignError(null);
   }
 
-  function assign(appointment: FmAppointment) {
-    if (!selectedStaffId) return;
-    setBusyId(appointment.id);
-    window.setTimeout(() => {
-      setBusyId(null);
-      assignAppointmentStaff(appointment.id, selectedStaffId);
-      refresh((count) => count + 1);
+  async function assign() {
+    if (!openAppointment || !selectedStaffId) return;
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      await assignAppointmentStaff(openAppointment.id, Number(selectedStaffId));
       setOpenId(null);
-    }, 700);
+      setReloadKey((key) => key + 1);
+    } catch (caught) {
+      setAssignError(
+        caught instanceof ApiError ? caught.message : "Không thể phân công nhân viên.",
+      );
+      if (caught instanceof ApiError && caught.status === 409) {
+        setReloadKey((key) => key + 1);
+      }
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  if (isLoading) {
+    return <SurfaceState variant="loading" title="Đang tải lịch hẹn…" />;
+  }
+
+  if (error) {
+    if (error.status === 403 || error.status === 404) {
+      return (
+        <SurfaceState
+          variant="forbidden"
+          title="Bạn không có quyền xem lịch hẹn cơ sở"
+          description={error.message}
+        />
+      );
+    }
+    return (
+      <SurfaceState
+        variant="error"
+        title="Không tải được lịch hẹn"
+        description={error.message}
+        action={{ label: "Thử lại", onClick: retry }}
+      />
+    );
   }
 
   return (
@@ -65,120 +171,131 @@ export function AppointmentSchedulePage() {
       <div>
         <h1 className="m-0 text-title text-ink">Lịch hẹn &amp; phân công FS</h1>
         <p className="mt-1.5 text-small text-muted">
-          Lịch check-in và trả kho tại cơ sở của bạn, theo ngày.
+          Lịch check-in tại {facility?.name ?? "cơ sở của bạn"} — chọn ngày để phân công FS.
         </p>
       </div>
 
-      <DemoNotice tone="pending">
-        Lịch <strong>trả kho</strong> được hệ thống tự phân công từ hàng chờ yêu cầu trả kho — ở đây
-        chỉ xem, không phân công lại để tránh trùng lặp.
-      </DemoNotice>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="grid max-w-[200px] gap-1.5 text-label text-muted">
+          Ngày
+          <input
+            className="h-11 rounded-[2px] border border-rule-strong bg-surface px-3 text-small text-ink outline-0 transition-colors focus:border-brand"
+            type="date"
+            value={date}
+            onChange={(event) => event.target.value && changeDate(event.target.value)}
+          />
+        </label>
 
-      <div className="max-w-[320px]">
-        <FilterSelect
-          label="Lọc lịch hẹn"
-          value={unassignedOnly ? "unassigned" : "all"}
-          onChange={(value) => setUnassignedOnly(value === "unassigned")}
-        >
-          <option value="all">Tất cả lịch hẹn</option>
-          <option value="unassigned">Chỉ chưa phân công</option>
-        </FilterSelect>
+        <div className="max-w-[280px]">
+          <FilterSelect
+            label="Lọc lịch hẹn"
+            value={unassignedOnly ? "unassigned" : "all"}
+            onChange={(value) => setUnassignedOnly(value === "unassigned")}
+          >
+            <option value="all">Tất cả lịch hẹn</option>
+            <option value="unassigned">Chỉ chưa phân công</option>
+          </FilterSelect>
+        </div>
       </div>
 
-      {groups.length === 0 ? (
-        <SurfaceState variant="empty" title="Không có lịch hẹn nào phù hợp bộ lọc" />
+      {filtered.length === 0 ? (
+        <SurfaceState
+          variant="empty"
+          title={`Không có lịch check-in ngày ${formatDateVN(date)} phù hợp bộ lọc`}
+        />
       ) : (
-        <div className="grid gap-6">
-          {groups.map(([date, dayItems]) => (
-            <section key={date}>
-              <p className="mb-2 text-label text-muted">{date}</p>
-              <div className="grid gap-2">
-                {dayItems.map((appointment) => {
-                  const assignedName = staffName(appointment.staffId);
-                  const isReadOnly = appointment.type === "RETURN";
-                  return (
-                    <button
-                      key={appointment.id}
-                      className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle disabled:cursor-default disabled:hover:bg-surface"
-                      onClick={() => !isReadOnly && openDetails(appointment)}
-                      disabled={isReadOnly}
-                    >
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <StatusTag tone={appointment.type === "CHECKIN" ? "success" : "info"}>
-                            {TYPE_LABEL[appointment.type]}
-                          </StatusTag>
-                          <strong className="text-small font-semibold text-ink">
-                            {appointment.customerName}
-                          </strong>
-                        </div>
-                        <span className="mt-1.5 block text-label text-muted">
-                          Khoang {appointment.unitCode} · {appointment.timeSlot}
-                        </span>
-                      </div>
-                      <span className="flex items-center gap-1.5 whitespace-nowrap">
-                        {isReadOnly && <Lock size={13} className="text-muted" />}
-                        {assignedName ? (
-                          <StatusTag tone="success">
-                            <User size={12} /> {assignedName}
-                          </StatusTag>
-                        ) : (
-                          <StatusTag tone="warning">Chưa phân công</StatusTag>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+        <div className="grid gap-2">
+          {filtered.map((appointment) => {
+            const assignedName = assignedStaffName(appointment);
+            return (
+              <button
+                key={appointment.id}
+                className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
+                onClick={() => openDetails(appointment)}
+              >
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusTag tone="success">Check-in</StatusTag>
+                    <strong className="text-small font-semibold text-ink">
+                      {appointment.customerName ?? appointment.customerEmail}
+                    </strong>
+                  </div>
+                  <span className="mt-1.5 block text-label text-muted">
+                    Khoang {appointment.unitCode ?? "—"} · {formatTimeRange(appointment)}
+                  </span>
+                </div>
+                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                  {assignedName ? (
+                    <StatusTag tone="success">
+                      <User size={12} /> {assignedName}
+                    </StatusTag>
+                  ) : (
+                    <StatusTag tone="warning">Chưa phân công</StatusTag>
+                  )}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
       {openAppointment && (
         <DetailPanel
-          title={openAppointment.customerName}
-          eyebrow={`${TYPE_LABEL[openAppointment.type]} · ${openAppointment.date}`}
+          title={openAppointment.customerName ?? openAppointment.customerEmail}
+          eyebrow={`Check-in · ${formatDateVN(openAppointment.date)}`}
           onClose={() => setOpenId(null)}
         >
           <div className="grid gap-2 text-small text-muted">
-            <span>Khoang {openAppointment.unitCode}</span>
-            <span>{openAppointment.timeSlot}</span>
+            <span>{openAppointment.customerEmail}</span>
+            <span>Khoang {openAppointment.unitCode ?? "—"}</span>
+            <span>{formatTimeRange(openAppointment)}</span>
           </div>
 
-          {staffName(openAppointment.staffId) ? (
+          {assignError && (
+            <div className="mt-4">
+              <DemoNotice tone="error">{assignError}</DemoNotice>
+            </div>
+          )}
+
+          {assignedStaffName(openAppointment) ? (
             <div className="mt-6">
               <DemoNotice tone="success">
-                Đã phân công {staffName(openAppointment.staffId)} phụ trách lịch hẹn này.
+                Đã phân công {assignedStaffName(openAppointment)} phụ trách lịch hẹn này.
               </DemoNotice>
             </div>
           ) : (
             <>
-              <label className="mt-6 grid gap-1.5 text-label text-muted">
-                Chọn nhân viên FS
-                <select
-                  className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
-                  value={selectedStaffId}
-                  onChange={(event) => setSelectedStaffId(event.target.value)}
-                >
-                  <option value="">— Chọn nhân viên —</option>
-                  {fsStaff.map((staff) => (
-                    <option key={staff.id} value={staff.id}>
-                      {staff.name} · {staff.phone}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="mt-5">
-                <Button
-                  pending={busyId === openAppointment.id}
-                  disabled={!selectedStaffId}
-                  onClick={() => assign(openAppointment)}
-                >
-                  {busyId !== openAppointment.id && <Check size={16} />}
-                  Phân công
-                </Button>
-              </div>
+              {staff.length === 0 ? (
+                <div className="mt-6">
+                  <DemoNotice tone="pending">
+                    Cơ sở chưa có FS đang hoạt động để phân công.
+                  </DemoNotice>
+                </div>
+              ) : (
+                <>
+                  <label className="mt-6 grid gap-1.5 text-label text-muted">
+                    Chọn nhân viên FS
+                    <select
+                      className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
+                      value={selectedStaffId}
+                      onChange={(event) => setSelectedStaffId(event.target.value)}
+                    >
+                      <option value="">— Chọn nhân viên —</option>
+                      {staff.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {staffLabel(member)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="mt-5">
+                    <Button pending={assigning} disabled={!selectedStaffId} onClick={assign}>
+                      {!assigning && <Check size={16} />}
+                      Phân công
+                    </Button>
+                  </div>
+                </>
+              )}
             </>
           )}
         </DetailPanel>
