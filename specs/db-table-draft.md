@@ -3,6 +3,8 @@
 # Account
 - id
 - email (unique, normalized)
+- name (nullable) - tên hiển thị; backfill khách từ `RentalRequest.customer_name`, seed cho tài khoản hệ thống; account cũ/test có thể null, API fallback email
+- phone (nullable) - số điện thoại liên hệ; backfill từ `RentalRequest.customer_phone`
 - email_verified_at (nullable) - thời điểm xác minh email. Luồng đăng ký tự phục vụ chỉ tạo
   `Account` sau khi xác minh (field set ngay khi tạo); account có `null` (legacy/seed/admin tạo tay)
   bị chặn đăng nhập và mọi thao tác nghiệp vụ — chỉ luồng xác minh email hoạt động.

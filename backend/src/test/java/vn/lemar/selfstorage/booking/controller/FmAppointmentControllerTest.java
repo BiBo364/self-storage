@@ -100,6 +100,7 @@ class FmAppointmentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value(FmAppointmentController.LIST_MESSAGE))
                 .andExpect(jsonPath("$.data[0].unitCode").value("A-01"))
+                .andExpect(jsonPath("$.data[0].customerName").value("Khách Demo"))
                 .andExpect(jsonPath("$.data[0].staffId").doesNotExist());
     }
 
@@ -123,11 +124,13 @@ class FmAppointmentControllerTest {
     @Test
     void staffListReturnsFacilityStaff() throws Exception {
         authenticate(FM, "FM");
-        when(queryService.staffOfFacility(1L)).thenReturn(List.of(new FmFacilityStaffResponse(4L, "fs1@lemar.vn")));
+        when(queryService.staffOfFacility(1L))
+                .thenReturn(List.of(new FmFacilityStaffResponse(4L, "FS Quận 7", "fs1@lemar.vn")));
 
         mockMvc.perform(as(get("/api/fm/facilities/1/staff"), FM))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value(FmAppointmentController.STAFF_MESSAGE))
+                .andExpect(jsonPath("$.data[0].name").value("FS Quận 7"))
                 .andExpect(jsonPath("$.data[0].email").value("fs1@lemar.vn"));
     }
 
@@ -183,7 +186,7 @@ class FmAppointmentControllerTest {
     private static FmAppointmentResponse appointment(Long staffId) {
         return new FmAppointmentResponse(1L, "CHECKIN", "Pending", DAY, Instant.parse("2026-11-02T01:00:00Z"),
                 Instant.parse("2026-11-02T03:00:00Z"), 5L, staffId == null ? "Scheduled" : "InProgress", "A-01",
-                "customer1@lemar.vn", staffId, staffId == null ? null : "fs1@lemar.vn");
+                "Khách Demo", "customer1@lemar.vn", staffId, staffId == null ? null : "fs1@lemar.vn");
     }
 
     private MockHttpServletRequestBuilder as(MockHttpServletRequestBuilder request, String email) {
