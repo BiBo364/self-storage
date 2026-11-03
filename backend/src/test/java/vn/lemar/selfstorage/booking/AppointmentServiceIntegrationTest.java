@@ -23,10 +23,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.lemar.selfstorage.booking.application.AppointmentQueryService;
 import vn.lemar.selfstorage.booking.application.AppointmentService;
 import vn.lemar.selfstorage.booking.application.dto.FmAppointmentResponse;
+import vn.lemar.selfstorage.booking.application.dto.FmFacilityStaffResponse;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationException;
-import vn.lemar.selfstorage.identity.application.FacilityStaffQuery.StaffView;
 import vn.lemar.selfstorage.identity.application.exception.FacilityNotFoundException;
 import vn.lemar.selfstorage.identity.application.exception.ForbiddenException;
 
@@ -272,7 +272,8 @@ class AppointmentServiceIntegrationTest {
     void staffListContainsOnlyActiveStaffOfTheFacility() {
         loginAs("fm1@lemar.vn");
 
-        assertThat(queryService.staffOfFacility(q7)).extracting(StaffView::email).containsExactly("fs1@lemar.vn");
+        assertThat(queryService.staffOfFacility(q7)).extracting(FmFacilityStaffResponse::email)
+                .containsExactly("fs1@lemar.vn");
 
         jdbc.update("update accounts set status = 'BANNED' where id = ?", fsId);
         assertThat(queryService.staffOfFacility(q7)).isEmpty();

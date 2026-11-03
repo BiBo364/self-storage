@@ -98,6 +98,7 @@ public class AppointmentService {
             throw new AppointmentConflictException("Đơn thuê không ở trạng thái chờ phân công");
         }
 
+        String previousOrderStatus = order.getStatus().dbValue();
         appointment.assignStaff(staffAccountId);
         order.startProgress();
         Map<String, Object> newValue = new HashMap<>();
@@ -105,7 +106,8 @@ public class AppointmentService {
         newValue.put("orderId", orderId);
         newValue.put("orderStatus", order.getStatus().dbValue());
         auditRecorder.record(new AuditEntry(AuditAction.FS_ASSIGNED, AuditEntityType.APPOINTMENT,
-                String.valueOf(appointmentId), Map.of("orderStatus", "Scheduled"), newValue, null, actorAccountId));
+                String.valueOf(appointmentId), Map.of("orderStatus", previousOrderStatus), newValue, null,
+                actorAccountId));
 
         appointmentRepository.flush();
         AppointmentRow row = readRepository.findById(appointmentId).orElseThrow(AppointmentNotFoundException::new);

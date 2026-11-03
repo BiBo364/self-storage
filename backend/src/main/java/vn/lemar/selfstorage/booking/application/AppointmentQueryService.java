@@ -5,10 +5,10 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.lemar.selfstorage.booking.application.dto.FmAppointmentResponse;
+import vn.lemar.selfstorage.booking.application.dto.FmFacilityStaffResponse;
 import vn.lemar.selfstorage.booking.repository.AppointmentReadRepository;
 import vn.lemar.selfstorage.identity.application.Access;
 import vn.lemar.selfstorage.identity.application.FacilityStaffQuery;
-import vn.lemar.selfstorage.identity.application.FacilityStaffQuery.StaffView;
 
 /** Màn lịch hẹn của FM (spec 1.5): xem lịch theo ngày, xem FS của cơ sở để phân công. */
 @Service
@@ -38,8 +38,9 @@ public class AppointmentQueryService {
 
     /** FS đang hoạt động của cơ sở để FM chọn — cùng quyền với thao tác phân công. */
     @Transactional(readOnly = true)
-    public List<StaffView> staffOfFacility(Long facilityId) {
+    public List<FmFacilityStaffResponse> staffOfFacility(Long facilityId) {
         access.can(PERMISSION_ASSIGN, facilityId);
-        return facilityStaffQuery.listStaff(facilityId);
+        return facilityStaffQuery.listStaff(facilityId).stream()
+                .map(staff -> new FmFacilityStaffResponse(staff.id(), staff.email())).toList();
     }
 }

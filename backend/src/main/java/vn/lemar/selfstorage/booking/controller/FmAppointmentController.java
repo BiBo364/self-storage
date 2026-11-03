@@ -22,8 +22,8 @@ import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.booking.application.AppointmentQueryService;
 import vn.lemar.selfstorage.booking.application.AppointmentService;
 import vn.lemar.selfstorage.booking.application.dto.FmAppointmentResponse;
+import vn.lemar.selfstorage.booking.application.dto.FmFacilityStaffResponse;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
-import vn.lemar.selfstorage.identity.application.FacilityStaffQuery.StaffView;
 
 /**
  * Màn lịch hẹn & phân công FS của FM (spec 1.5). Role-bound {@code /api/fm/**} (FM) + permission theo cơ sở
@@ -75,7 +75,7 @@ public class FmAppointmentController {
             @ApiResponse(responseCode = "404", description = "Cơ sở không tồn tại")
     })
     @GetMapping("/facilities/{facilityId}/staff")
-    public ResponseEntity<ApiEnvelope<List<StaffView>>> staff(@PathVariable Long facilityId) {
+    public ResponseEntity<ApiEnvelope<List<FmFacilityStaffResponse>>> staff(@PathVariable Long facilityId) {
         return ResponseEntity.ok(ApiEnvelope.ok(STAFF_MESSAGE, queryService.staffOfFacility(facilityId)));
     }
 

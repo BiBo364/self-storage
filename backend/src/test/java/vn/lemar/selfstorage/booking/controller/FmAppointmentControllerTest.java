@@ -30,12 +30,12 @@ import vn.lemar.selfstorage.SecurityConfig;
 import vn.lemar.selfstorage.booking.application.AppointmentQueryService;
 import vn.lemar.selfstorage.booking.application.AppointmentService;
 import vn.lemar.selfstorage.booking.application.dto.FmAppointmentResponse;
+import vn.lemar.selfstorage.booking.application.dto.FmFacilityStaffResponse;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationException;
 import vn.lemar.selfstorage.identity.application.AccountJwtAuthenticationConverter;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
-import vn.lemar.selfstorage.identity.application.FacilityStaffQuery.StaffView;
 import vn.lemar.selfstorage.identity.application.exception.FacilityNotFoundException;
 import vn.lemar.selfstorage.identity.application.exception.ForbiddenException;
 import vn.lemar.selfstorage.identity.config.JwtConfiguration;
@@ -123,7 +123,7 @@ class FmAppointmentControllerTest {
     @Test
     void staffListReturnsFacilityStaff() throws Exception {
         authenticate(FM, "FM");
-        when(queryService.staffOfFacility(1L)).thenReturn(List.of(new StaffView(4L, "fs1@lemar.vn")));
+        when(queryService.staffOfFacility(1L)).thenReturn(List.of(new FmFacilityStaffResponse(4L, "fs1@lemar.vn")));
 
         mockMvc.perform(as(get("/api/fm/facilities/1/staff"), FM))
                 .andExpect(status().isOk())
