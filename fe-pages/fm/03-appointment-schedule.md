@@ -19,7 +19,6 @@ FM xem toàn bộ `Appointment` (check-in, trả kho) của cơ sở theo ngày 
 
 ## Actions
 - Chọn 1 `Appointment` chưa phân công → chọn FS → [Phân công]
-- Chọn 1 `Appointment` check-in còn `Pending` đã có FS → chọn FS khác → [Đổi FS]; FS cũ và FS mới đều nhận thông báo
 - Xem lịch dạng calendar/list theo ngày
 
 ## States / UI trạng thái
