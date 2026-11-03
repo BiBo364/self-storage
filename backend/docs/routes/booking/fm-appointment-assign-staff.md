@@ -47,7 +47,9 @@ curl -s -X POST http://localhost:8080/api/fm/appointments/1/staff -H "Authorizat
 # {"message":"Đã phân công nhân viên phụ trách lịch hẹn","data":{"id":1,"type":"CHECKIN","status":"Pending","date":"2026-10-27","startedAt":"2026-10-27T01:00:00Z","endAt":"2026-10-27T03:00:00Z","orderId":1,"orderStatus":"InProgress","unitCode":"A-01","customerEmail":"customer1@lemar.vn","staffId":5,"staffEmail":"fs1@lemar.vn"}}
 
 # 409 — gọi lại với đúng FS đó
-# (chưa chạy lại sau khi cho phép đổi FS; câu thông báo lấy từ code: "Lịch hẹn đã do FS này phụ trách")
+curl -s -X POST http://localhost:8080/api/fm/appointments/1/staff -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"staffId":5}'
+# {"message":"Lịch hẹn đã do FS này phụ trách","timestamp":"2026-11-03T04:45:25.755838347Z"}
 
 # 403 — fm2@lemar.vn (cơ sở TD)
 # {"message":"Bạn không được gán vào cơ sở này","timestamp":"2026-10-23T08:44:52.890730500Z"}
