@@ -121,7 +121,7 @@ public class DepositPaymentService {
 
         // IPN đã ghi PAY/Success nhưng listener AFTER_COMMIT chưa chạy/lỗi: invoice vẫn Unpaid.
         // Không mở phiên mới và không huỷ hoá đơn — khách sẽ trả lần hai, còn giao dịch đầu không
-        // có đường tự chốt. Đối soát/querydr xử lý phần còn lại.
+        // có đường tự chốt. Đối soát thủ công xử lý phần còn lại.
         if (sessions.hasSuccessfulPayment(invoice.getId())) {
             throw new DepositNotAllowedException(PAYMENT_ALREADY_SUCCEEDED);
         }

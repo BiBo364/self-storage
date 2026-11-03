@@ -17,6 +17,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     List<Invoice> findByOrderIdAndStatus(Long orderId, InvoiceStatus status);
 
+    /** Invoice còn Unpaid theo loại — job sửa state booking khi listener IPN lỗi. */
+    List<Invoice> findByStatusAndTypeIn(InvoiceStatus status, Collection<InvoiceType> types);
+
     /** Tổng tiền đã thu của các loại hoá đơn trên đơn — dùng để tính chênh lệch cọc. */
     @Query("select coalesce(sum(i.amount), 0) from Invoice i where i.orderId = :orderId "
             + "and i.type in :types and i.status = :status")

@@ -4,13 +4,14 @@ package vn.lemar.selfstorage.payment.domain;
  * Trạng thái một lượt giao dịch.
  *
  * <p>Giá trị lưu xuống DB viết kiểu {@code Pending} chứ không phải {@code PENDING} — đây là
- * ràng buộc CHECK sẵn có của bảng {@code payment_transactions}, xem
- * {@code V1__baseline_schema.sql}. Việc quy đổi do {@link PaymentStatusConverter} lo.
+ * ràng buộc CHECK của bảng {@code payment_transactions}; {@code V12__payment_duplicate.sql}
+ * mở rộng thêm {@code Duplicate}. Việc quy đổi do {@link PaymentStatusConverter} lo.
  */
 public enum PaymentStatus {
     PENDING("Pending"),
     FAILED("Failed"),
-    SUCCESS("Success");
+    SUCCESS("Success"),
+    DUPLICATE("Duplicate");
 
     private final String dbValue;
 

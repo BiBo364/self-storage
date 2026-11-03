@@ -37,6 +37,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import vn.lemar.selfstorage.booking.application.DepositStateRepairJob;
 
 /**
  * Toàn tuyến đặt cọc trên Postgres thật: gọi endpoint → mở phiên → VNPay xác nhận qua IPN →
@@ -75,6 +76,9 @@ class DepositPaymentIntegrationTest {
 
     @Autowired
     private JwtEncoder jwtEncoder;
+
+    @Autowired
+    private DepositStateRepairJob repairJob;
 
     @MockBean
     private vn.lemar.selfstorage.notification.application.NotificationService notifications;
@@ -320,6 +324,16 @@ class DepositPaymentIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(
                         "đã được thanh toán thành công")));
+
+        // Local outbox: giao dịch Success còn đó, job sửa lại state booking dù listener đã lỗi.
+        org.mockito.Mockito.reset(notifications);
+        repairJob.repairUnpaidDeposits();
+
+        assertThat(statusOf("invoices", invoiceId)).isEqualTo("Paid");
+        assertThat(statusOf("rental_orders", orderId)).isEqualTo("Deposited");
+        assertThat(statusOf("storage_units", unitId)).isEqualTo("Reserved");
+        assertThat(jdbc.queryForList("SELECT action FROM audit_logs ORDER BY action", String.class))
+                .containsExactly("PAYMENT_SUCCEEDED", "RENTAL_ORDER_DEPOSITED", "STORAGE_UNIT_RESERVED");
     }
 
     /**
