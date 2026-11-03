@@ -32,6 +32,23 @@ Module sở hữu Invoice (booking) nghe PaymentSucceeded → chuyển Invoice s
 chốt đơn và khoang theo loại hoá đơn (routes/booking/invoice-pay.md › Nhánh thành công)
 ```
 
+## Ba lớp xác nhận & đối soát
+
+Không dùng `querydr` tự động. Ba lớp không thay thế nhau; mỗi lớp chỉ xử lý state mà lớp trước bỏ lại.
+
+| Lớp | Khi nào chạy | Chặn được | Không chặn được |
+|---|---|---|---|
+| **1. IPN** | VNPay gọi `GET /api/payments/vnpay/ipn` | IPN giả/sai chữ ký (`97`), sai merchant/amount (`01`/`04`), IPN lặp (`02`); ghi `Success`/`Failed` | IPN không về; listener booking lỗi sau khi IPN đã commit |
+| **2. Local repair** | `DepositStateRepairJob` mỗi 5 phút | `PaymentTransaction(PAY/Success)` + invoice `Unpaid` (`Deposit`/`DepositSupplement`) do listener lỗi; replay listener idempotent | IPN mất hẳn (transaction còn `Pending`); không tự gọi cổng/tạo giao dịch |
+| **3. Đối soát thủ công** | Ops tra portal VNPay rồi gọi endpoint ADMIN | `Pending` do IPN mất; chốt `Success`/`Failed`; Success thứ hai thành `Duplicate`, không ghi Success lần hai, notify FM | Không tự phát hiện `Pending`; không tự retry; không tự hoàn tiền |
+
+**Nhớ nhanh:** IPN về → lớp 1. Success đã ghi nhưng invoice còn `Unpaid` → lớp 2. IPN không về,
+transaction còn `Pending` → lớp 3.
+
+Lớp 3 hiện là **pull**: dữ liệu phát hiện có sẵn (`direction='PAY'`, `status='Pending'`,
+`created_at < now() - 15 phút`), nhưng chưa có job/notification nhắc ops; ops phải tự lọc theo
+[manual-reconcile.md](routes/payment/manual-reconcile.md). Không lớp nào tự hoàn tiền.
+
 ## Hành vi
 
 - **Đồng hồ của hóa đơn: `Invoice.due_date`.** Quá hạn là mốc duy nhất của "quá hạn thanh toán" —
@@ -39,13 +56,6 @@ chốt đơn và khoang theo loại hoá đơn (routes/booking/invoice-pay.md �
   - **LƯU Ý:** đừng nhầm với cửa sổ phiên VNPay (`vnp_ExpireDate` = lúc tạo URL + `PAYMENT_WINDOW`,
     hiện 15') — cửa sổ chỉ là giới hạn kỹ thuật (hết cửa sổ là cổng không cho trả tiếp); khách bấm
     trả sát `due_date` vẫn có đủ 15'.
-- **Ba lớp xác nhận & đối soát.** Không dùng `querydr` tự động:
-  1. **IPN** — nguồn xác nhận chính, tự động.
-  2. **Local repair** — `PaymentTransaction(PAY/Success)` còn đó nhưng listener booking lỗi; job
-     `DepositStateRepairJob` quét invoice `Unpaid` và gọi lại listener.
-  3. **Đối soát thủ công** — IPN mất hẳn nên giao dịch còn `Pending`; ops tra portal VNPay theo
-     `vnp_TxnRef` rồi nhập kết quả qua endpoint ADMIN. Đây là thay thế cho querydr; chấp nhận
-     không có job tự đóng `Pending`.
 - **Xác nhận muộn (lưới an toàn).** Hi hữu — khách đã trả trong cửa sổ hợp lệ nhưng hệ thống chỉ biết
   sau khi invoice/đơn đã hủy (chỉ khi job/server lỗi dài): vẫn ghi `Success` + đủ dấu vết, log ERROR
   để vận hành xử lý thủ công (hoàn tiền hoặc xếp chỗ khác). Không tự mở lại đơn.
