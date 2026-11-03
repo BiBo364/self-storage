@@ -65,8 +65,8 @@ public class Appointment {
     }
 
     /**
-     * Spec 1.5: FM chỉ định FS phụ trách ca tiếp đón. Chỉ lịch {@code Pending} chưa có FS — đổi FS đã gán chưa
-     * được docs định nghĩa nên không cho phép.
+     * Spec 1.5: FM chỉ định FS phụ trách ca tiếp đón. Chỉ lịch {@code Pending} chưa có FS — đổi FS đã gán không
+     * cho ở MVP (đã có FS → 409).
      */
     public void assignStaff(Long staffAccountId) {
         if (status != AppointmentStatus.Pending) {

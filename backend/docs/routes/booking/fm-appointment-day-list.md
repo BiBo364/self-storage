@@ -24,7 +24,8 @@ phụ trách.
 
 ## Ghi chú nghiệp vụ
 
-- Spec 1.5: FM xem các đơn đã có lịch check-in (`Scheduled`) để phân công FS.
+- Spec 1.5: FM xem các lịch check-in trong ngày để phân công FS; lịch đã phân công vẫn hiện với
+  `orderStatus = InProgress`.
 - Sai định dạng `date` hiện trả 500 do lỗi chung của API khi path/query sai kiểu, không riêng route này.
 
 ## Ví dụ

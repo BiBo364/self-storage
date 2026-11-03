@@ -18,8 +18,9 @@ Body `{ "staffId": 5 }`.
 3. `staffId` không phải FS đang hoạt động của cùng cơ sở → 400. Thiếu `staffId` → 400.
 4. Khoá đơn thuê nối qua `rental_appointments`; đơn không ở `Scheduled` → 409.
 5. OK → một transaction: `appointments.staff_id = staffId`, đơn `Scheduled → InProgress`, AuditLog
-   `FS_ASSIGNED` (entity `Appointment`, actor = FM, giá trị mới gồm `staffId`, `orderId`, `orderStatus`),
-   FS nhận notification + email `FS_ASSIGNED` (mã đơn, giờ hẹn theo giờ VN, địa chỉ cơ sở, mã khoang).
+   `FS_ASSIGNED` (entity `Appointment`, actor = FM, `old_value = {orderStatus: "Scheduled"}`, `new_value`
+   gồm `staffId`, `orderId`, `orderStatus`), FS nhận notification + email `FS_ASSIGNED` (mã đơn, giờ hẹn
+   theo giờ VN, địa chỉ cơ sở, mã khoang).
 
 ## Ghi chú nghiệp vụ
 

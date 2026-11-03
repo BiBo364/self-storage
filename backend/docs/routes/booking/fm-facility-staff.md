@@ -15,7 +15,7 @@ FS (role `FS`, tài khoản `ACTIVE`) được gán vào cơ sở qua `account_f
 ## Luồng / hành vi
 
 - Trả `{id, email}` — bảng `accounts` chưa có cột họ tên nên hiển thị bằng email.
-- Tài khoản `BANNED` không xuất hiện. Ngoài phạm vi cơ sở → 403.
+- Tài khoản `BANNED` không xuất hiện. Ngoài phạm vi cơ sở → 403; cơ sở không tồn tại → 404 (theo `Access`).
 
 ## Ví dụ
 
