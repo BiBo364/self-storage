@@ -472,7 +472,7 @@ Các bước:
 | `MANUAL_REFUND_RECORDED` | Ghi nhận hoàn tiền thủ công | `PaymentTransaction` | Admin/FM |
 | `DEPOSIT_REFUND_REQUIRED` | Đổi khoang sau khi cọc dư — cần hoàn tiền | `RentalOrder` | Customer |
 | `APPOINTMENT_CREATED` | Tạo lịch hẹn check-in | `Appointment` | System |
-| `FS_ASSIGNED` | FM phân công FS | `Appointment` | FM |
+| `FS_ASSIGNED` | FM phân công FS | `Appointment`, `RentalOrder` | FM |
 | `APPOINTMENT_RESCHEDULED` | Lịch hẹn được đặt lại | `Appointment` | Customer/FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron xử lý khách không đến | `Appointment` | System |
 | `APPOINTMENT_CANCELED` | Hủy lịch chưa diễn ra khi đơn bị hủy (cancellation cascade) | `Appointment` | System |

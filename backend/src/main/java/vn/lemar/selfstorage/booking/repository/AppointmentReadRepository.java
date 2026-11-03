@@ -38,13 +38,14 @@ public class AppointmentReadRepository {
     }
 
     /**
-     * Lịch check-in của một cơ sở trong một ngày, theo giờ bắt đầu (chưa có giờ thì xếp cuối). Lịch bàn giao / trả
-     * kho ({@code HANDOVER}, {@code RETURN}) không thuộc màn phân công FS nên bị loại.
+     * Lịch check-in đang {@code Pending} của một cơ sở trong một ngày, theo giờ bắt đầu (chưa có giờ thì xếp
+     * cuối). Lịch bàn giao / trả kho ({@code HANDOVER}, {@code RETURN}) và lịch {@code Done}/{@code Canceled}
+     * không thuộc màn phân công FS nên bị loại.
      */
     public List<AppointmentRow> findByFacilityAndDate(Long facilityId, LocalDate date) {
         return jdbc.query(SELECT
                         + " where a.facility_id = ? and a.date = ? and a.type = 'CHECKIN'"
-                        + " order by a.started_at nulls last, a.id",
+                        + " and a.status = 'Pending' order by a.started_at nulls last, a.id",
                 AppointmentReadRepository::map, facilityId, date);
     }
 

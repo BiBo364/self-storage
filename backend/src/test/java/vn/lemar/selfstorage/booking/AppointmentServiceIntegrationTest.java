@@ -118,6 +118,30 @@ class AppointmentServiceIntegrationTest {
     }
 
     @Test
+    void assignStaffWritesOneAuditPerChangedEntity() {
+        loginAs("fm1@lemar.vn");
+        service.assignStaff(appointmentId, fsId, fmId);
+
+        List<Map<String, Object>> audits = jdbc.queryForList(
+                "select entity_type, old_value, actor_account_id from audit_logs "
+                        + "where action = 'FS_ASSIGNED' order by id");
+        assertThat(audits).hasSize(2);
+        assertThat(audits.get(0).get("entity_type")).isEqualTo("Appointment");
+        assertThat(audits.get(0).get("old_value")).isNull();
+        assertThat(audits.get(0).get("actor_account_id")).isEqualTo(fmId);
+        assertThat(audits.get(1).get("entity_type")).isEqualTo("RentalOrder");
+        assertThat(jdbc.queryForObject("select old_value ->> 'status' from audit_logs "
+                + "where action = 'FS_ASSIGNED' and entity_type = 'RentalOrder'", String.class))
+                .isEqualTo("Scheduled");
+        assertThat(jdbc.queryForObject("select new_value ->> 'status' from audit_logs "
+                + "where action = 'FS_ASSIGNED' and entity_type = 'RentalOrder'", String.class))
+                .isEqualTo("InProgress");
+        assertThat(jdbc.queryForObject("select new_value ->> 'staffId' from audit_logs "
+                + "where action = 'FS_ASSIGNED' and entity_type = 'Appointment'", String.class))
+                .isEqualTo(String.valueOf(fsId));
+    }
+
+    @Test
     void appointmentWithStaffCannotBeAssignedAgain() {
         loginAs("fm1@lemar.vn");
         service.assignStaff(appointmentId, fsId, fmId);
@@ -247,6 +271,21 @@ class AppointmentServiceIntegrationTest {
                 insert into appointments (customer_id, facility_id, type, date, status)
                 values (?, ?, 'HANDOVER', ?, 'Pending')""",
                 accountId("customer1@lemar.vn"), q7, day);
+        loginAs("fm1@lemar.vn");
+
+        assertThat(queryService.listForFacility(q7, day)).extracting(FmAppointmentResponse::id)
+                .containsExactly(appointmentId);
+    }
+
+    @Test
+    void dayListSkipsCanceledAndDoneAppointments() {
+        long customerId = accountId("customer1@lemar.vn");
+        jdbc.update("""
+                insert into appointments (customer_id, facility_id, type, date, status)
+                values (?, ?, 'CHECKIN', ?, 'Canceled')""", customerId, q7, day);
+        jdbc.update("""
+                insert into appointments (customer_id, facility_id, type, date, status)
+                values (?, ?, 'CHECKIN', ?, 'Done')""", customerId, q7, day);
         loginAs("fm1@lemar.vn");
 
         assertThat(queryService.listForFacility(q7, day)).extracting(FmAppointmentResponse::id)

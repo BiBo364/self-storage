@@ -56,6 +56,9 @@ public class Appointment {
     @Column(nullable = false, length = 20)
     private AppointmentStatus status;
 
+    @Column(name = "cancel_reason")
+    private String cancelReason;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -76,6 +79,16 @@ public class Appointment {
             throw new IllegalStateException("Lịch hẹn " + id + " đã có FS phụ trách");
         }
         this.staffId = staffAccountId;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Cancellation Cascade: lịch {@code Pending} chưa diễn ra bị huỷ theo đơn, ghi lý do. */
+    public void cancel(String reason) {
+        if (status != AppointmentStatus.Pending) {
+            throw new IllegalStateException("Lịch hẹn " + id + " không còn Pending: " + status);
+        }
+        this.status = AppointmentStatus.Canceled;
+        this.cancelReason = reason;
         this.updatedAt = Instant.now();
     }
 }

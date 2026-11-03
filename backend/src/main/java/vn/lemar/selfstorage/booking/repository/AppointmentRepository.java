@@ -1,6 +1,7 @@
 package vn.lemar.selfstorage.booking.repository;
 
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -25,4 +26,14 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     /** Đơn thuê nối với lịch hẹn qua {@code rental_appointments} (bảng nối, không có entity). */
     @Query(value = "select order_id from rental_appointments where appointment_id = :id", nativeQuery = true)
     Optional<Long> findOrderId(@Param("id") Long id);
+
+    /**
+     * Id các lịch {@code Pending} của đơn — cascade huỷ đơn lấy danh sách rồi khoá từng row theo thứ tự id.
+     */
+    @Query(value = """
+            select a.id from appointments a
+            join rental_appointments ra on ra.appointment_id = a.id
+            where ra.order_id = :orderId and a.status = 'Pending'
+            order by a.id""", nativeQuery = true)
+    List<Long> findPendingIdsByOrderId(@Param("orderId") Long orderId);
 }

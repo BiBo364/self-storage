@@ -49,8 +49,8 @@ public class FmAppointmentController {
     }
 
     @Operation(summary = "Lịch check-in của cơ sở theo ngày",
-            description = "Lịch check-in (`type = CHECKIN`) trong ngày, xếp theo giờ bắt đầu, kèm đơn thuê, khách, "
-                    + "khoang và FS phụ trách. Quyền `appointment.read` theo cơ sở.")
+            description = "Lịch check-in (`type = CHECKIN`, `status = Pending`) trong ngày, xếp theo giờ bắt đầu, "
+                    + "kèm đơn thuê, khách, khoang và FS phụ trách. Quyền `appointment.read` theo cơ sở.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy danh sách thành công"),
             @ApiResponse(responseCode = "400", description = "Thiếu `facilityId` hoặc `date` (ISO `yyyy-MM-dd`)"),

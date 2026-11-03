@@ -14,13 +14,14 @@ Body `{ "staffId": 5 }`.
 ## Luồng / hành vi
 
 1. Lịch không tồn tại → 404. Kiểm quyền theo cơ sở của lịch → 403 nếu ngoài phạm vi.
-2. Khoá row lịch hẹn. Lịch không phải `CHECKIN` / không còn `Pending` / đã có FS → 409, không đổi gì.
-3. `staffId` không phải FS đang hoạt động của cùng cơ sở → 400. Thiếu `staffId` → 400.
-4. Khoá đơn thuê nối qua `rental_appointments`; đơn không ở `Scheduled` → 409.
-5. OK → một transaction: `appointments.staff_id = staffId`, đơn `Scheduled → InProgress`, AuditLog
-   `FS_ASSIGNED` (entity `Appointment`, actor = FM, `old_value = {orderStatus: "Scheduled"}`, `new_value`
-   gồm `staffId`, `orderId`, `orderStatus`), FS nhận notification + email `FS_ASSIGNED` (mã đơn, giờ hẹn
-   theo giờ VN, địa chỉ cơ sở, mã khoang).
+2. Đọc link qua `rental_appointments`; không có đơn → 409. Khoá đơn thuê; đơn không ở `Scheduled` → 409.
+3. Khoá row lịch hẹn (sau đơn — cùng thứ tự với cancellation cascade). Lịch không phải `CHECKIN` / không
+   còn `Pending` / đã có FS → 409, không đổi gì.
+4. `staffId` không phải FS đang hoạt động của cùng cơ sở → 400. Thiếu `staffId` → 400.
+5. OK → một transaction: `appointments.staff_id = staffId`, đơn `Scheduled → InProgress`, hai AuditLog
+   `FS_ASSIGNED` (actor = FM): một cho `Appointment` (`old_value = null`, `new_value = {staffId, orderId}`)
+   và một cho `RentalOrder` (`old_value = {status: "Scheduled"}`, `new_value = {status: "InProgress"}`).
+   FS nhận notification + email `FS_ASSIGNED` (mã đơn, giờ hẹn theo giờ VN, địa chỉ cơ sở, mã khoang).
 
 ## Ghi chú nghiệp vụ
 
@@ -54,9 +55,13 @@ curl -s -X POST http://localhost:8080/api/fm/appointments/1/staff -H "Authorizat
 # {"message":"Không tìm thấy lịch hẹn","timestamp":"2026-10-23T08:44:53.748581300Z"}
 ```
 
-Sau lần gọi 200: `audit_logs` có `FS_ASSIGNED | Appointment | 1 | actor 3 | {"orderId": 1, "staffId": 5,
-"orderStatus": "InProgress"}`; fs1 nhận "Bạn được phân công lịch check-in — Đơn 1: lịch hẹn 08:00–10:00 27/10/2026
-tại 123 Nguyễn Văn Linh, Quận 7, TP.HCM, khoang A-01."
+Sau lần gọi 200: `audit_logs` có 2 bản ghi `FS_ASSIGNED` (actor = FM):
+
+- `Appointment | 1 | old_value null | new_value {"orderId": 1, "staffId": 5}`
+- `RentalOrder | 1 | old_value {"status": "Scheduled"} | new_value {"status": "InProgress"}`
+
+fs1 nhận "Bạn được phân công lịch check-in — Đơn 1: lịch hẹn 08:00–10:00 27/10/2026 tại 123 Nguyễn Văn Linh,
+Quận 7, TP.HCM, khoang A-01."
 
 ## Liên quan
 

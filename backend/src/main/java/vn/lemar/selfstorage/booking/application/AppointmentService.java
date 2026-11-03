@@ -76,6 +76,11 @@ public class AppointmentService {
                 .orElseThrow(AppointmentNotFoundException::new);
         access.can(AppointmentQueryService.PERMISSION_ASSIGN, facilityId);
 
+        Long orderId = appointmentRepository.findOrderId(appointmentId)
+                .orElseThrow(() -> new AppointmentConflictException("Lịch hẹn không gắn với đơn thuê"));
+        // Cùng thứ tự khoá với Cancellation Cascade: đơn trước, lịch sau.
+        RentalOrder order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new AppointmentConflictException("Lịch hẹn không gắn với đơn thuê"));
         Appointment appointment = appointmentRepository.findByIdForUpdate(appointmentId)
                 .orElseThrow(AppointmentNotFoundException::new);
         if (appointment.getType() != AppointmentType.CHECKIN) {
@@ -90,10 +95,6 @@ public class AppointmentService {
         if (!facilityStaffQuery.isActiveStaffOf(staffAccountId, facilityId)) {
             throw new AppointmentValidationException("Nhân viên không phải FS của cơ sở này");
         }
-        Long orderId = appointmentRepository.findOrderId(appointmentId)
-                .orElseThrow(() -> new AppointmentConflictException("Lịch hẹn không gắn với đơn thuê"));
-        RentalOrder order = orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new AppointmentConflictException("Lịch hẹn không gắn với đơn thuê"));
         if (!order.isScheduled()) {
             throw new AppointmentConflictException("Đơn thuê không ở trạng thái chờ phân công");
         }
@@ -101,13 +102,14 @@ public class AppointmentService {
         String previousOrderStatus = order.getStatus().dbValue();
         appointment.assignStaff(staffAccountId);
         order.startProgress();
-        Map<String, Object> newValue = new HashMap<>();
-        newValue.put("staffId", staffAccountId);
-        newValue.put("orderId", orderId);
-        newValue.put("orderStatus", order.getStatus().dbValue());
+        Map<String, Object> appointmentNewValue = new HashMap<>();
+        appointmentNewValue.put("staffId", staffAccountId);
+        appointmentNewValue.put("orderId", orderId);
         auditRecorder.record(new AuditEntry(AuditAction.FS_ASSIGNED, AuditEntityType.APPOINTMENT,
-                String.valueOf(appointmentId), Map.of("orderStatus", previousOrderStatus), newValue, null,
-                actorAccountId));
+                String.valueOf(appointmentId), null, appointmentNewValue, null, actorAccountId));
+        auditRecorder.record(new AuditEntry(AuditAction.FS_ASSIGNED, AuditEntityType.RENTAL_ORDER,
+                String.valueOf(orderId), Map.of("status", previousOrderStatus),
+                Map.of("status", order.getStatus().dbValue()), null, actorAccountId));
 
         appointmentRepository.flush();
         AppointmentRow row = readRepository.findById(appointmentId).orElseThrow(AppointmentNotFoundException::new);
