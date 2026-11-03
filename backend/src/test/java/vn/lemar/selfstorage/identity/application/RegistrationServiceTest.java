@@ -66,15 +66,41 @@ class RegistrationServiceTest {
     void registerStoresPendingAndPublishesVerificationEmail() {
         when(accountRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("password-hash");
-        when(verificationCodes.issue(EMAIL, "password-hash")).thenReturn("123456");
+        when(verificationCodes.issue(EMAIL, "password-hash", null, null)).thenReturn("123456");
 
         registrationService.register(new RegisterRequest(" Customer@Example.com ", "password123"));
 
         verify(verificationCodes).markResendCooldown(EMAIL);
-        verify(verificationCodes).issue(EMAIL, "password-hash");
+        verify(verificationCodes).issue(EMAIL, "password-hash", null, null);
         verify(events).publishEvent(new VerificationEmailRequested(EMAIL, "123456", TTL));
         verify(accountRepository, never()).save(any());
         verifyNoInteractions(verifiedAccountCreator);
+    }
+
+    @Test
+    void registerAndVerifyPassProfileToAccount() {
+        when(accountRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("password-hash");
+        when(verificationCodes.issue(EMAIL, "password-hash", "Nguyễn Văn A", "0900000000"))
+                .thenReturn("123456");
+
+        registrationService.register(new RegisterRequest(EMAIL, "password123", "Nguyễn Văn A", "0900000000"));
+
+        verify(verificationCodes).issue(EMAIL, "password-hash", "Nguyễn Văn A", "0900000000");
+
+        Account created = new Account(EMAIL, "password-hash", "Nguyễn Văn A", "0900000000",
+                new Role("CUSTOMER"));
+        created.markEmailVerified();
+        ReflectionTestUtils.setField(created, "id", 42L);
+        when(accountRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        when(verificationCodes.verify(EMAIL, "123456")).thenReturn(Optional.of(
+                new PendingRegistration(EMAIL, "password-hash", "Nguyễn Văn A", "0900000000")));
+        when(verifiedAccountCreator.create(EMAIL, "password-hash", "Nguyễn Văn A", "0900000000"))
+                .thenReturn(created);
+
+        registrationService.verifyEmail(new VerifyEmailRequest(EMAIL, "123456"));
+
+        verify(verifiedAccountCreator).create(EMAIL, "password-hash", "Nguyễn Văn A", "0900000000");
     }
 
     @Test
@@ -107,13 +133,13 @@ class RegistrationServiceTest {
         when(accountRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
         when(verificationCodes.verify(EMAIL, "123456"))
                 .thenReturn(Optional.of(new PendingRegistration(EMAIL, "password-hash")));
-        when(verifiedAccountCreator.create(EMAIL, "password-hash")).thenReturn(created);
+        when(verifiedAccountCreator.create(EMAIL, "password-hash", null, null)).thenReturn(created);
 
         EmailVerificationResult result =
                 registrationService.verifyEmail(new VerifyEmailRequest(" Customer@Example.com ", "123456"));
 
         assertThat(result).isEqualTo(EmailVerificationResult.VERIFIED);
-        verify(verifiedAccountCreator).create(EMAIL, "password-hash");
+        verify(verifiedAccountCreator).create(EMAIL, "password-hash", null, null);
         verify(events).publishEvent(new EmailVerified(42L));
     }
 
@@ -161,7 +187,7 @@ class RegistrationServiceTest {
         when(accountRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
         when(verificationCodes.verify(EMAIL, "123456"))
                 .thenReturn(Optional.of(new PendingRegistration(EMAIL, "password-hash")));
-        when(verifiedAccountCreator.create(EMAIL, "password-hash"))
+        when(verifiedAccountCreator.create(EMAIL, "password-hash", null, null))
                 .thenThrow(new IllegalStateException("Role CUSTOMER chưa được seed"));
 
         assertThatThrownBy(() -> registrationService.verifyEmail(new VerifyEmailRequest(EMAIL, "123456")))
@@ -178,7 +204,7 @@ class RegistrationServiceTest {
         when(accountRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
         when(verificationCodes.verify(EMAIL, "123456"))
                 .thenReturn(Optional.of(new PendingRegistration(EMAIL, "password-hash")));
-        when(verifiedAccountCreator.create(EMAIL, "password-hash")).thenReturn(created);
+        when(verifiedAccountCreator.create(EMAIL, "password-hash", null, null)).thenReturn(created);
 
         TransactionSynchronizationManager.initSynchronization();
         try {
@@ -203,7 +229,7 @@ class RegistrationServiceTest {
                 .thenReturn(Optional.of(verified));
         when(verificationCodes.verify(EMAIL, "123456"))
                 .thenReturn(Optional.of(new PendingRegistration(EMAIL, "password-hash")));
-        when(verifiedAccountCreator.create(EMAIL, "password-hash"))
+        when(verifiedAccountCreator.create(EMAIL, "password-hash", null, null))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
 
         EmailVerificationResult result =
@@ -223,7 +249,7 @@ class RegistrationServiceTest {
                 .thenReturn(Optional.of(created));
         when(verificationCodes.verify(EMAIL, "123456"))
                 .thenReturn(Optional.of(new PendingRegistration(EMAIL, "password-hash")));
-        when(verifiedAccountCreator.create(EMAIL, "password-hash")).thenReturn(created);
+        when(verifiedAccountCreator.create(EMAIL, "password-hash", null, null)).thenReturn(created);
 
         registrationService.verifyEmail(new VerifyEmailRequest(EMAIL, "123456"));
         registrationService.verifyEmail(new VerifyEmailRequest(EMAIL, "123456"));

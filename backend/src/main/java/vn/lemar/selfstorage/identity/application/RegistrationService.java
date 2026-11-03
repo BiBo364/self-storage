@@ -66,7 +66,8 @@ public class RegistrationService {
             throw new EmailAlreadyExistsException();
         }
         verificationCodes.markResendCooldown(email);
-        String code = verificationCodes.issue(email, passwordEncoder.encode(request.password()));
+        String code = verificationCodes.issue(email, passwordEncoder.encode(request.password()),
+                request.name(), request.phone());
         events.publishEvent(new VerificationEmailRequested(email, code, codeTtl));
     }
 
@@ -95,7 +96,7 @@ public class RegistrationService {
                 .orElseThrow(InvalidVerificationCodeException::new);
         Account account;
         try {
-            account = verifiedAccountCreator.create(email, pending.passwordHash());
+            account = verifiedAccountCreator.create(email, pending.passwordHash(), pending.name(), pending.phone());
         } catch (DataIntegrityViolationException e) {
             // Verify đồng thời: request còn lại đã tạo account (transaction riêng đã commit) —
             // coi như đã xác minh, không để unique violation làm hỏng transaction ngoài.

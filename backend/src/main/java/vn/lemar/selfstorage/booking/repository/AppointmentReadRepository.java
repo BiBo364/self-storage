@@ -20,6 +20,7 @@ public class AppointmentReadRepository {
     private static final String SELECT = """
             select a.id, a.type, a.status, a.date, a.started_at, a.end_at,
                    ra.order_id, o.status as order_status, u.code as unit_code,
+                   coalesce(c.name, r.customer_name, c.email) as customer_name,
                    c.email as customer_email, a.staff_id, s.email as staff_email,
                    f.name as facility_name, f.address as facility_address
             from appointments a
@@ -28,6 +29,7 @@ public class AppointmentReadRepository {
             left join accounts s on s.id = a.staff_id
             left join rental_appointments ra on ra.appointment_id = a.id
             left join rental_orders o on o.id = ra.order_id
+            left join rental_requests r on r.id = o.request_id
             left join storage_units u on u.id = o.unit_id
             """;
 
@@ -58,7 +60,7 @@ public class AppointmentReadRepository {
         return new AppointmentRow(rs.getLong("id"), rs.getString("type"), rs.getString("status"),
                 rs.getObject("date", LocalDate.class), instant(rs.getTimestamp("started_at")),
                 instant(rs.getTimestamp("end_at")), (Long) rs.getObject("order_id"), rs.getString("order_status"),
-                rs.getString("unit_code"), rs.getString("customer_email"),
+                rs.getString("unit_code"), rs.getString("customer_name"), rs.getString("customer_email"),
                 (Long) rs.getObject("staff_id"), rs.getString("staff_email"), rs.getString("facility_name"),
                 rs.getString("facility_address"));
     }
@@ -70,7 +72,7 @@ public class AppointmentReadRepository {
     /** Một lịch hẹn kèm dữ liệu hiển thị; {@code orderId} null nếu lịch không nối với đơn thuê. */
     public record AppointmentRow(Long id, String type, String status, LocalDate date, Instant startedAt,
                                  Instant endAt, Long orderId, String orderStatus, String unitCode,
-                                 String customerEmail, Long staffId, String staffEmail, String facilityName,
-                                 String facilityAddress) {
+                                 String customerName, String customerEmail, Long staffId, String staffEmail,
+                                 String facilityName, String facilityAddress) {
     }
 }

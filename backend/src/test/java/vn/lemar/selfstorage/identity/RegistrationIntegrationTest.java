@@ -301,7 +301,7 @@ class RegistrationIntegrationTest {
     private ResultActions register(String email) throws Exception {
         return mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"));
+                .content("{\"name\":\"Khách Test\",\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"));
     }
 
     private ResultActions verifyEmail(String email, String code) throws Exception {

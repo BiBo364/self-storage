@@ -16,6 +16,7 @@ public record FmAppointmentResponse(
         @Schema(description = "Đơn thuê nối với lịch (null nếu lịch không thuộc đơn thuê)") Long orderId,
         @Schema(description = "Trạng thái đơn thuê", example = "Scheduled") String orderStatus,
         @Schema(description = "Mã khoang của đơn") String unitCode,
+        @Schema(description = "Tên khách", example = "Khách Demo") String customerName,
         @Schema(description = "Email khách") String customerEmail,
         @Schema(description = "Id FS phụ trách, null khi chưa phân công") Long staffId,
         @Schema(description = "Email FS phụ trách") String staffEmail
@@ -23,7 +24,7 @@ public record FmAppointmentResponse(
 
     public static FmAppointmentResponse from(AppointmentRow row) {
         return new FmAppointmentResponse(row.id(), row.type(), row.status(), row.date(), row.startedAt(),
-                row.endAt(), row.orderId(), row.orderStatus(), row.unitCode(), row.customerEmail(), row.staffId(),
-                row.staffEmail());
+                row.endAt(), row.orderId(), row.orderStatus(), row.unitCode(), row.customerName(),
+                row.customerEmail(), row.staffId(), row.staffEmail());
     }
 }

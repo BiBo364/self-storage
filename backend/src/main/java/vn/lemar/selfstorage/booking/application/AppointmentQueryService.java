@@ -41,6 +41,6 @@ public class AppointmentQueryService {
     public List<FmFacilityStaffResponse> staffOfFacility(Long facilityId) {
         access.can(PERMISSION_ASSIGN, facilityId);
         return facilityStaffQuery.listStaff(facilityId).stream()
-                .map(staff -> new FmFacilityStaffResponse(staff.id(), staff.email())).toList();
+                .map(staff -> new FmFacilityStaffResponse(staff.id(), staff.name(), staff.email())).toList();
     }
 }

@@ -41,6 +41,8 @@ public class EmailVerificationCodes {
     private static final String FIELD_HASH = "hash";
     private static final String FIELD_ATTEMPTS = "attempts";
     private static final String FIELD_PASSWORD_HASH = "passwordHash";
+    private static final String FIELD_NAME = "name";
+    private static final String FIELD_PHONE = "phone";
 
     private final StringRedisTemplate redis;
     private final PasswordEncoder passwordEncoder;
@@ -75,7 +77,12 @@ public class EmailVerificationCodes {
      * plaintext để caller gửi email.
      */
     public String issue(String normalizedEmail, String passwordHash) {
-        return issueCode(normalizedEmail, passwordHash);
+        return issue(normalizedEmail, passwordHash, null, null);
+    }
+
+    /** Phát mã kèm hồ sơ của pending registration (name/phone có thể null). */
+    public String issue(String normalizedEmail, String passwordHash, String name, String phone) {
+        return issueCode(normalizedEmail, passwordHash, name, phone);
     }
 
     /**
@@ -84,7 +91,10 @@ public class EmailVerificationCodes {
      */
     public String reissue(String normalizedEmail) {
         Object passwordHash = redis.opsForHash().get(CODE_KEY_PREFIX + normalizedEmail, FIELD_PASSWORD_HASH);
-        return issueCode(normalizedEmail, passwordHash == null ? null : passwordHash.toString());
+        Object name = redis.opsForHash().get(CODE_KEY_PREFIX + normalizedEmail, FIELD_NAME);
+        Object phone = redis.opsForHash().get(CODE_KEY_PREFIX + normalizedEmail, FIELD_PHONE);
+        return issueCode(normalizedEmail, passwordHash == null ? null : passwordHash.toString(),
+                name == null ? null : name.toString(), phone == null ? null : phone.toString());
     }
 
     /** Có pending registration còn hạn (mã chưa hết TTL) cho email này không. */
@@ -92,13 +102,19 @@ public class EmailVerificationCodes {
         return Boolean.TRUE.equals(redis.hasKey(CODE_KEY_PREFIX + normalizedEmail));
     }
 
-    private String issueCode(String normalizedEmail, String passwordHash) {
+    private String issueCode(String normalizedEmail, String passwordHash, String name, String phone) {
         String code = generateCode();
         String key = CODE_KEY_PREFIX + normalizedEmail;
         redis.opsForHash().put(key, FIELD_HASH, passwordEncoder.encode(code));
         redis.opsForHash().put(key, FIELD_ATTEMPTS, "0");
         if (passwordHash != null) {
             redis.opsForHash().put(key, FIELD_PASSWORD_HASH, passwordHash);
+        }
+        if (name != null) {
+            redis.opsForHash().put(key, FIELD_NAME, name);
+        }
+        if (phone != null) {
+            redis.opsForHash().put(key, FIELD_PHONE, phone);
         }
         redis.expire(key, ttl);
         return code;
@@ -139,9 +155,13 @@ public class EmailVerificationCodes {
             throw new InvalidVerificationCodeException();
         }
         Object passwordHash = state.get(FIELD_PASSWORD_HASH);
-        return passwordHash == null
-                ? Optional.empty()
-                : Optional.of(new PendingRegistration(normalizedEmail, passwordHash.toString()));
+        if (passwordHash == null) {
+            return Optional.empty();
+        }
+        Object name = state.get(FIELD_NAME);
+        Object phone = state.get(FIELD_PHONE);
+        return Optional.of(new PendingRegistration(normalizedEmail, passwordHash.toString(),
+                name == null ? null : name.toString(), phone == null ? null : phone.toString()));
     }
 
     /** Tiêu thụ mã sau khi transaction xác minh đã commit (dùng một lần). */

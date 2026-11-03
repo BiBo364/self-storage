@@ -5,5 +5,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /** Một FS đang hoạt động của cơ sở cho dropdown phân công lịch check-in. */
 public record FmFacilityStaffResponse(
         @Schema(description = "Id tài khoản FS", example = "5") Long id,
+        @Schema(description = "Tên FS", example = "FS Quận 7") String name,
         @Schema(description = "Email FS", example = "fs1@lemar.vn") String email) {
 }

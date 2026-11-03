@@ -1,9 +1,9 @@
 ---
-purpose: Trả email + role của account đang đăng nhập (xác minh session).
+purpose: Trả email, tên, phone + role của account đang đăng nhập (xác minh session).
 ---
 # GET /api/auth/me
 
-Xác minh session hiện tại là ai — FE dùng sau login để biết email + role.
+Xác minh session hiện tại là ai — FE dùng sau login để biết email, tên, phone + role.
 
 - **Actor / quyền:** bearer token + authority `ACCOUNT_ACTIVE`.
 - **Contract chi tiết:** annotation tại `identity/controller/AuthController.java`; Swagger UI —
@@ -27,7 +27,7 @@ Xác minh session hiện tại là ai — FE dùng sau login để biết email 
 TOKEN='<token từ POST /api/auth/login>'
 
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/auth/me
-# {"message":"Lấy thông tin tài khoản thành công","data":{"email":"customer1@lemar.vn","role":"CUSTOMER"}}
+# {"message":"Lấy thông tin tài khoản thành công","data":{"email":"customer1@lemar.vn","role":"CUSTOMER","name":"Khách Demo","phone":null}}
 
 curl -s http://localhost:8080/api/auth/me
 # {"message":"Bạn cần đăng nhập để tiếp tục.","timestamp":"2026-10-05T06:20:49.321777582Z"}
