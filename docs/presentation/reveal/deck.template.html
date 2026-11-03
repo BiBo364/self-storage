@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Self-Storage — SWR302</title>
+  <link rel="stylesheet" href="vendor/reveal.css">
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <section class="title-slide">
+        <div class="hazard" aria-hidden="true"></div>
+        <div class="title-inner">
+          <div class="title-copy">
+            <div class="title-top">SWR302 · Software Requirement Specification</div>
+            <h1>Self-Storage<br>Facility Rental<br>&amp; Management</h1>
+          </div>
+        </div>
+        <aside class="member-block">
+          <div class="member-label">Members</div>
+          <div class="member">
+            <div class="member-name">Phạm Quốc Hưng</div>
+            <div class="member-id">SE194646</div>
+          </div>
+          <div class="member">
+            <div class="member-name">Lê Văn Minh</div>
+            <div class="member-id">SE190763</div>
+          </div>
+          <div class="member-meta">SWR302 · 2026</div>
+        </aside>
+      </section>
+
+      <section class="goal-slide">
+        <div class="goal-inner">
+          <div class="slide-header">
+            <div class="section-label">Product goal</div>
+            <div class="slide-index">02 / 09</div>
+          </div>
+          <div class="goal-layout">
+            <div class="goal-copy">
+              <h2>One system for the whole rental lifecycle</h2>
+              <p class="goal-note">Every state change is traceable, from the first request to an active contract.</p>
+            </div>
+            <div class="lifecycle">
+              <svg class="lc-svg" viewBox="0 0 600 600" role="img" aria-label="Unit lifecycle">
+                <circle cx="300" cy="300" r="232" fill="#141A18" stroke="#2B3330" stroke-width="1"/>
+                <circle cx="300" cy="300" r="180" fill="none" stroke="#2B3330" stroke-width="1.5"/>
+                <circle id="lc-progress" class="lc-progress" cx="300" cy="300" r="180" fill="none" stroke="#8FC4CC" stroke-width="2" stroke-dasharray="1131" stroke-dashoffset="1131" transform="rotate(-90 300 300)"/>
+
+                <g class="lc-node is-active" data-node="0">
+                  <rect x="230" y="26" width="140" height="54" fill="#1A201E" stroke="rgba(238,240,236,0.26)" stroke-width="1"/>
+                  <text x="300" y="48" text-anchor="middle" font-family="Saira Semi Condensed" font-size="16" font-weight="600" fill="#EEF0EC">Available</text>
+                  <text x="300" y="66" text-anchor="middle" font-family="Source Sans 3" font-size="12" fill="#9AA19C">free to rent</text>
+                </g>
+
+                <g class="lc-node" data-node="1">
+                  <rect x="500" y="273" width="90" height="54" fill="#1A201E" stroke="rgba(238,240,236,0.26)" stroke-width="1"/>
+                  <text x="545" y="295" text-anchor="middle" font-family="Saira Semi Condensed" font-size="14" font-weight="600" fill="#EEF0EC">Reserved</text>
+                  <text x="545" y="313" text-anchor="middle" font-family="Source Sans 3" font-size="12" fill="#9AA19C">held</text>
+                </g>
+
+                <g class="lc-node" data-node="2">
+                  <rect x="230" y="520" width="140" height="54" fill="#1A201E" stroke="rgba(238,240,236,0.26)" stroke-width="1"/>
+                  <text x="300" y="542" text-anchor="middle" font-family="Saira Semi Condensed" font-size="16" font-weight="600" fill="#EEF0EC">Rented</text>
+                  <text x="300" y="560" text-anchor="middle" font-family="Source Sans 3" font-size="12" fill="#9AA19C">contract active</text>
+                </g>
+
+                <g class="lc-node" data-node="3">
+                  <rect x="10" y="273" width="90" height="54" fill="#1A201E" stroke="rgba(238,240,236,0.26)" stroke-width="1"/>
+                  <text x="55" y="295" text-anchor="middle" font-family="Saira Semi Condensed" font-size="13" font-weight="600" fill="#EEF0EC">Maintenance</text>
+                  <text x="55" y="313" text-anchor="middle" font-family="Source Sans 3" font-size="12" fill="#9AA19C">repair</text>
+                </g>
+
+                <g class="fragment lc-step" data-fragment-index="1" data-stage="1">
+                  <text x="430" y="148" text-anchor="start" font-family="Saira Semi Condensed" font-size="17" font-weight="600" fill="#EEF0EC">Reserve</text>
+                  <text x="430" y="168" text-anchor="start" font-family="Source Sans 3" font-size="13" fill="#9AA19C">request · approve · deposit</text>
+                </g>
+
+                <g class="fragment lc-step" data-fragment-index="2" data-stage="2">
+                  <text x="430" y="442" text-anchor="start" font-family="Saira Semi Condensed" font-size="17" font-weight="600" fill="#EEF0EC">Hand over</text>
+                  <text x="430" y="462" text-anchor="start" font-family="Source Sans 3" font-size="13" fill="#9AA19C">check-in · contract · key</text>
+                </g>
+
+                <g class="fragment lc-step" data-fragment-index="3" data-stage="3">
+                  <text x="170" y="442" text-anchor="end" font-family="Saira Semi Condensed" font-size="17" font-weight="600" fill="#EEF0EC">Operate</text>
+                  <text x="170" y="462" text-anchor="end" font-family="Source Sans 3" font-size="13" fill="#9AA19C">extend · return · incident</text>
+                </g>
+
+                <g class="fragment lc-step" data-fragment-index="4" data-stage="4">
+                  <text x="170" y="148" text-anchor="end" font-family="Saira Semi Condensed" font-size="17" font-weight="600" fill="#EEF0EC">Turnaround</text>
+                  <text x="170" y="168" text-anchor="end" font-family="Source Sans 3" font-size="13" fill="#9AA19C">maintenance days</text>
+                </g>
+
+                <g class="lc-dot" id="lc-dot">
+                  <circle cx="300" cy="120" r="7" fill="#FFD400"/>
+                </g>
+              </svg>
+
+              <div class="lc-center">
+                <div class="lc-kicker">Unit lifecycle</div>
+                <div class="lc-state" id="lc-state">Available</div>
+                <div class="lc-desc" id="lc-desc">A unit is free to rent.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide-header">
+          <div class="section-label">System context</div>
+          <div class="slide-index">03 / 09</div>
+        </div>
+        <h2>Who talks to the system?</h2>
+        <div class="diagram">{{CONTEXT}}</div>
+      </section>
+
+      <section>
+        <div class="slide-header">
+          <div class="section-label">Core flow 1</div>
+          <div class="slide-index">04 / 09</div>
+        </div>
+        <h2>Reservation: request → check-in slot</h2>
+        <div class="diagram">{{FLOW1}}</div>
+      </section>
+
+      <section>
+        <div class="slide-header">
+          <div class="section-label">Core flow 2</div>
+          <div class="slide-index">05 / 09</div>
+        </div>
+        <h2>Check-in &amp; handover: arrival → active contract</h2>
+        <div class="diagram">{{FLOW2}}</div>
+      </section>
+
+      <section class="flow-3-slide">
+        <div class="slide-header">
+          <div class="section-label">Core flow 3</div>
+          <div class="slide-index">06 / 09</div>
+        </div>
+        <h2>Post-rental: extend, return, incident</h2>
+                        <div class="flow3-grid">
+          <div class="flow3-col">
+            <div class="track-head fragment fade-up" data-fragment-index="1">
+              <span class="track-index">01</span><span class="track-name">Extension</span>
+            </div>
+            <div class="flow3-steps">
+              <span class="flow3-arrow fragment" data-fragment-index="1" style="top: 86px; left: 126px;">↘</span>
+              <span class="flow3-arrow fragment" data-fragment-index="1" style="top: 196px; left: 156px;">↘</span>
+              <div class="tstep actor-customer fragment" data-fragment-index="1" style="top: 0; left: 0;"><span class="tstep-actor">Customer</span><span class="tstep-name">Request extension</span><span class="tstep-outcome">Pending</span></div>
+              <div class="tstep actor-fm fragment" data-fragment-index="1" style="top: 110px; left: 30px;"><span class="tstep-actor">FM</span><span class="tstep-name">Approve &amp; issue invoice</span><span class="tstep-outcome">Invoice issued</span></div>
+              <div class="tstep actor-customer fragment" data-fragment-index="1" style="top: 220px; left: 60px;"><span class="tstep-actor">Customer</span><span class="tstep-name">Pay invoice</span><span class="tstep-outcome">end_date + period</span></div>
+            </div>
+          </div>
+          <div class="flow3-col">
+            <div class="track-head fragment fade-up" data-fragment-index="2">
+              <span class="track-index">02</span><span class="track-name">Return</span>
+            </div>
+            <div class="flow3-steps">
+              <span class="flow3-arrow fragment" data-fragment-index="2" style="top: 86px; left: 126px;">↘</span>
+              <span class="flow3-arrow fragment" data-fragment-index="2" style="top: 196px; left: 156px;">↘</span>
+              <div class="tstep actor-customer fragment" data-fragment-index="2" style="top: 0; left: 0;"><span class="tstep-actor">Customer</span><span class="tstep-name">Request return</span><span class="tstep-outcome">Pending</span></div>
+              <div class="tstep actor-fm fragment" data-fragment-index="2" style="top: 110px; left: 30px;"><span class="tstep-actor">FM</span><span class="tstep-name">Assign Facility Staff</span><span class="tstep-outcome">Assigned · notify</span></div>
+              <div class="tstep tstep-out fragment" data-fragment-index="2" style="top: 220px; left: 60px;"><span class="tstep-actor">Facility Staff</span><span class="tstep-name">On-site return</span></div>
+            </div>
+          </div>
+          <div class="flow3-col">
+            <div class="track-head fragment fade-up" data-fragment-index="3">
+              <span class="track-index">03</span><span class="track-name">Incident</span>
+            </div>
+            <div class="flow3-steps">
+              <span class="flow3-arrow fragment" data-fragment-index="3" style="top: 86px; left: 126px;">↘</span>
+              <span class="flow3-arrow fragment" data-fragment-index="3" style="top: 196px; left: 156px;">↘</span>
+              <div class="tstep actor-customer fragment" data-fragment-index="3" style="top: 0; left: 0;"><span class="tstep-actor">Customer / FS</span><span class="tstep-name">Report incident</span><span class="tstep-outcome">Service invoice</span></div>
+              <div class="tstep actor-fm fragment" data-fragment-index="3" style="top: 110px; left: 30px;"><span class="tstep-actor">FM</span><span class="tstep-name">Assign Facility Staff</span><span class="tstep-outcome">Assigned · notify</span></div>
+              <div class="tstep tstep-out fragment" data-fragment-index="3" style="top: 220px; left: 60px;"><span class="tstep-actor">Facility Staff</span><span class="tstep-name">Handle on site</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="flow4-slide">
+        <div class="slide-header">
+          <div class="section-label">Core flow 4</div>
+          <div class="slide-index">07 / 09</div>
+        </div>
+        <h2>Configure once. Snapshot at signing. Report actual payments.</h2>
+        <div class="pipeline">
+          <div class="pipe-col">
+            <div class="pipe-head">BOM configures</div>
+            <div class="pipe-block"><strong>Unit type &amp; price</strong></div>
+            <div class="pipe-block"><strong>Policy key</strong></div>
+            <div class="pipe-block"><strong>Fee catalogue</strong></div>
+          </div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-col">
+            <div class="pipe-head">System applies</div>
+            <div class="pipe-block"><strong>Price snapshot</strong></div>
+            <div class="pipe-block"><strong>Policy value</strong></div>
+            <div class="pipe-block"><strong>Incident fee</strong></div>
+          </div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-col">
+            <div class="pipe-head">BOM reports</div>
+            <div class="pipe-block"><strong>Revenue</strong></div>
+            <div class="pipe-block"><strong>Receivables</strong></div>
+            <div class="pipe-block"><strong>Breakdown</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide-header">
+          <div class="section-label">Core flow 5</div>
+          <div class="slide-index">08 / 09</div>
+        </div>
+        <h2>Admin is the center of access control.</h2>
+        <div class="diagram">{{FLOW5}}</div>
+      </section>
+
+      
+
+      
+
+      
+
+      <section class="thanks-slide">
+        <div class="thanks-inner">
+          <h2 class="thanks-title">Thanks for watching.</h2>
+          <p class="thanks-authors">Phạm Quốc Hưng · SE194646<br>Lê Văn Minh · SE190763</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="vendor/reveal.js"></script>
+  <script>
+    function initLifecycle() {
+      const slide = document.querySelector('.goal-slide');
+      if (!slide) return () => {};
+      const dot = slide.querySelector('#lc-dot');
+      const stateEl = slide.querySelector('#lc-state');
+      const descEl = slide.querySelector('#lc-desc');
+      const nodes = [...slide.querySelectorAll('.lc-node')];
+      const progress = slide.querySelector('#lc-progress');
+      const states = [
+        { name: 'Available', desc: 'A unit is free to rent.' },
+        { name: 'Reserved', desc: 'Deposit paid; the unit is held.' },
+        { name: 'Rented', desc: 'Contract active; access handed over.' },
+        { name: 'Maintenance', desc: 'Returned or under repair.' },
+        { name: 'Available', desc: 'Reopened after maintenance.' }
+      ];
+
+      const setStage = (stage) => {
+        const s = Math.max(0, Math.min(4, stage));
+        dot.style.transform = `rotate(${s * 90}deg)`;
+        progress.style.strokeDashoffset = `${2 * Math.PI * 180 * (1 - s / 4)}`;
+        stateEl.textContent = states[s].name;
+        descEl.textContent = states[s].desc;
+        nodes.forEach((node, i) => {
+          node.classList.toggle('is-active', i === s % 4);
+        });
+      };
+
+      Reveal.on('fragmentshown', (event) => {
+        if (event.fragment.classList.contains('lc-step')) {
+          setStage(Number(event.fragment.dataset.stage));
+        }
+      });
+      Reveal.on('fragmenthidden', (event) => {
+        if (event.fragment.classList.contains('lc-step')) {
+          setStage(Number(event.fragment.dataset.stage) - 1);
+        }
+      });
+      Reveal.on('slidechanged', (event) => {
+        if (event.currentSlide === slide) {
+          setStage(slide.querySelectorAll('.lc-step.visible').length);
+        }
+      });
+
+      setStage(0);
+      return setStage;
+    }
+
+    Reveal.initialize({
+      width: 1280,
+      height: 720,
+      margin: 0,
+      hash: true,
+      history: true,
+      controls: false,
+      progress: false,
+      slideNumber: false,
+      transition: 'fade',
+      transitionSpeed: 'fast',
+      backgroundTransition: 'fade',
+      center: false,
+      fragmentInURL: true
+    }).then(() => {
+      const all = location.search.includes('all');
+      if (all) {
+        document.querySelectorAll('.fragment').forEach((el) => el.classList.add('visible'));
+      }
+      const setStage = initLifecycle();
+      if (all) setStage(4);
+    });
+  </script>
+</body>
+</html>

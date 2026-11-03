@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Self-Storage — SWR302</title>
+  <link rel="stylesheet" href="vendor/reveal.css">
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <section class="title-slide">
+        <div class="hazard" aria-hidden="true"></div>
+        <div class="title-inner">
+          <div class="title-copy">
+            <div class="title-top">SWR302 · Software Requirement Specification</div>
+            <h1>Self-Storage<br>Facility Rental<br>&amp; Management</h1>
+          </div>
+        </div>
+        <aside class="member-block">
+          <div class="member-label">Members</div>
+          <div class="member">
+            <div class="member-name">Phạm Quốc Hưng</div>
+            <div class="member-id">SE194646</div>
+          </div>
+          <div class="member">
+            <div class="member-name">Lê Văn Minh</div>
+            <div class="member-id">SE190763</div>
+          </div>
+          <div class="member-meta">SWR302 · 2026</div>
+        </aside>
+      </section>
+
+      <section class="goal-slide">
+        <div class="goal-inner">
+          <div class="slide-header">
+            <div class="section-label">Product goal</div>
+            <div class="slide-index">02 / 09</div>
+          </div>
+          <div class="goal-layout">
+            <div class="goal-copy">
+              <h2>One system for the whole rental lifecycle</h2>
+              <p class="goal-note">Every state change is traceable, from the first request to an active contract.</p>
+            </div>
+            <div class="lifecycle">
+              <svg class="lc-svg" viewBox="0 0 600 600" role="img" aria-label="Unit lifecycle">
+                <circle cx="300" cy="300" r="232" fill="#141A18" stroke="#2B3330" stroke-width="1"/>
+                <circle cx="300" cy="300" r="180" fill="none" stroke="#2B3330" stroke-width="1.5"/>
+                <circle id="lc-progress" class="lc-progress" cx="300" cy="300" r="180" fill="none" stroke="#8FC4CC" stroke-width="2" stroke-dasharray="1131" stroke-dashoffset="1131" transform="rotate(-90 300 300)"/>
+
+                <g class="lc-node is-active" data-node="0">
+                  <rect x="230" y="26" width="140" height="54" fill="#1A201E" stroke="rgba(238,240,236,0.26)" stroke-width="1"/>
+                  <text x="300" y="48" text-anchor="middle" font-family="Saira Semi Condensed" font-size="16" font-weight="600" fill="#EEF0EC">Available</text>
+                  <text x="300" y="66" text-anchor="middle" font-family="Source Sans 3" font-size="12" fill="#9AA19C">free to rent</text>
+                </g>
+
+                <g class="lc-node" data-node="1">
+                  <rect x="500" y="273" width="90" height="54" fill="#1A201E" stroke="rgba(238,240,236,0.26)" stroke-width="1"/>
+                  <text x="545" y="295" text-anchor="middle" font-family="Saira Semi Condensed" font-size="14" font-weight="600" fill="#EEF0EC">Reserved</text>
+                  <text x="545" y="313" text-anchor="middle" font-family="Source Sans 3" font-size="12" fill="#9AA19C">held</text>
+                </g>
+
+                <g class="lc-node" data-node="2">
+                  <rect x="230" y="520" width="140" height="54" fill="#1A201E" stroke="rgba(238,240,236,0.26)" stroke-width="1"/>
+                  <text x="300" y="542" text-anchor="middle" font-family="Saira Semi Condensed" font-size="16" font-weight="600" fill="#EEF0EC">Rented</text>
+                  <text x="300" y="560" text-anchor="middle" font-family="Source Sans 3" font-size="12" fill="#9AA19C">contract active</text>
+                </g>
+
+                <g class="lc-node" data-node="3">
+                  <rect x="10" y="273" width="90" height="54" fill="#1A201E" stroke="rgba(238,240,236,0.26)" stroke-width="1"/>
+                  <text x="55" y="295" text-anchor="middle" font-family="Saira Semi Condensed" font-size="13" font-weight="600" fill="#EEF0EC">Maintenance</text>
+                  <text x="55" y="313" text-anchor="middle" font-family="Source Sans 3" font-size="12" fill="#9AA19C">repair</text>
+                </g>
+
+                <g class="fragment lc-step" data-fragment-index="1" data-stage="1">
+                  <text x="430" y="148" text-anchor="start" font-family="Saira Semi Condensed" font-size="17" font-weight="600" fill="#EEF0EC">Reserve</text>
+                  <text x="430" y="168" text-anchor="start" font-family="Source Sans 3" font-size="13" fill="#9AA19C">request · approve · deposit</text>
+                </g>
+
+                <g class="fragment lc-step" data-fragment-index="2" data-stage="2">
+                  <text x="430" y="442" text-anchor="start" font-family="Saira Semi Condensed" font-size="17" font-weight="600" fill="#EEF0EC">Hand over</text>
+                  <text x="430" y="462" text-anchor="start" font-family="Source Sans 3" font-size="13" fill="#9AA19C">check-in · contract · key</text>
+                </g>
+
+                <g class="fragment lc-step" data-fragment-index="3" data-stage="3">
+                  <text x="170" y="442" text-anchor="end" font-family="Saira Semi Condensed" font-size="17" font-weight="600" fill="#EEF0EC">Operate</text>
+                  <text x="170" y="462" text-anchor="end" font-family="Source Sans 3" font-size="13" fill="#9AA19C">extend · return · incident</text>
+                </g>
+
+                <g class="fragment lc-step" data-fragment-index="4" data-stage="4">
+                  <text x="170" y="148" text-anchor="end" font-family="Saira Semi Condensed" font-size="17" font-weight="600" fill="#EEF0EC">Turnaround</text>
+                  <text x="170" y="168" text-anchor="end" font-family="Source Sans 3" font-size="13" fill="#9AA19C">maintenance days</text>
+                </g>
+
+                <g class="lc-dot" id="lc-dot">
+                  <circle cx="300" cy="120" r="7" fill="#FFD400"/>
+                </g>
+              </svg>
+
+              <div class="lc-center">
+                <div class="lc-kicker">Unit lifecycle</div>
+                <div class="lc-state" id="lc-state">Available</div>
+                <div class="lc-desc" id="lc-desc">A unit is free to rent.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide-header">
+          <div class="section-label">System context</div>
+          <div class="slide-index">03 / 09</div>
+        </div>
+        <h2>Who talks to the system?</h2>
+        <div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760">
+<defs><marker id="arrow-end" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9AA19C"/></marker><marker id="arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 10 0 L 0 5 L 10 10 z" fill="#9AA19C"/></marker></defs>
+<rect width="1600" height="760" fill="#0E1211"/>
+<rect x="560" y="305" width="480" height="150" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.4" stroke-width="2"/>
+<rect x="560" y="305" width="4" height="150" fill="#FFD400"/>
+<text x="800" y="380.0" font-size="30" font-weight="700" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="800" dy="0">Self-Storage Platform</tspan></text>
+<g class="fragment" data-fragment-index="1"><path d="M 290 342 H 560" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><path d="M 290 552 H 400 V 420 H 560" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><text x="320" y="326.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="320" dy="0">rental &amp; payment requests</tspan></text><text x="320" y="360.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="320" dy="0">proposal, invoice, contract</tspan></text><text x="410" y="535.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="410" dy="0">check-in &amp; handover</tspan></text><rect x="50" y="300" width="240" height="84" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="50" y="300" width="3" height="84" fill="#8FC4CC"/><text x="68" y="330.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="68" dy="0">Customer</tspan></text><text x="68" y="360.0" font-size="13" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="68" dy="0">rents · pays · manages</tspan></text><rect x="50" y="510" width="240" height="84" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="50" y="510" width="3" height="84" fill="#8CC6A2"/><text x="68" y="540.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="68" dy="0">Facility Staff</tspan></text><text x="68" y="570.0" font-size="13" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="68" dy="0">on-site operations</tspan></text></g>
+<g class="fragment" data-fragment-index="2"><path d="M 800 640 V 455" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><text x="814" y="552.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="814" dy="0">approvals &amp; assignments</tspan></text><text x="786" y="592.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="end" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="786" dy="0">requests &amp; reports</tspan></text><rect x="670" y="640" width="260" height="84" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="670" y="640" width="3" height="84" fill="#E3C05C"/><text x="688" y="670.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="688" dy="0">Facility Manager</tspan></text><text x="688" y="700.0" font-size="13" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="688" dy="0">one facility</tspan></text></g>
+<g class="fragment" data-fragment-index="3"><path d="M 390 134 V 200 H 640 V 305" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><path d="M 1210 134 V 200 H 960 V 305" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><text x="500" y="186.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="500" dy="0">policies, pricing, facilities</tspan></text><text x="1100" y="186.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="1100" dy="0">accounts, RBAC, audit</tspan></text><rect x="260" y="50" width="260" height="84" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="260" y="50" width="3" height="84" fill="#9AA19C"/><text x="278" y="70.5" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="278" dy="0">Business Operation</tspan><tspan x="278" dy="19">Manager</tspan></text><text x="278" y="110.0" font-size="13" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="278" dy="0">chain-wide</tspan></text><rect x="1080" y="50" width="260" height="84" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="1080" y="50" width="3" height="84" fill="#9AA19C"/><text x="1098" y="80.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1098" dy="0">System Administrator</tspan></text><text x="1098" y="110.0" font-size="13" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1098" dy="0">accounts · RBAC</tspan></text></g>
+<g class="fragment" data-fragment-index="4"><path d="M 1040 360 H 1290" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><path d="M 1040 420 H 1150 V 542 H 1290" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><text x="1165" y="344.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="1165" dy="0">payments</tspan></text><text x="1090" y="404.0" font-size="14" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif" stroke="#0E1211" stroke-width="4" paint-order="stroke"><tspan x="1090" dy="0">notifications</tspan></text><rect x="1290" y="280" width="250" height="84" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1" stroke-dasharray="6 4"/><rect x="1290" y="280" width="3" height="84" fill="#8FC4CC"/><text x="1308" y="310.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1308" dy="0">VNPay</tspan></text><text x="1308" y="340.0" font-size="13" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1308" dy="0">payment gateway</tspan></text><rect x="1290" y="500" width="250" height="84" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1" stroke-dasharray="6 4"/><rect x="1290" y="500" width="3" height="84" fill="#9AA19C"/><text x="1308" y="530.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1308" dy="0">Email / SMTP</tspan></text><text x="1308" y="560.0" font-size="13" font-weight="400" fill="#9AA19C" text-anchor="start" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1308" dy="0">notifications</tspan></text></g>
+</svg></div>
+      </section>
+
+      <section>
+        <div class="slide-header">
+          <div class="section-label">Core flow 1</div>
+          <div class="slide-index">04 / 09</div>
+        </div>
+        <h2>Reservation: request → check-in slot</h2>
+        <div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760">
+<defs><marker id="arrow-end" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9AA19C"/></marker><marker id="arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 10 0 L 0 5 L 10 10 z" fill="#9AA19C"/></marker></defs>
+<rect width="1600" height="760" fill="#0E1211"/>
+<rect x="0" y="10" width="1600" height="230" fill="#0E1211"/><line x1="0" y1="10" x2="1600" y2="10" stroke="#2B3330" stroke-width="1"/><line x1="190" y1="10" x2="190" y2="240" stroke="#2B3330" stroke-width="1"/><rect x="28" y="120.0" width="10" height="10" fill="#8FC4CC"/><text x="48" y="125.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="48" dy="0">Customer</tspan></text>
+<rect x="0" y="240" width="1600" height="230" fill="#121715"/><line x1="0" y1="240" x2="1600" y2="240" stroke="#2B3330" stroke-width="1"/><line x1="190" y1="240" x2="190" y2="470" stroke="#2B3330" stroke-width="1"/><rect x="28" y="350.0" width="10" height="10" fill="#E3C05C"/><text x="48" y="355.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="48" dy="0">Facility Manager</tspan></text>
+<rect x="0" y="470" width="1600" height="130" fill="#0E1211"/><line x1="0" y1="470" x2="1600" y2="470" stroke="#2B3330" stroke-width="1"/><line x1="190" y1="470" x2="190" y2="600" stroke="#2B3330" stroke-width="1"/><rect x="28" y="530.0" width="10" height="10" fill="#8FC4CC"/><text x="48" y="535.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="48" dy="0">VNPay</tspan></text>
+<g class="fragment" data-fragment-index="1"><rect x="225.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="225.0" y="79.0" width="4" height="92" fill="#8FC4CC"/><rect x="239.0" y="112" width="26" height="26" fill="#FFD400"/><text x="252.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="252.0" dy="0">1</tspan></text><text x="350" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="350" dy="0">Submit rental</tspan><tspan x="350" dy="22">request</tspan></text><text x="350" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="350" dy="0">7-day expiry</tspan></text></g>
+<g class="fragment" data-fragment-index="2"><path d="M 435 125 H 445.0 V 355 H 455" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><rect x="455.0" y="309.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="455.0" y="309.0" width="4" height="92" fill="#E3C05C"/><rect x="469.0" y="342" width="26" height="26" fill="#FFD400"/><text x="482.0" y="356.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="482.0" dy="0">2</tspan></text><text x="580" y="336.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="580" dy="0">Approve &amp;</tspan><tspan x="580" dy="22">assign unit</tspan></text><text x="580" y="383.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="580" dy="0">order + proposal</tspan></text></g>
+<g class="fragment" data-fragment-index="3"><path d="M 665 355 H 675.0 V 125 H 685" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><rect x="685.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="685.0" y="79.0" width="4" height="92" fill="#8FC4CC"/><rect x="699.0" y="112" width="26" height="26" fill="#FFD400"/><text x="712.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="712.0" dy="0">3</tspan></text><text x="810" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="810" dy="0">Confirm</tspan><tspan x="810" dy="22">proposal</tspan></text><text x="810" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="810" dy="0">deposit invoice</tspan></text></g>
+<g class="fragment" data-fragment-index="4"><path d="M 895 125 H 915" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><path d="M 1020 509 V 171" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 5" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><rect x="915" y="509" width="210" height="52" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.4" stroke-width="1" stroke-dasharray="6 4"/><text x="1020" y="535.0" font-size="16" font-weight="600" fill="#9AA19C" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1020" dy="0">payment · IPN</tspan></text><rect x="915.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="915.0" y="79.0" width="4" height="92" fill="#8FC4CC"/><rect x="929.0" y="112" width="26" height="26" fill="#FFD400"/><text x="942.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="942.0" dy="0">4</tspan></text><text x="1040" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1040" dy="0">Pay deposit</tspan><tspan x="1040" dy="22">(VNPay)</tspan></text><text x="1040" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1040" dy="0">unit Reserved</tspan></text></g>
+<g class="fragment" data-fragment-index="5"><path d="M 1125 125 H 1145" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><rect x="1145.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="1145.0" y="79.0" width="4" height="92" fill="#8FC4CC"/><rect x="1159.0" y="112" width="26" height="26" fill="#FFD400"/><text x="1172.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1172.0" dy="0">5</tspan></text><text x="1270" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1270" dy="0">Choose</tspan><tspan x="1270" dy="22">check-in slot</tspan></text><text x="1270" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1270" dy="0">CHECKIN appointment</tspan></text></g>
+<g class="fragment" data-fragment-index="6"><path d="M 1355 125 H 1365.0 V 355 H 1375" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><rect x="1375.0" y="309.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="1375.0" y="309.0" width="4" height="92" fill="#E3C05C"/><rect x="1389.0" y="342" width="26" height="26" fill="#FFD400"/><text x="1402.0" y="356.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1402.0" dy="0">6</tspan></text><text x="1500" y="336.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1500" dy="0">Assign</tspan><tspan x="1500" dy="22">Facility Staff</tspan></text><text x="1500" y="383.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1500" dy="0">order InProgress</tspan></text></g>
+</svg></div>
+      </section>
+
+      <section>
+        <div class="slide-header">
+          <div class="section-label">Core flow 2</div>
+          <div class="slide-index">05 / 09</div>
+        </div>
+        <h2>Check-in &amp; handover: arrival → active contract</h2>
+        <div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760">
+<defs><marker id="arrow-end" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9AA19C"/></marker><marker id="arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 10 0 L 0 5 L 10 10 z" fill="#9AA19C"/></marker></defs>
+<rect width="1600" height="760" fill="#0E1211"/>
+<rect x="0" y="10" width="1600" height="230" fill="#0E1211"/><line x1="0" y1="10" x2="1600" y2="10" stroke="#2B3330" stroke-width="1"/><line x1="190" y1="10" x2="190" y2="240" stroke="#2B3330" stroke-width="1"/><rect x="28" y="120.0" width="10" height="10" fill="#8CC6A2"/><text x="48" y="125.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="48" dy="0">Facility Staff</tspan></text>
+<rect x="0" y="240" width="1600" height="230" fill="#121715"/><line x1="0" y1="240" x2="1600" y2="240" stroke="#2B3330" stroke-width="1"/><line x1="190" y1="240" x2="190" y2="470" stroke="#2B3330" stroke-width="1"/><rect x="28" y="350.0" width="10" height="10" fill="#8FC4CC"/><text x="48" y="355.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="48" dy="0">Customer</tspan></text>
+<rect x="0" y="470" width="1600" height="130" fill="#0E1211"/><line x1="0" y1="470" x2="1600" y2="470" stroke="#2B3330" stroke-width="1"/><line x1="190" y1="470" x2="190" y2="600" stroke="#2B3330" stroke-width="1"/><rect x="28" y="530.0" width="10" height="10" fill="#8FC4CC"/><text x="48" y="535.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="start" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="48" dy="0">VNPay</tspan></text>
+<g class="fragment" data-fragment-index="1"><rect x="225.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="225.0" y="79.0" width="4" height="92" fill="#8CC6A2"/><rect x="239.0" y="112" width="26" height="26" fill="#FFD400"/><text x="252.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="252.0" dy="0">1</tspan></text><text x="350" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="350" dy="0">Confirm</tspan><tspan x="350" dy="22">arrival</tspan></text><text x="350" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="350" dy="0">appointment Done</tspan></text></g>
+<g class="fragment" data-fragment-index="2"><path d="M 435 125 H 455" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><rect x="455.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="455.0" y="79.0" width="4" height="92" fill="#8CC6A2"/><rect x="469.0" y="112" width="26" height="26" fill="#FFD400"/><text x="482.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="482.0" dy="0">2</tspan></text><text x="580" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="580" dy="0">Verify</tspan><tspan x="580" dy="22">identity</tspan></text><text x="580" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="580" dy="0">identity Verified</tspan></text></g>
+<g class="fragment" data-fragment-index="3"><path d="M 665 125 H 685" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><rect x="685.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="685.0" y="79.0" width="4" height="92" fill="#8CC6A2"/><rect x="699.0" y="112" width="26" height="26" fill="#FFD400"/><text x="712.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="712.0" dy="0">3</tspan></text><text x="810" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="810" dy="0">Inspect unit</tspan><tspan x="810" dy="22">+ confirm</tspan></text><text x="810" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="810" dy="0">condition Agreed</tspan></text></g>
+<g class="fragment" data-fragment-index="4"><path d="M 895 125 H 915" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><rect x="915.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="915.0" y="79.0" width="4" height="92" fill="#8CC6A2"/><rect x="929.0" y="112" width="26" height="26" fill="#FFD400"/><text x="942.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="942.0" dy="0">4</tspan></text><text x="1040" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1040" dy="0">Sign</tspan><tspan x="1040" dy="22">contract</tspan></text><text x="1040" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1040" dy="0">contract Signed</tspan></text></g>
+<g class="fragment" data-fragment-index="5"><path d="M 1125 125 H 1135.0 V 355 H 1145" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><path d="M 1250 509 V 401" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 5" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"/><rect x="1145" y="509" width="210" height="52" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.4" stroke-width="1" stroke-dasharray="6 4"/><text x="1250" y="535.0" font-size="16" font-weight="600" fill="#9AA19C" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1250" dy="0">payment · IPN</tspan></text><rect x="1145.0" y="309.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="1145.0" y="309.0" width="4" height="92" fill="#8FC4CC"/><rect x="1159.0" y="342" width="26" height="26" fill="#FFD400"/><text x="1172.0" y="356.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1172.0" dy="0">5</tspan></text><text x="1270" y="336.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1270" dy="0">Pay first</tspan><tspan x="1270" dy="22">month</tspan></text><text x="1270" y="383.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1270" dy="0">invoice Paid</tspan></text></g>
+<g class="fragment" data-fragment-index="6"><path d="M 1355 355 H 1365.0 V 125 H 1375" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/><rect x="1375.0" y="79.0" width="210" height="92" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/><rect x="1375.0" y="79.0" width="4" height="92" fill="#8CC6A2"/><rect x="1389.0" y="112" width="26" height="26" fill="#FFD400"/><text x="1402.0" y="126.0" font-size="16" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1402.0" dy="0">6</tspan></text><text x="1500" y="106.0" font-size="20" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1500" dy="0">Hand over</tspan><tspan x="1500" dy="22">key / code</tspan></text><text x="1500" y="153.0" font-size="13" font-weight="500" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Source Sans 3, sans-serif"><tspan x="1500" dy="0">unit Rented</tspan></text></g>
+</svg></div>
+      </section>
+
+      <section class="flow-3-slide">
+        <div class="slide-header">
+          <div class="section-label">Core flow 3</div>
+          <div class="slide-index">06 / 09</div>
+        </div>
+        <h2>Post-rental: extend, return, incident</h2>
+                        <div class="flow3-grid">
+          <div class="flow3-col">
+            <div class="track-head fragment fade-up" data-fragment-index="1">
+              <span class="track-index">01</span><span class="track-name">Extension</span>
+            </div>
+            <div class="flow3-steps">
+              <span class="flow3-arrow fragment" data-fragment-index="1" style="top: 86px; left: 126px;">↘</span>
+              <span class="flow3-arrow fragment" data-fragment-index="1" style="top: 196px; left: 156px;">↘</span>
+              <div class="tstep actor-customer fragment" data-fragment-index="1" style="top: 0; left: 0;"><span class="tstep-actor">Customer</span><span class="tstep-name">Request extension</span><span class="tstep-outcome">Pending</span></div>
+              <div class="tstep actor-fm fragment" data-fragment-index="1" style="top: 110px; left: 30px;"><span class="tstep-actor">FM</span><span class="tstep-name">Approve &amp; issue invoice</span><span class="tstep-outcome">Invoice issued</span></div>
+              <div class="tstep actor-customer fragment" data-fragment-index="1" style="top: 220px; left: 60px;"><span class="tstep-actor">Customer</span><span class="tstep-name">Pay invoice</span><span class="tstep-outcome">end_date + period</span></div>
+            </div>
+          </div>
+          <div class="flow3-col">
+            <div class="track-head fragment fade-up" data-fragment-index="2">
+              <span class="track-index">02</span><span class="track-name">Return</span>
+            </div>
+            <div class="flow3-steps">
+              <span class="flow3-arrow fragment" data-fragment-index="2" style="top: 86px; left: 126px;">↘</span>
+              <span class="flow3-arrow fragment" data-fragment-index="2" style="top: 196px; left: 156px;">↘</span>
+              <div class="tstep actor-customer fragment" data-fragment-index="2" style="top: 0; left: 0;"><span class="tstep-actor">Customer</span><span class="tstep-name">Request return</span><span class="tstep-outcome">Pending</span></div>
+              <div class="tstep actor-fm fragment" data-fragment-index="2" style="top: 110px; left: 30px;"><span class="tstep-actor">FM</span><span class="tstep-name">Assign Facility Staff</span><span class="tstep-outcome">Assigned · notify</span></div>
+              <div class="tstep tstep-out fragment" data-fragment-index="2" style="top: 220px; left: 60px;"><span class="tstep-actor">Facility Staff</span><span class="tstep-name">On-site return</span></div>
+            </div>
+          </div>
+          <div class="flow3-col">
+            <div class="track-head fragment fade-up" data-fragment-index="3">
+              <span class="track-index">03</span><span class="track-name">Incident</span>
+            </div>
+            <div class="flow3-steps">
+              <span class="flow3-arrow fragment" data-fragment-index="3" style="top: 86px; left: 126px;">↘</span>
+              <span class="flow3-arrow fragment" data-fragment-index="3" style="top: 196px; left: 156px;">↘</span>
+              <div class="tstep actor-customer fragment" data-fragment-index="3" style="top: 0; left: 0;"><span class="tstep-actor">Customer / FS</span><span class="tstep-name">Report incident</span><span class="tstep-outcome">Service invoice</span></div>
+              <div class="tstep actor-fm fragment" data-fragment-index="3" style="top: 110px; left: 30px;"><span class="tstep-actor">FM</span><span class="tstep-name">Assign Facility Staff</span><span class="tstep-outcome">Assigned · notify</span></div>
+              <div class="tstep tstep-out fragment" data-fragment-index="3" style="top: 220px; left: 60px;"><span class="tstep-actor">Facility Staff</span><span class="tstep-name">Handle on site</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="flow4-slide">
+        <div class="slide-header">
+          <div class="section-label">Core flow 4</div>
+          <div class="slide-index">07 / 09</div>
+        </div>
+        <h2>Configure once. Snapshot at signing. Report actual payments.</h2>
+        <div class="pipeline">
+          <div class="pipe-col">
+            <div class="pipe-head">BOM configures</div>
+            <div class="pipe-block"><strong>Unit type &amp; price</strong></div>
+            <div class="pipe-block"><strong>Policy key</strong></div>
+            <div class="pipe-block"><strong>Fee catalogue</strong></div>
+          </div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-col">
+            <div class="pipe-head">System applies</div>
+            <div class="pipe-block"><strong>Price snapshot</strong></div>
+            <div class="pipe-block"><strong>Policy value</strong></div>
+            <div class="pipe-block"><strong>Incident fee</strong></div>
+          </div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-col">
+            <div class="pipe-head">BOM reports</div>
+            <div class="pipe-block"><strong>Revenue</strong></div>
+            <div class="pipe-block"><strong>Receivables</strong></div>
+            <div class="pipe-block"><strong>Breakdown</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide-header">
+          <div class="section-label">Core flow 5</div>
+          <div class="slide-index">08 / 09</div>
+        </div>
+        <h2>Admin is the center of access control.</h2>
+        <div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760">
+<defs><marker id="arrow-end" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9AA19C"/></marker><marker id="arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 10 0 L 0 5 L 10 10 z" fill="#9AA19C"/></marker></defs>
+<rect width="1600" height="760" fill="#0E1211"/>
+<rect x="680" y="330" width="240" height="100" rx="0" fill="#FFD400" stroke="#FFD400" stroke-opacity="1" stroke-width="2"/>
+<text x="800" y="380.0" font-size="36" font-weight="700" fill="#101413" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="800" dy="0">Admin</tspan></text>
+<rect x="1080" y="230" width="200" height="80" rx="0" fill="#1A201E" stroke="#8FC4CC" stroke-opacity="1" stroke-width="2"/>
+<rect x="1080" y="230" width="3" height="80" fill="#8FC4CC"/>
+<text x="1180" y="270.0" font-size="24" font-weight="700" fill="#8FC4CC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1180" dy="0">RBAC</tspan></text>
+<rect x="1360" y="120" width="170" height="52" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/>
+<rect x="1360" y="120" width="3" height="52" fill="#9AA19C"/>
+<text x="1445" y="146.0" font-size="16" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1445" dy="0">Customer</tspan></text>
+<path d="M 1280 270 H 1320 V 146 H 1360" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+<rect x="1360" y="210" width="170" height="52" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/>
+<rect x="1360" y="210" width="3" height="52" fill="#9AA19C"/>
+<text x="1445" y="236.0" font-size="16" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1445" dy="0">Facility Manager</tspan></text>
+<path d="M 1280 270 H 1320 V 236 H 1360" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+<rect x="1360" y="300" width="170" height="52" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/>
+<rect x="1360" y="300" width="3" height="52" fill="#9AA19C"/>
+<text x="1445" y="326.0" font-size="16" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1445" dy="0">Facility Staff</tspan></text>
+<path d="M 1280 270 H 1320 V 326 H 1360" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+<rect x="1360" y="390" width="170" height="52" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/>
+<rect x="1360" y="390" width="3" height="52" fill="#9AA19C"/>
+<text x="1445" y="416.0" font-size="16" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="1445" dy="0">BOM</tspan></text>
+<path d="M 1280 270 H 1320 V 416 H 1360" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+<rect x="300" y="160" width="220" height="70" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/>
+<rect x="300" y="160" width="3" height="70" fill="#9AA19C"/>
+<text x="410" y="195.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="410" dy="0">Accounts</tspan></text>
+<path d="M 680 380 H 640 V 195 H 520" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+<rect x="300" y="280" width="220" height="70" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/>
+<rect x="300" y="280" width="3" height="70" fill="#9AA19C"/>
+<text x="410" y="315.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="410" dy="0">Role requests</tspan></text>
+<path d="M 680 380 H 640 V 315 H 520" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+<rect x="300" y="400" width="220" height="70" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/>
+<rect x="300" y="400" width="3" height="70" fill="#9AA19C"/>
+<text x="410" y="435.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="410" dy="0">Login history</tspan></text>
+<path d="M 680 380 H 640 V 435 H 520" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+<rect x="300" y="520" width="220" height="70" rx="0" fill="#1A201E" stroke="#EEF0EC" stroke-opacity="0.26" stroke-width="1"/>
+<rect x="300" y="520" width="3" height="70" fill="#9AA19C"/>
+<text x="410" y="555.0" font-size="18" font-weight="600" fill="#EEF0EC" text-anchor="middle" dominant-baseline="middle" font-family="Saira Semi Condensed, sans-serif"><tspan x="410" dy="0">Audit log</tspan></text>
+<path d="M 680 380 H 640 V 555 H 520" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+<path d="M 920 380 H 1000 V 270 H 1080" fill="none" stroke="#9AA19C" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-end)"/>
+</svg></div>
+      </section>
+
+      
+
+      
+
+      
+
+      <section class="thanks-slide">
+        <div class="thanks-inner">
+          <h2 class="thanks-title">Thanks for watching.</h2>
+          <p class="thanks-authors">Phạm Quốc Hưng · SE194646<br>Lê Văn Minh · SE190763</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="vendor/reveal.js"></script>
+  <script>
+    function initLifecycle() {
+      const slide = document.querySelector('.goal-slide');
+      if (!slide) return () => {};
+      const dot = slide.querySelector('#lc-dot');
+      const stateEl = slide.querySelector('#lc-state');
+      const descEl = slide.querySelector('#lc-desc');
+      const nodes = [...slide.querySelectorAll('.lc-node')];
+      const progress = slide.querySelector('#lc-progress');
+      const states = [
+        { name: 'Available', desc: 'A unit is free to rent.' },
+        { name: 'Reserved', desc: 'Deposit paid; the unit is held.' },
+        { name: 'Rented', desc: 'Contract active; access handed over.' },
+        { name: 'Maintenance', desc: 'Returned or under repair.' },
+        { name: 'Available', desc: 'Reopened after maintenance.' }
+      ];
+
+      const setStage = (stage) => {
+        const s = Math.max(0, Math.min(4, stage));
+        dot.style.transform = `rotate(${s * 90}deg)`;
+        progress.style.strokeDashoffset = `${2 * Math.PI * 180 * (1 - s / 4)}`;
+        stateEl.textContent = states[s].name;
+        descEl.textContent = states[s].desc;
+        nodes.forEach((node, i) => {
+          node.classList.toggle('is-active', i === s % 4);
+        });
+      };
+
+      Reveal.on('fragmentshown', (event) => {
+        if (event.fragment.classList.contains('lc-step')) {
+          setStage(Number(event.fragment.dataset.stage));
+        }
+      });
+      Reveal.on('fragmenthidden', (event) => {
+        if (event.fragment.classList.contains('lc-step')) {
+          setStage(Number(event.fragment.dataset.stage) - 1);
+        }
+      });
+      Reveal.on('slidechanged', (event) => {
+        if (event.currentSlide === slide) {
+          setStage(slide.querySelectorAll('.lc-step.visible').length);
+        }
+      });
+
+      setStage(0);
+      return setStage;
+    }
+
+    Reveal.initialize({
+      width: 1280,
+      height: 720,
+      margin: 0,
+      hash: true,
+      history: true,
+      controls: false,
+      progress: false,
+      slideNumber: false,
+      transition: 'fade',
+      transitionSpeed: 'fast',
+      backgroundTransition: 'fade',
+      center: false,
+      fragmentInURL: true
+    }).then(() => {
+      const all = location.search.includes('all');
+      if (all) {
+        document.querySelectorAll('.fragment').forEach((el) => el.classList.add('visible'));
+      }
+      const setStage = initLifecycle();
+      if (all) setStage(4);
+    });
+  </script>
+</body>
+</html>
