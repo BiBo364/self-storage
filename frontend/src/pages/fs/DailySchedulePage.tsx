@@ -2,6 +2,7 @@ import { Clock3, MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../app/api";
 import { fetchStaffAppointments, type StaffAppointment } from "../../app/staffSchedule";
+import { FilterSelect } from "../../components/ui/FilterSelect";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
@@ -54,6 +55,7 @@ function statusOf(status: string) {
 
 export function DailySchedulePage() {
   const [date, setDate] = useState(todayIso);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
@@ -86,6 +88,10 @@ export function DailySchedulePage() {
 
   const pending = appointments.filter((appointment) => appointment.status === "Pending").length;
   const done = appointments.filter((appointment) => appointment.status === "Done").length;
+  const filtered =
+    statusFilter === "all"
+      ? appointments
+      : appointments.filter((appointment) => appointment.status === statusFilter);
 
   function changeDate(next: string) {
     if (!next) return;
@@ -109,15 +115,25 @@ export function DailySchedulePage() {
             Các lịch hẹn được FM phân công cho bạn tại cơ sở.
           </p>
         </div>
-        <label className="grid gap-1 text-label text-muted">
-          Ngày
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => changeDate(event.target.value)}
-            className="min-h-[42px] border border-border bg-surface px-3 text-small text-ink"
-          />
-        </label>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="grid gap-1 text-label text-muted">
+            Ngày
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => changeDate(event.target.value)}
+              className="min-h-[42px] border border-border bg-surface px-3 text-small text-ink"
+            />
+          </label>
+          <div className="min-w-[170px]">
+            <FilterSelect label="Lọc trạng thái" value={statusFilter} onChange={setStatusFilter}>
+              <option value="all">Tất cả</option>
+              <option value="Pending">Đang chờ</option>
+              <option value="Done">Đã đến</option>
+              <option value="Canceled">Đã huỷ</option>
+            </FilterSelect>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
@@ -154,15 +170,19 @@ export function DailySchedulePage() {
             action={{ label: "Thử lại", onClick: retry }}
           />
         )
-      ) : appointments.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <SurfaceState
           variant="empty"
-          title={`Không có lịch hẹn ngày ${formatDateVN(date)}`}
+          title={
+            appointments.length === 0
+              ? `Không có lịch hẹn ngày ${formatDateVN(date)}`
+              : "Không có lịch ở trạng thái này"
+          }
           description="Chọn ngày khác hoặc liên hệ FM nếu bạn cần được phân công thêm."
         />
       ) : (
         <div className="grid gap-3">
-          {appointments.map((appointment) => {
+          {filtered.map((appointment) => {
             const status = statusOf(appointment.status);
             return (
               <article key={appointment.id} className="border border-border bg-surface p-5">
