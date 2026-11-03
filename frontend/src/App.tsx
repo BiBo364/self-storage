@@ -9,6 +9,7 @@ import { PublicFooter } from "./components/layout/PublicFooter";
 import { PublicHeader } from "./components/layout/PublicHeader";
 import { CustomerShell } from "./components/layout/CustomerShell";
 import { FmShell } from "./components/layout/FmShell";
+import { FsShell } from "./components/layout/FsShell";
 import { MyStoragePage } from "./pages/MyStoragePage";
 import { ContractDetailPage } from "./pages/ContractDetailPage";
 import { ProposalsPage } from "./pages/ProposalsPage";
@@ -16,6 +17,7 @@ import { InvoicesPage } from "./pages/InvoicesPage";
 import { AppointmentBookingPage } from "./pages/AppointmentBookingPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { RentalRequestQueuePage } from "./pages/fm/RentalRequestQueuePage";
+import { RentalOrderListPage } from "./pages/fm/RentalOrderListPage";
 import { ProposalRedoPage } from "./pages/fm/ProposalRedoPage";
 import { AppointmentSchedulePage } from "./pages/fm/AppointmentSchedulePage";
 import { ReturnRequestQueuePage } from "./pages/fm/ReturnRequestQueuePage";
@@ -26,17 +28,20 @@ import { StaffListPage } from "./pages/fm/StaffListPage";
 import { FacilityReportPage } from "./pages/fm/FacilityReportPage";
 import { FacilityInvoicesPage } from "./pages/fm/FacilityInvoicesPage";
 import { CustomerContractOverviewPage } from "./pages/fm/CustomerContractOverviewPage";
+import { DailySchedulePage } from "./pages/fs/DailySchedulePage";
+import { HandoverChecklistPage } from "./pages/fs/HandoverChecklistPage";
 import type { Theme } from "./components/ui/ThemeToggle";
 import { ROLE_HOME, viewFromLocation } from "./app/routes";
 import { View } from "./app/types";
 
 const THEME_STORAGE_KEY = "kho-moc-theme";
+const THEME_COLOR: Record<Theme, string> = { light: "#e9eae6", dark: "#0e1211" };
 
 function getInitialTheme(): Theme {
   try {
-    return window.localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
+    return window.localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
   } catch {
-    return "dark";
+    return "light";
   }
 }
 
@@ -49,6 +54,7 @@ function App() {
   useEffect(() => {
     document.documentElement.style.colorScheme = theme;
     document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[theme]);
 
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -119,6 +125,7 @@ function App() {
     (view === "request" && !!session);
   const isFmView =
     view === "fm-rental-requests" ||
+    view === "fm-orders" ||
     view === "fm-proposal-redo" ||
     view === "fm-appointments" ||
     view === "fm-return-requests" ||
@@ -129,17 +136,20 @@ function App() {
     view === "fm-reports" ||
     view === "fm-invoices" ||
     view === "fm-contracts";
+  const isFsView = view === "fs-schedule" || view === "fs-handover";
   const isNotificationView = view === "notifications";
   // The route guard only picks the screen to render; the real gate is the API
   // (403 on /api/** for the wrong role). /notifications is shared by every
-  // role per fe-pages/shared/03; today only CUSTOMER and FM have a shell.
-  const allowedRoles: UserRole[] | null = isFmView
-    ? ["FM"]
-    : isCustomerView
-      ? ["CUSTOMER"]
-      : isNotificationView
-        ? ["CUSTOMER", "FM"]
-        : null;
+  // role per fe-pages/shared/03; today CUSTOMER, FM and FS have a shell.
+  const allowedRoles: UserRole[] | null = isFsView
+    ? ["FS"]
+    : isFmView
+      ? ["FM"]
+      : isCustomerView
+        ? ["CUSTOMER"]
+        : isNotificationView
+          ? ["CUSTOMER", "FM", "FS"]
+          : null;
   const needsLoginRedirect = !isAuthLoading && allowedRoles !== null && !session;
   const isWrongRole =
     !isAuthLoading &&
@@ -150,6 +160,7 @@ function App() {
   const isCustomerShellView =
     isCustomerView || (isNotificationView && session?.user.role === "CUSTOMER");
   const isFmShellView = isFmView || (isNotificationView && session?.user.role === "FM");
+  const isFsShellView = isFsView || (isNotificationView && session?.user.role === "FS");
 
   useEffect(() => {
     if (needsLoginRedirect) {
@@ -158,7 +169,7 @@ function App() {
     }
     if (isWrongRole && session) {
       // A role with its own home keeps the session and moves there; roles
-      // without a screen yet (ADMIN/BOM/FS) go back to the login page.
+      // without a screen yet (ADMIN/BOM) go back to the login page.
       if (roleHome) {
         navigate(roleHome);
       } else {
@@ -198,6 +209,7 @@ function App() {
       ) : isFmShellView ? (
         <FmShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
           {view === "fm-rental-requests" && <RentalRequestQueuePage navigate={navigate} />}
+          {view === "fm-orders" && <RentalOrderListPage navigate={navigate} />}
           {view === "fm-proposal-redo" && <ProposalRedoPage navigate={navigate} />}
           {view === "fm-appointments" && <AppointmentSchedulePage />}
           {view === "fm-return-requests" && <ReturnRequestQueuePage />}
@@ -210,6 +222,12 @@ function App() {
           {view === "fm-contracts" && <CustomerContractOverviewPage navigate={navigate} />}
           {isNotificationView && <NotificationsPage navigate={navigate} />}
         </FmShell>
+      ) : isFsShellView ? (
+        <FsShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
+          {view === "fs-schedule" && <DailySchedulePage navigate={navigate} />}
+          {view === "fs-handover" && <HandoverChecklistPage navigate={navigate} />}
+          {isNotificationView && <NotificationsPage navigate={navigate} />}
+        </FsShell>
       ) : (
         <>
           <PublicHeader

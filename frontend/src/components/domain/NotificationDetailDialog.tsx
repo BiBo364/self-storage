@@ -69,29 +69,29 @@ export function NotificationDetailDialog({
       <div
         ref={containerRef}
         tabIndex={-1}
-        className="w-[min(560px,100%)] rounded-md border border-border bg-surface p-7 shadow-soft-token focus:outline-none"
+        className="w-[min(560px,100%)] border border-[var(--container-border)] bg-surface p-6 shadow-[var(--shadow-soft)] focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="mb-1 mt-0 font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
+        <p className="mb-1 mt-0 text-label text-muted">
           {formatNotificationTime(notification.createdAt)}
         </p>
-        <h2 id={titleId} className="mb-3 mt-0 text-[19px] leading-[1.2] tracking-[-0.03em]">
+        <h2 id={titleId} className="mb-3 mt-0 text-section text-ink">
           {notification.title}
         </h2>
         {isLoading ? (
-          <p className="m-0 text-[13px] text-muted">Đang tải nội dung…</p>
+          <p className="m-0 text-small text-muted">Đang tải nội dung…</p>
         ) : loadError ? (
           <div className="flex flex-wrap items-center gap-3">
-            <p className="m-0 text-[13px] text-danger">Không tải được nội dung.</p>
+            <p className="m-0 text-small text-danger">Không tải được nội dung.</p>
             <Button variant="secondary" onClick={() => void retry()}>
               Thử lại
             </Button>
           </div>
         ) : (
-          <p className="m-0 whitespace-pre-wrap text-[13px] leading-[1.6] text-ink">{body}</p>
+          <p className="m-0 whitespace-pre-wrap text-small leading-relaxed text-ink">{body}</p>
         )}
         <div className="mt-6 flex justify-end gap-2.5">
           <Button variant="secondary" onClick={onClose}>

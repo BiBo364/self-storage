@@ -127,6 +127,8 @@ Chi tiết: [error-handling.md](error-handling.md).
 ## Chưa có
 
 - UI quản trị gán permission cho role (Flow 5): mapping hiện sửa qua seed/SQL.
+- Luồng gán lại FM khi account FM bị `BANNED`/chưa xác minh. `facilities.fm_account_id` giữ
+  nguyên, nên facility không còn account vận hành; reassign hiện thủ công hoặc thuộc Flow 5.
 - Namespace `/api/fm/**` có các màn của FM: hàng đợi + duyệt/từ chối yêu cầu đặt kho, xem đơn để đề xuất
   lại (`GET /api/fm/rental-orders/{orderId}`, role FM **cộng** facility scope); lịch check-in theo ngày, danh sách FS
   của cơ sở và phân công FS (`appointment.read` / `appointment.assign` theo cơ sở). Thao tác đề xuất khoang theo

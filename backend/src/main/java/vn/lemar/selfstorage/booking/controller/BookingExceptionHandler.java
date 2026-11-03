@@ -21,6 +21,7 @@ import vn.lemar.selfstorage.booking.application.exception.RentalRequestExpiredEx
 import vn.lemar.selfstorage.booking.application.exception.RentalRequestNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.RentalOrderNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.RentalRequestValidationException;
+import vn.lemar.selfstorage.booking.application.exception.StorageUnitFilterException;
 import vn.lemar.selfstorage.booking.application.exception.StorageUnitNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.StorageUnitUnavailableException;
 
@@ -91,6 +92,7 @@ public class BookingExceptionHandler {
     public ResponseEntity<ApiError> handleUnitUnavailable(StorageUnitUnavailableException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.now(ex.getMessage()));
     }
+
     // ---- Lịch hẹn check-in (spec 1.5)
 
     @ExceptionHandler(AppointmentNotFoundException.class)
@@ -105,6 +107,11 @@ public class BookingExceptionHandler {
 
     @ExceptionHandler(AppointmentValidationException.class)
     public ResponseEntity<ApiError> handleAppointmentValidation(AppointmentValidationException ex) {
+        return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(StorageUnitFilterException.class)
+    public ResponseEntity<ApiError> handleStorageUnitFilter(StorageUnitFilterException ex) {
         return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
     }
 }

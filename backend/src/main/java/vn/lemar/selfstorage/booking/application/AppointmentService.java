@@ -31,10 +31,10 @@ import vn.lemar.selfstorage.notification.application.NotificationType;
 
 /**
  * Spec 1.5 phía FM: phân công FS cho lịch check-in. Gán {@code Appointment.staff_id}, đơn {@code Scheduled ->
- * InProgress}, AuditLog {@code FS_ASSIGNED}, FS nhận {@code FS_ASSIGNED}. Lịch {@code Pending} đã có FS thì đổi
- * được: đơn giữ {@code InProgress}, FS mới nhận {@code FS_ASSIGNED}, FS cũ nhận {@code FS_REASSIGNED}.
+ * InProgress}, AuditLog {@code FS_ASSIGNED}, FS nhận {@code FS_ASSIGNED}.
  *
- * <p>Chưa làm: phát {@code FS_ASSIGNMENT_REQUIRED} lúc khách tạo lịch (thuộc luồng khách đặt lịch).
+ * <p>Đổi FS đã gán không cho ở MVP (chốt trong behavior-gap): lịch đã có FS thì 409. Chưa làm: phát
+ * {@code FS_ASSIGNMENT_REQUIRED} lúc khách tạo lịch (thuộc luồng khách đặt lịch).
  */
 @Service
 public class AppointmentService {
@@ -67,8 +67,8 @@ public class AppointmentService {
     }
 
     /**
-     * FM phân công (hoặc đổi) FS cho lịch check-in. Quyền {@code appointment.assign} theo cơ sở của lịch; FS phải
-     * là tài khoản FS đang hoạt động được gán vào cùng cơ sở.
+     * FM phân công FS cho lịch check-in. Quyền {@code appointment.assign} theo cơ sở của lịch; FS phải là tài khoản
+     * FS đang hoạt động được gán vào cùng cơ sở.
      */
     @Transactional
     public FmAppointmentResponse assignStaff(Long appointmentId, Long staffAccountId, Long actorAccountId) {
@@ -84,9 +84,8 @@ public class AppointmentService {
         if (appointment.getStatus() != AppointmentStatus.Pending) {
             throw new AppointmentConflictException("Lịch hẹn không còn ở trạng thái chờ");
         }
-        boolean reassign = appointment.hasStaff();
-        if (reassign && appointment.getStaffId().equals(staffAccountId)) {
-            throw new AppointmentConflictException("Lịch hẹn đã do FS này phụ trách");
+        if (appointment.hasStaff()) {
+            throw new AppointmentConflictException("Lịch hẹn đã có FS phụ trách");
         }
         if (!facilityStaffQuery.isActiveStaffOf(staffAccountId, facilityId)) {
             throw new AppointmentValidationException("Nhân viên không phải FS của cơ sở này");
@@ -95,37 +94,23 @@ public class AppointmentService {
                 .orElseThrow(() -> new AppointmentConflictException("Lịch hẹn không gắn với đơn thuê"));
         RentalOrder order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new AppointmentConflictException("Lịch hẹn không gắn với đơn thuê"));
-        if (reassign ? !order.isInProgress() : !order.isScheduled()) {
-            throw new AppointmentConflictException(reassign
-                    ? "Đơn thuê không ở trạng thái đang tiếp đón"
-                    : "Đơn thuê không ở trạng thái chờ phân công");
+        if (!order.isScheduled()) {
+            throw new AppointmentConflictException("Đơn thuê không ở trạng thái chờ phân công");
         }
 
-        Long previousStaffId = appointment.assignStaff(staffAccountId);
-        Map<String, Object> oldValue = new HashMap<>();
+        appointment.assignStaff(staffAccountId);
+        order.startProgress();
         Map<String, Object> newValue = new HashMap<>();
         newValue.put("staffId", staffAccountId);
         newValue.put("orderId", orderId);
-        if (reassign) {
-            // Đổi FS: đơn đã InProgress từ lần gán đầu, giữ nguyên — chỉ ghi FS cũ/mới.
-            oldValue.put("staffId", previousStaffId);
-        } else {
-            order.startProgress();
-            oldValue.put("orderStatus", "Scheduled");
-            newValue.put("orderStatus", order.getStatus().dbValue());
-        }
+        newValue.put("orderStatus", order.getStatus().dbValue());
         auditRecorder.record(new AuditEntry(AuditAction.FS_ASSIGNED, AuditEntityType.APPOINTMENT,
-                String.valueOf(appointmentId), oldValue, newValue, null, actorAccountId));
+                String.valueOf(appointmentId), Map.of("orderStatus", "Scheduled"), newValue, null, actorAccountId));
 
         appointmentRepository.flush();
         AppointmentRow row = readRepository.findById(appointmentId).orElseThrow(AppointmentNotFoundException::new);
-        Map<String, String> values = notificationValues(row);
         notificationService.notify(staffAccountId, accountQueryService.requireEmailById(staffAccountId),
-                NotificationRecipient.FS, NotificationType.FS_ASSIGNED, values, orderId);
-        if (reassign) {
-            notificationService.notify(previousStaffId, accountQueryService.requireEmailById(previousStaffId),
-                    NotificationRecipient.FS, NotificationType.FS_REASSIGNED, values, orderId);
-        }
+                NotificationRecipient.FS, NotificationType.FS_ASSIGNED, notificationValues(row), orderId);
         return FmAppointmentResponse.from(row);
     }
 

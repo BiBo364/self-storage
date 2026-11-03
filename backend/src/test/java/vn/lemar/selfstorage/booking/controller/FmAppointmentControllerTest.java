@@ -162,14 +162,14 @@ class FmAppointmentControllerTest {
         when(appointmentService.assignStaff(8L, 4L, 3L))
                 .thenThrow(new ForbiddenException("Bạn không được gán vào cơ sở này"));
         when(appointmentService.assignStaff(7L, 4L, 3L))
-                .thenThrow(new AppointmentConflictException("Lịch hẹn đã do FS này phụ trách"));
+                .thenThrow(new AppointmentConflictException("Lịch hẹn đã có FS phụ trách"));
         when(appointmentService.assignStaff(6L, 4L, 3L))
                 .thenThrow(new AppointmentValidationException("Nhân viên không phải FS của cơ sở này"));
 
         mockMvc.perform(assign(9L)).andExpect(status().isNotFound());
         mockMvc.perform(assign(8L)).andExpect(status().isForbidden());
         mockMvc.perform(assign(7L)).andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Lịch hẹn đã do FS này phụ trách"));
+                .andExpect(jsonPath("$.message").value("Lịch hẹn đã có FS phụ trách"));
         mockMvc.perform(assign(6L)).andExpect(status().isBadRequest());
     }
 

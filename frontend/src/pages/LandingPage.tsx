@@ -1,40 +1,79 @@
-import { useState } from "react";
-import {
-  ArrowRight,
-  Box,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Clock3,
-  MapPin,
-  Search,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, Check } from "lucide-react";
 import { Navigate } from "../app/types";
 import { PAGE_CONTAINER as CONTAINER } from "../app/layout";
 import { facilities, formatPrice, unitTypes } from "../mocks/catalog";
+import { Button } from "../components/ui/Button";
+import { SelectField } from "../components/ui/FormField";
 
-const THEME_TRANSITION =
-  "transition-[background-color,color,border-color,box-shadow] duration-[280ms] ease";
-const LANDING_BUTTON =
-  "inline-flex min-h-[45px] items-center justify-center gap-[9px] rounded-sm border border-transparent px-[17px] text-[13px] font-[750] transition-colors duration-[180ms] ease";
-const PRIMARY_BUTTON = `${LANDING_BUTTON} bg-brand text-background hover:bg-brand-strong hover:text-background`;
-const SECONDARY_BUTTON = `${LANDING_BUTTON} border-border bg-transparent text-brand hover:border-brand hover:bg-brand-soft hover:text-ink`;
-const TEXT_LINK =
-  "inline-flex items-center gap-2 border-0 bg-transparent p-0 text-[13px] font-[750] text-brand hover:text-ink";
-const ROW_LINK = `${TEXT_LINK} whitespace-nowrap text-[11px] max-[760px]:col-start-3 max-[760px]:row-[1/span_2]`;
-const SECTION_TITLE = "m-0 max-w-[15ch] text-ink text-title";
-const LIST_HEADING =
-  "flex items-center justify-between gap-3.5 font-mono text-mono uppercase tracking-[0.05em] text-muted";
+const HAZARD_STRIPE = "repeating-linear-gradient(135deg, #101413 0 11px, var(--brand) 11px 22px)";
 
-function SectionHeading({ title, copy }: { title: string; copy: string }) {
+function areaNumber(area: string) {
+  return Number(area.replace(/[^\d]/g, ""));
+}
+
+function unitRange(unitIds: string[]) {
+  const areas = unitTypes
+    .filter((unit) => unitIds.includes(unit.id))
+    .map((unit) => areaNumber(unit.area))
+    .filter((area) => area > 0);
+  if (areas.length === 0) return "Đang cập nhật";
+  return `${Math.min(...areas)}–${Math.max(...areas)} m²`;
+}
+
+const SECTIONS = [
+  { id: "how-it-works", index: "01", label: "Quy trình" },
+  { id: "locations", index: "02", label: "Cơ sở" },
+];
+
+function SectionNav() {
+  const [active, setActive] = useState<string | null>(null);
+
+  useEffect(() => {
+    const elements = SECTIONS.map((section) => document.getElementById(section.id)).filter(
+      (element): element is HTMLElement => element !== null,
+    );
+    if (elements.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+        if (visible) setActive(visible.target.id);
+      },
+      { rootMargin: "-120px 0px -55% 0px", threshold: [0, 0.25, 0.5] },
+    );
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+
+  function jump(id: string) {
+    setActive(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
-    <div className="mb-12 grid grid-cols-[minmax(0,1fr)_minmax(260px,340px)] items-end gap-[50px] max-[900px]:gap-10 max-[760px]:block">
-      <div>
-        <h2 className={SECTION_TITLE}>{title}</h2>
+    <div className="sticky top-[74px] z-10 border-y border-border bg-background/95 backdrop-blur max-[760px]:top-[64px]">
+      <div className={`${CONTAINER} flex items-center gap-6 overflow-x-auto py-2.5`}>
+        <span className="label shrink-0 text-muted">Trang này</span>
+        {SECTIONS.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            aria-current={active === section.id ? "true" : undefined}
+            className={`inline-flex shrink-0 items-center gap-2 border-b-2 pb-0.5 text-small font-semibold transition-colors ${
+              active === section.id
+                ? "border-brand text-ink"
+                : "border-transparent text-muted hover:text-ink"
+            }`}
+            onClick={() => jump(section.id)}
+          >
+            <span className="font-mono text-label text-muted">{section.index}</span>
+            {section.label}
+          </button>
+        ))}
       </div>
-      <p className="m-0 mb-[3px] text-[13px] leading-[1.65] text-muted max-[760px]:mt-[22px] max-[760px]:max-w-[45ch]">
-        {copy}
-      </p>
     </div>
   );
 }
@@ -42,12 +81,10 @@ function SectionHeading({ title, copy }: { title: string; copy: string }) {
 export function LandingPage({ navigate }: { navigate: Navigate }) {
   const [facilityId, setFacilityId] = useState("");
   const [typeId, setTypeId] = useState("");
-  const [selectedFacilityId, setSelectedFacilityId] = useState(facilities[0]?.id ?? "");
-  const selectedFacility =
-    facilities.find((item) => item.id === selectedFacilityId) ?? facilities[0];
-  const selectedUnits = selectedFacility
-    ? unitTypes.filter((unit) => selectedFacility.availableUnitIds.includes(unit.id))
-    : [];
+  const areaRange = (() => {
+    const areas = unitTypes.map((unit) => areaNumber(unit.area)).filter((area) => area > 0);
+    return `${Math.min(...areas)}–${Math.max(...areas)} m²`;
+  })();
 
   function browseFromFinder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,335 +97,310 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
 
   return (
     <>
-      <section className={`border-b border-border bg-background ${THEME_TRANSITION}`}>
+      <section className="bg-background">
         <div
-          className={`${CONTAINER} grid grid-cols-[minmax(0,1fr)_minmax(360px,420px)] items-center gap-[clamp(48px,8vw,120px)] py-24 pb-20 max-[900px]:grid-cols-[minmax(0,1fr)_minmax(330px,390px)] max-[900px]:gap-[42px] max-[760px]:block max-[760px]:py-[72px] max-[760px]:pb-[58px]`}
+          className={`${CONTAINER} grid grid-cols-[minmax(0,1.1fr)_minmax(350px,420px)] items-start gap-[clamp(40px,7vw,92px)] pb-14 pt-[clamp(48px,7vw,92px)] max-[900px]:grid-cols-1 max-[900px]:gap-10 max-[760px]:pt-12`}
         >
-          <div className="max-w-[620px]">
-            <h1 className="m-0 max-w-[10ch] text-ink text-display max-[760px]:text-[clamp(3.1rem,14vw,5rem)]">
-              Tìm đúng chỗ chứa
-              <span className="block text-brand">cho nhịp hàng.</span>
-            </h1>
-            <p className="mt-7 max-w-[47ch] text-[16px] leading-[1.65] text-muted">
-              Chọn điểm kho và quy mô để xem phương án phù hợp trước khi gửi nhu cầu. Không cần đăng
-              nhập để bắt đầu.
+          <div>
+            <p className="label flex items-center gap-2.5 text-muted">
+              <span className="h-2 w-2 bg-brand" aria-hidden="true" />
+              Tự lưu trữ · TP. Hồ Chí Minh
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-6">
-              <a className={TEXT_LINK} href="#how-it-works">
-                Xem quy trình <ArrowRight size={16} />
-              </a>
+            <h1 className="mt-5 max-w-[14ch] text-display text-ink">
+              Kho đúng cỡ.
+              <span className="block text-accent">Hợp đồng rõ ràng.</span>
+            </h1>
+            <p className="mt-6 max-w-[46ch] text-lead text-muted">
+              Chọn cơ sở, diện tích và thời hạn. Xem giá tham khảo trước khi gửi yêu cầu — không cần
+              đăng nhập để bắt đầu.
+            </p>
+            <div className="mt-8 grid max-w-[560px] grid-cols-3 gap-8 max-[760px]:gap-5">
+              <div>
+                <strong className="block whitespace-nowrap text-stat text-ink">
+                  {String(facilities.length).padStart(2, "0")}
+                </strong>
+                <span className="text-label text-muted">cơ sở đang mở</span>
+              </div>
+              <div>
+                <strong className="block whitespace-nowrap text-stat text-ink">{areaRange}</strong>
+                <span className="text-label text-muted">diện tích khoang</span>
+              </div>
+              <div>
+                <strong className="block whitespace-nowrap text-stat text-ink">07:00–21:00</strong>
+                <span className="text-label text-muted">giờ tiếp nhận</span>
+              </div>
             </div>
           </div>
 
           <form
-            className={`rounded-md border border-border bg-surface p-7 shadow-[0_24px_60px_rgba(0,0,0,0.22)] max-[760px]:mt-12 ${THEME_TRANSITION}`}
+            className="border-2 border-[var(--container-border)] bg-surface"
             onSubmit={browseFromFinder}
           >
-            <div className="flex items-center gap-[13px]">
-              <div
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand-soft text-brand"
-                aria-hidden="true"
-              >
-                <Search size={17} />
-              </div>
+            <div className="h-2 w-full" style={{ background: HAZARD_STRIPE }} aria-hidden="true" />
+            <div className="grid gap-4 p-6">
               <div>
-                <p className="m-0 mb-1 font-mono text-mono uppercase tracking-[0.05em] text-brand">
-                  Bắt đầu từ điều bạn biết
-                </p>
-                <h2 className="m-0 text-[25px] leading-[1.1] tracking-[-0.035em] text-ink">
-                  Tìm phương án kho
+                <span className="label text-muted">Bắt đầu từ điều bạn biết</span>
+                <h2 className="mt-1 text-[1.3125rem] leading-[1.15] tracking-[-0.01em] text-ink">
+                  Tìm khoang phù hợp
                 </h2>
               </div>
+              <SelectField
+                label="Cơ sở"
+                name="facility"
+                value={facilityId}
+                onChange={setFacilityId}
+                placeholder="Tất cả cơ sở"
+                options={facilities.map((facility) => ({
+                  value: facility.id,
+                  label: `${facility.district} · ${facility.name}`,
+                }))}
+              />
+              <SelectField
+                label="Diện tích"
+                name="type"
+                value={typeId}
+                onChange={setTypeId}
+                placeholder="Tất cả diện tích"
+                options={unitTypes.map((unit) => ({
+                  value: unit.id,
+                  label: `${unit.area} · ${unit.name}`,
+                }))}
+              />
+              <Button type="submit" className="mt-1 w-full">
+                Xem khoang trống <ArrowRight size={16} />
+              </Button>
+              <p className="flex items-center justify-center gap-1.5 text-label text-muted">
+                <Check size={14} className="text-success" aria-hidden="true" />
+                Không cần đăng nhập · Giá tham khảo theo tháng
+              </p>
             </div>
-            <p className="mb-6 mt-5 text-[13px] leading-[1.55] text-muted">
-              Chọn một hoặc cả hai tiêu chí. Bạn có thể xem toàn bộ lựa chọn sau đó.
-            </p>
-
-            <label
-              className="mb-4 block text-[12px] font-[750] text-ink"
-              htmlFor="landing-facility"
-            >
-              <span>Điểm kho</span>
-              <div className="mt-[7px] flex min-h-12 items-center gap-2.5 rounded-sm border border-border bg-background px-[13px] text-muted focus-within:border-brand focus-within:shadow-[0_0_0_3px_var(--brand-soft)] [&>svg:last-child]:pointer-events-none [&>svg:last-child]:shrink-0">
-                <MapPin size={16} aria-hidden="true" />
-                <select
-                  className="w-full min-w-0 appearance-none border-0 bg-transparent text-[13px] text-ink outline-0 invalid:text-muted"
-                  id="landing-facility"
-                  value={facilityId}
-                  onChange={(event) => setFacilityId(event.target.value)}
-                >
-                  <option value="">Tất cả điểm kho</option>
-                  {facilities.map((facility) => (
-                    <option key={facility.id} value={facility.id}>
-                      {facility.district}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={15} aria-hidden="true" />
-              </div>
-            </label>
-
-            <label
-              className="mb-4 block text-[12px] font-[750] text-ink"
-              htmlFor="landing-unit-type"
-            >
-              <span>Quy mô lưu trữ</span>
-              <div className="mt-[7px] flex min-h-12 items-center gap-2.5 rounded-sm border border-border bg-background px-[13px] text-muted focus-within:border-brand focus-within:shadow-[0_0_0_3px_var(--brand-soft)] [&>svg:last-child]:pointer-events-none [&>svg:last-child]:shrink-0">
-                <Box size={16} aria-hidden="true" />
-                <select
-                  className="w-full min-w-0 appearance-none border-0 bg-transparent text-[13px] text-ink outline-0 invalid:text-muted"
-                  id="landing-unit-type"
-                  value={typeId}
-                  onChange={(event) => setTypeId(event.target.value)}
-                >
-                  <option value="">Tất cả quy mô</option>
-                  {unitTypes.map((unit) => (
-                    <option key={unit.id} value={unit.id}>
-                      {unit.capacity} · {unit.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={15} aria-hidden="true" />
-              </div>
-            </label>
-
-            <button className={`${PRIMARY_BUTTON} mt-1 w-full`} type="submit">
-              Xem phương án kho <ArrowRight size={16} />
-            </button>
-            <p className="mt-[15px] flex items-center justify-center gap-1.5 text-[11px] text-muted [&>svg]:text-success">
-              <Check size={14} aria-hidden="true" /> Xem trước không cần đăng nhập
-            </p>
           </form>
         </div>
-
-        <div
-          className={`${CONTAINER} grid grid-cols-3 border-t border-border max-[760px]:grid-cols-1`}
-          aria-label="Điều bạn có thể làm trên Kho Mộc"
-        >
-          {[
-            { mark: "01", title: "Chọn trước", copy: "Điểm kho và quy mô" },
-            { mark: "02", title: "So sánh rõ", copy: "Kích thước, giá tham khảo" },
-            { mark: "03", title: "Gửi khi sẵn sàng", copy: "Không cần cam kết ngay" },
-          ].map((item) => (
-            <div
-              key={item.mark}
-              className={`flex min-h-[88px] items-center gap-3 border-r border-border px-6 py-4 first:pl-0 last:border-r-0 last:pr-0 max-[760px]:min-h-[63px] max-[760px]:border-r-0 max-[760px]:border-b max-[760px]:px-0 max-[760px]:py-[14px] max-[760px]:last:border-b-0 ${THEME_TRANSITION}`}
-            >
-              <span className="font-mono text-mono tracking-[0.04em] text-brand" aria-hidden="true">
-                {item.mark}
-              </span>
-              <span className="grid gap-0.5">
-                <strong className="text-[12px] text-ink">{item.title}</strong>
-                <small className="text-[11px] text-muted">{item.copy}</small>
-              </span>
-            </div>
-          ))}
-        </div>
       </section>
 
-      <section
-        className={`border-b border-border bg-surface py-28 max-[760px]:py-[76px] ${THEME_TRANSITION}`}
-        id="support"
-      >
-        <div className={CONTAINER}>
-          <SectionHeading
-            title="Xem nơi hàng đến, rồi chọn quy mô."
-            copy="Thông tin địa chỉ, giờ tiếp nhận và các phương án mẫu được đặt cạnh nhau để bạn kiểm tra nhanh."
-          />
+      <SectionNav />
 
-          <div
-            className={`grid grid-cols-[minmax(250px,0.7fr)_minmax(0,1.3fr)] border border-border bg-background max-[760px]:block ${THEME_TRANSITION}`}
-          >
-            <div
-              className="border-r border-border py-5 max-[760px]:border-b max-[760px]:border-r-0 max-[760px]:border-border"
-              aria-label="Chọn điểm kho"
-            >
-              <div className={`${LIST_HEADING} px-[22px] pb-3.5`}>
-                <span>Điểm kho</span>
-                <span>{String(facilities.length).padStart(2, "0")}</span>
-              </div>
-              {facilities.map((facility, index) => {
-                const isSelected = facility.id === selectedFacility?.id;
-                return (
-                  <button
-                    key={facility.id}
-                    className={`group grid w-full grid-cols-[25px_minmax(0,1fr)_16px] items-center gap-3 border-0 border-t border-border px-[22px] py-[18px] text-left transition-[color,background-color] duration-[180ms] ease hover:bg-surface-subtle hover:text-ink ${
-                      isSelected ? "bg-surface-subtle text-ink" : "bg-transparent text-muted"
-                    }`}
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => setSelectedFacilityId(facility.id)}
-                  >
-                    <span
-                      className={`font-mono text-mono group-hover:text-brand ${
-                        isSelected ? "text-brand" : "text-muted"
-                      }`}
-                    >
-                      {String(index + 1).padStart(2, "0")}
+      <section aria-label="Cơ sở đang mở" className="bg-background">
+        <div className={`${CONTAINER} pb-16`}>
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <span className="label text-muted">Cơ sở đang mở · giá tham khảo</span>
+            <span className="label text-muted">{facilities.length} cơ sở</span>
+          </div>
+          <div className="grid gap-2">
+            {facilities.map((facility, index) => {
+              const units = unitTypes.filter((unit) => facility.availableUnitIds.includes(unit.id));
+              const from = units.length ? Math.min(...units.map((unit) => unit.monthlyPrice)) : 0;
+              return (
+                <div
+                  key={facility.id}
+                  className="grid grid-cols-[32px_minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_24px] items-center gap-4 bg-surface px-4 py-4 max-[900px]:grid-cols-[28px_minmax(0,1fr)_auto] max-[760px]:gap-2"
+                >
+                  <span className="text-label text-muted">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <div className="min-w-0 max-[900px]:col-span-2">
+                    <strong className="block text-small font-semibold text-ink">
+                      {facility.name}
+                    </strong>
+                    <span className="mt-0.5 block truncate text-label text-muted">
+                      {facility.address} · {facility.hours.replace("Tiếp nhận hàng: ", "")}
                     </span>
-                    <span className="grid min-w-0 gap-[3px]">
-                      <strong className="truncate text-[13px] font-bold text-current">
-                        {facility.district}
-                      </strong>
-                      <small className="truncate text-[11px] text-muted">{facility.address}</small>
-                    </span>
-                    <ChevronRight size={16} aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
-
-            {selectedFacility && (
-              <article
-                className="min-w-0 p-[31px] max-[760px]:p-[25px_20px_22px]"
-                aria-live="polite"
-              >
-                <div className="flex items-start justify-between gap-[18px]">
-                  <div>
-                    <span className="font-mono text-mono uppercase tracking-[0.05em] text-brand">
-                      Đang xem
-                    </span>
-                    <h3 className="m-0 max-w-[17ch] text-[clamp(1.6rem,3vw,2.35rem)] leading-[1.08] tracking-[-0.04em] text-ink">
-                      {selectedFacility.name}
-                    </h3>
                   </div>
-                  <span className="shrink-0 rounded-full border border-[rgba(140,221,166,0.25)] px-2 py-[5px] font-mono text-[9px] tracking-[0.03em] text-success">
-                    Đang hoạt động
+                  <span className="text-small text-muted max-[900px]:hidden">
+                    {facility.district}
                   </span>
-                </div>
-                <p className="mt-4 max-w-[48ch] text-[13px] leading-[1.6] text-muted">
-                  {selectedFacility.note}
-                </p>
-                <div className="mt-[21px] flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-ink [&>span]:inline-flex [&>span]:items-center [&>span]:gap-[7px] [&>svg]:text-brand">
-                  <span>
-                    <MapPin size={15} /> {selectedFacility.address}
+                  <span className="text-small text-ink max-[900px]:hidden">
+                    <span className="block text-label text-muted">Từ</span>
+                    {formatPrice(from)} đ
                   </span>
-                  <span>
-                    <Clock3 size={15} /> {selectedFacility.hours.replace("Tiếp nhận hàng: ", "")}
+                  <span className="text-label text-muted max-[900px]:hidden">
+                    {units.length} loại khoang
                   </span>
-                </div>
-
-                <div className="mt-[33px] border-t border-border">
-                  <div className={`${LIST_HEADING} px-0 py-3.5`}>
-                    <span>Quy mô tham khảo</span>
-                    <span>{String(selectedUnits.length).padStart(2, "0")}</span>
-                  </div>
-                  {selectedUnits.map((unit) => (
-                    <div
-                      className="grid grid-cols-[26px_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-border py-4 max-[760px]:grid-cols-[26px_minmax(0,1fr)_auto]"
-                      key={unit.id}
-                    >
-                      <div
-                        className="grid h-[26px] w-[26px] place-items-center rounded-sm bg-brand-soft text-brand"
-                        aria-hidden="true"
-                      >
-                        <Box size={17} />
-                      </div>
-                      <div className="grid min-w-0 gap-[3px]">
-                        <strong className="text-[13px] text-ink">{unit.name}</strong>
-                        <span className="text-[11px] text-muted">
-                          {unit.capacity} · {unit.size}
-                        </span>
-                      </div>
-                      <div className="grid justify-items-end gap-0.5 max-[760px]:col-start-2 max-[760px]:justify-items-start">
-                        <strong className="text-[12px] text-brand">
-                          {formatPrice(unit.monthlyPrice)}đ
-                        </strong>
-                        <span className="text-[11px] text-muted">/ tháng</span>
-                      </div>
-                      <button
-                        className={ROW_LINK}
-                        type="button"
-                        onClick={() =>
-                          navigate(`/units?facility=${selectedFacility.id}&type=${unit.id}`)
-                        }
-                      >
-                        Chi tiết <ArrowRight size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-[22px] flex justify-end">
                   <button
-                    className={SECONDARY_BUTTON}
-                    type="button"
-                    onClick={() => navigate(`/units?facility=${selectedFacility.id}`)}
+                    className="border-0 bg-transparent p-0 text-muted hover:text-accent"
+                    onClick={() => navigate(`/units?facility=${facility.id}`)}
+                    aria-label={`Xem khoang tại ${facility.name}`}
                   >
-                    Xem tất cả phương án <ArrowRight size={16} />
+                    <ArrowRight size={17} />
                   </button>
                 </div>
-              </article>
-            )}
+              );
+            })}
           </div>
         </div>
       </section>
 
-      <section
-        className={`border-b border-border bg-background py-28 max-[760px]:py-[76px] ${THEME_TRANSITION}`}
-        id="how-it-works"
-      >
-        <div
-          className={`${CONTAINER} grid grid-cols-[minmax(260px,0.75fr)_minmax(0,1.25fr)] gap-[clamp(50px,10vw,140px)] max-[900px]:gap-10 max-[760px]:block`}
-        >
-          <div>
-            <h2 className={`${SECTION_TITLE} max-w-[10ch]`}>Từ lựa chọn đến nhu cầu rõ ràng.</h2>
-            <p className="mt-6 max-w-[32ch] text-[13px] leading-[1.65] text-muted max-[760px]:mt-[22px]">
-              Bạn luôn biết mình đang ở bước nào và cần chuẩn bị điều gì tiếp theo.
+      <section className="bg-surface-subtle py-[clamp(56px,7vw,92px)]">
+        <div className={CONTAINER}>
+          <div className="mb-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-end gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-4">
+            <div>
+              <span className="label text-muted">Quy mô</span>
+              <h2 className="mt-2 max-w-[17ch] text-balance text-[clamp(1.75rem,3.6vw,2.625rem)] leading-[1.0] tracking-[-0.02em] text-ink">
+                Chọn theo diện tích thật.
+              </h2>
+            </div>
+            <p className="max-w-[42ch] text-small leading-relaxed text-muted">
+              Ba khung tham chiếu, vẽ đúng tỷ lệ. Giá là giá niêm yết theo tháng, chưa gồm phí phát
+              sinh nếu có.
             </p>
           </div>
-          <div className="border-t border-border">
-            {[
-              {
-                number: "01",
-                title: "Xác định nhu cầu",
-                copy: "Chọn khu vực và quy mô lưu trữ gần với kế hoạch hàng hóa của bạn.",
-              },
-              {
-                number: "02",
-                title: "Gửi thông tin",
-                copy: "Cho Kho Mộc biết lô hàng, thời gian và nhu cầu vận hành dự kiến.",
-              },
-              {
-                number: "03",
-                title: "Chốt phương án",
-                copy: "Đội ngũ phản hồi, thống nhất lịch và các bước tiếp theo.",
-              },
-            ].map((step) => (
-              <article
-                key={step.number}
-                className="grid grid-cols-[42px_minmax(0,1fr)] gap-3.5 border-b border-border py-[22px]"
-              >
-                <span className="pt-1 font-mono text-mono tracking-[0.04em] text-brand">
-                  {step.number}
-                </span>
-                <div>
-                  <h3 className="m-0 text-[17px] tracking-[-0.02em] text-ink">{step.title}</h3>
-                  <p className="mt-[7px] max-w-[47ch] text-[13px] leading-[1.6] text-muted">
-                    {step.copy}
-                  </p>
+          <div className="grid gap-2">
+            {unitTypes.map((unit) => {
+              const area = areaNumber(unit.area);
+              const square = 48 + (area - 4) * 5;
+              return (
+                <div
+                  key={unit.id}
+                  className="grid grid-cols-[160px_minmax(0,1fr)_auto] items-center gap-6 bg-surface p-5 max-[760px]:grid-cols-1 max-[760px]:gap-3"
+                >
+                  <div
+                    className="relative flex h-[118px] w-[160px] items-end border-2 border-[var(--container-border)] bg-surface-subtle p-3 max-[760px]:w-full"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+                      backgroundSize: "16px 16px",
+                    }}
+                  >
+                    <span className="absolute right-3 top-2.5 text-label text-muted">
+                      {unit.area}
+                    </span>
+                    <span
+                      className="border-2 border-[#101413] bg-brand"
+                      style={{ width: square, height: square }}
+                      aria-hidden="true"
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-section text-ink">{unit.name}</h3>
+                    <p className="mt-1 text-small text-muted">{unit.description}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 max-[760px]:items-start">
+                    <div className="flex items-baseline gap-2">
+                      <strong className="text-stat text-ink">
+                        {formatPrice(unit.monthlyPrice)}
+                      </strong>
+                      <span className="text-label text-muted">đ / tháng</span>
+                    </div>
+                    <button
+                      className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
+                      onClick={() => navigate(`/units?type=${unit.id}`)}
+                    >
+                      Xem khoang <ArrowRight size={15} />
+                    </button>
+                  </div>
                 </div>
-              </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="how-it-works"
+        className="scroll-mt-[120px] bg-background py-[clamp(56px,7vw,92px)]"
+      >
+        <div className={CONTAINER}>
+          <div className="mb-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-end gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-4">
+            <div>
+              <span className="label text-muted">Quy trình</span>
+              <h2 className="mt-2 max-w-[14ch] text-balance text-[clamp(1.75rem,3.6vw,2.625rem)] leading-[1.0] tracking-[-0.02em] text-ink">
+                Từ nhu cầu đến nhận kho.
+              </h2>
+            </div>
+            <p className="max-w-[42ch] text-small leading-relaxed text-muted">
+              Bốn bước, không có bước ẩn. Mỗi bước cho bạn biết ai đang xử lý và bạn cần làm gì tiếp
+              theo.
+            </p>
+          </div>
+          <div className="grid grid-cols-4 gap-2 max-[900px]:grid-cols-2 max-[760px]:grid-cols-1">
+            {[
+              ["Gửi nhu cầu", "Điền cơ sở, diện tích và thời hạn. Không cần tài khoản."],
+              ["Nhận đề xuất", "FM kiểm tra khoang trống và gửi phương án cụ thể."],
+              ["Đặt cọc", "Thanh toán cọc trong thời hạn để giữ khoang."],
+              ["Nhận kho", "Chọn lịch bàn giao và nhận chìa khoá tại cơ sở."],
+            ].map(([title, copy]) => (
+              <div key={title} className="bg-surface p-5">
+                <span className="mb-3 block h-2 w-2 bg-brand" aria-hidden="true" />
+                <h3 className="text-[16px] font-semibold text-ink">{title}</h3>
+                <p className="mt-1.5 text-small leading-relaxed text-muted">{copy}</p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className={`bg-surface-subtle py-[72px] ${THEME_TRANSITION}`}>
-        <div className={`${CONTAINER} flex items-center justify-between gap-8 max-[760px]:block`}>
-          <div>
-            <h2 className="m-0 text-[clamp(2rem,4vw,3rem)] font-[750] leading-[1.03] tracking-[-0.045em] text-ink">
-              Đã biết quy mô?
-            </h2>
-            <p className="mt-2 text-[13px] text-muted">Gửi nhu cầu lưu trữ khi bạn đã sẵn sàng.</p>
+      <section
+        id="locations"
+        className="scroll-mt-[120px] bg-surface-subtle py-[clamp(56px,7vw,92px)]"
+      >
+        <div className={CONTAINER}>
+          <div className="mb-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-end gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-4">
+            <div>
+              <span className="label text-muted">Cơ sở</span>
+              <h2 className="mt-2 max-w-[14ch] text-balance text-[clamp(1.75rem,3.6vw,2.625rem)] leading-[1.0] tracking-[-0.02em] text-ink">
+                Xem nơi hàng đến.
+              </h2>
+            </div>
+            <p className="max-w-[42ch] text-small leading-relaxed text-muted">
+              Địa chỉ, giờ tiếp nhận và diện tích đang có. Chọn cơ sở để xem khoang cụ thể.
+            </p>
           </div>
-          <button
-            className={`${PRIMARY_BUTTON} shrink-0 max-[760px]:mt-[26px]`}
-            type="button"
-            onClick={() => navigate("/rental-requests/new")}
-          >
-            Gửi nhu cầu lưu trữ <ArrowRight size={16} />
-          </button>
+          <div className="mb-2 grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] gap-5 px-4 text-label text-muted max-[900px]:hidden">
+            <span>Cơ sở</span>
+            <span>Địa chỉ</span>
+            <span>Giờ tiếp nhận</span>
+            <span>Diện tích</span>
+            <span />
+          </div>
+          <div className="grid gap-2">
+            {facilities.map((facility) => (
+              <div
+                key={facility.id}
+                className="grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] items-center gap-5 bg-surface p-4 max-[900px]:grid-cols-1 max-[900px]:gap-2"
+              >
+                <div>
+                  <strong className="block text-small font-semibold text-ink">
+                    {facility.name}
+                  </strong>
+                  <span className="text-label text-muted">{facility.district}</span>
+                </div>
+                <span className="text-small text-muted">{facility.address}</span>
+                <span className="text-small text-muted">
+                  {facility.hours.replace("Tiếp nhận hàng: ", "")}
+                </span>
+                <span className="text-small text-ink">{unitRange(facility.availableUnitIds)}</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={() => navigate(`/units?facility=${facility.id}`)}
+                >
+                  Xem khoang
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[var(--dark)] px-6 py-[clamp(48px,7vw,78px)] text-[var(--on-dark-ink)]">
+        <div className={`${CONTAINER} flex items-end justify-between gap-12 max-[900px]:block`}>
+          <div>
+            <span className="label text-[var(--on-dark-border-hover)]">
+              Chưa chắc cần bao nhiêu?
+            </span>
+            <h2 className="mt-3 max-w-[19ch] text-[2.75rem] leading-[0.95] tracking-[-0.02em] text-[var(--on-dark-ink)] max-[760px]:text-[2.25rem]">
+              Gửi nhu cầu. FM sẽ đề xuất khoang phù hợp.
+            </h2>
+          </div>
+          <div className="flex shrink-0 gap-2.5 max-[900px]:mt-7">
+            <Button onClick={() => navigate("/rental-requests/new")}>
+              Gửi yêu cầu đặt kho <ArrowRight size={16} />
+            </Button>
+            <Button variant="onDark" onClick={() => navigate("/units")}>
+              Xem khoang trống
+            </Button>
+          </div>
         </div>
       </section>
     </>

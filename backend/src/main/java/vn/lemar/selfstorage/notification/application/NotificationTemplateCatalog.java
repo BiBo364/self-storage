@@ -87,10 +87,6 @@ public class NotificationTemplateCatalog {
         put(NotificationType.FS_ASSIGNED, NotificationRecipient.FS,
                 "Bạn được phân công lịch check-in",
                 "Đơn {{orderCode}}: lịch hẹn {{appointmentTime}} tại {{facilityAddress}}, khoang {{unitCode}}.");
-        put(NotificationType.FS_REASSIGNED, NotificationRecipient.FS,
-                "Lịch check-in đã được phân công cho người khác",
-                "Đơn {{orderCode}}: lịch hẹn {{appointmentTime}} tại {{facilityAddress}} đã được phân công cho nhân "
-                        + "viên khác. Bạn không cần phụ trách lịch này.");
         put(NotificationType.FS_ASSIGNMENT_REQUIRED, NotificationRecipient.FM,
                 "Lịch check-in chưa có nhân viên phụ trách",
                 "Đơn {{orderCode}}: lịch hẹn {{appointmentTime}} tại {{facilityAddress}} chưa có FS phụ trách.");

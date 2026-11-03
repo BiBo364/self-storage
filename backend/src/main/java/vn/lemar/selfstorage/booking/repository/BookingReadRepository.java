@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import vn.lemar.selfstorage.booking.application.InvoiceListView;
 import vn.lemar.selfstorage.booking.application.dto.CustomerProposalResponse;
 import vn.lemar.selfstorage.booking.application.dto.FmRentalOrderResponse;
 
@@ -45,6 +46,26 @@ public class BookingReadRepository {
                 rs.getString("type_name"), rs.getLong("facility_id"), rs.getString("facility_name"),
                 rs.getString("address"), rs.getBigDecimal("price"), rs.getLong("rejections"), maxRejection),
                 customerId, status, status);
+    }
+
+    /** Hoá đơn của một khách, mới nhất trước; join đơn/khoang/cơ sở để FE hiển thị. */
+    public List<InvoiceListView> findCustomerInvoices(Long customerId) {
+        String sql = "select i.id, i.order_id, i.code, i.title, i.description, i.type, i.status, i.amount, "
+                + "i.created_at, i.due_date, o.unit_id, u.code as unit_code, f.id as facility_id, "
+                + "f.name as facility_name "
+                + "from invoices i "
+                + "left join rental_orders o on o.id = i.order_id "
+                + "left join storage_units u on u.id = o.unit_id "
+                + "left join facilities f on f.id = u.facility_id "
+                + "where i.customer_id = ? "
+                + "order by i.created_at desc, i.id desc";
+        return jdbc.query(sql, (rs, rowNum) -> new InvoiceListView(
+                rs.getLong("id"), (Long) rs.getObject("order_id"), rs.getString("code"), rs.getString("title"),
+                rs.getString("description"), rs.getString("type"), rs.getString("status"),
+                rs.getBigDecimal("amount"), instant(rs, "created_at"), instant(rs, "due_date"),
+                (Long) rs.getObject("unit_id"), rs.getString("unit_code"), (Long) rs.getObject("facility_id"),
+                rs.getString("facility_name")),
+                customerId);
     }
 
     /** Đơn + thông tin form yêu cầu; rỗng nếu đơn không tồn tại. */

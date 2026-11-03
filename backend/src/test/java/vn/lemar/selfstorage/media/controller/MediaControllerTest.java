@@ -5,12 +5,15 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -33,8 +36,10 @@ import vn.lemar.selfstorage.identity.domain.Account;
 import vn.lemar.selfstorage.identity.domain.AccountStatus;
 import vn.lemar.selfstorage.identity.domain.Role;
 import vn.lemar.selfstorage.identity.repository.AccountRepository;
-import vn.lemar.selfstorage.media.FileStorage;
 import vn.lemar.selfstorage.media.application.MediaService;
+import vn.lemar.selfstorage.media.application.dto.MediaBatchAttachResult;
+import vn.lemar.selfstorage.media.application.dto.MediaBatchDeleteResult;
+import vn.lemar.selfstorage.media.application.dto.MediaUploadResult;
 import vn.lemar.selfstorage.media.application.exception.InvalidUploadException;
 
 @WebMvcTest(controllers = MediaController.class)
@@ -71,9 +76,10 @@ class MediaControllerTest {
     @Test
     void uploadReturnsStoredFileOfCurrentAccount() throws Exception {
         authenticate();
-        when(mediaService.upload(any(byte[].class), eq("anh.png"), eq("image/png"), eq(1L)))
-                .thenReturn(new FileStorage.StoredFile(
-                        "https://res.cloudinary.com/x/uploads/acc-1/anh.png", "uploads/acc-1/anh", 2, "png"));
+        when(mediaService.upload(any(byte[].class), eq("anh.png"), eq("image/png"), eq(1L), any()))
+                .thenReturn(new MediaUploadResult(
+                        "https://res.cloudinary.com/x/uploads/acc-1/anh.png", "uploads/acc-1/anh", 2, "png",
+                        UUID.randomUUID()));
 
         mockMvc.perform(multipart("/api/media/uploads")
                         .file(new MockMultipartFile("file", "anh.png", "image/png", new byte[]{1, 2}))
@@ -89,7 +95,7 @@ class MediaControllerTest {
     @Test
     void uploadReturns400WithSpecificMessageWhenInvalid() throws Exception {
         authenticate();
-        when(mediaService.upload(any(byte[].class), any(), any(), anyLong()))
+        when(mediaService.upload(any(byte[].class), any(), any(), anyLong(), any()))
                 .thenThrow(new InvalidUploadException(INVALID_TYPE_MESSAGE));
 
         mockMvc.perform(multipart("/api/media/uploads")
@@ -106,6 +112,48 @@ class MediaControllerTest {
         mockMvc.perform(multipart("/api/media/uploads")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(EMAIL)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void uploadAcceptsBatchId() throws Exception {
+        authenticate();
+        UUID batchId = UUID.randomUUID();
+        when(mediaService.upload(any(byte[].class), eq("anh.png"), eq("image/png"), eq(1L), eq(batchId)))
+                .thenReturn(new MediaUploadResult("u", "p", 1, "png", batchId));
+
+        mockMvc.perform(multipart("/api/media/uploads")
+                        .file(new MockMultipartFile("file", "anh.png", "image/png", new byte[]{1}))
+                        .param("batchId", batchId.toString())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(EMAIL)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.batchId").value(batchId.toString()));
+    }
+
+    @Test
+    void deleteBatchReturnsCounts() throws Exception {
+        authenticate();
+        UUID batchId = UUID.randomUUID();
+        when(mediaService.deleteBatch(1L, batchId)).thenReturn(new MediaBatchDeleteResult(2, 1));
+
+        mockMvc.perform(delete("/api/media/uploads/batch/{batchId}", batchId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(EMAIL)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã huỷ batch"))
+                .andExpect(jsonPath("$.data.deleted").value(2))
+                .andExpect(jsonPath("$.data.skipped").value(1));
+    }
+
+    @Test
+    void attachBatchReturnsCount() throws Exception {
+        authenticate();
+        UUID batchId = UUID.randomUUID();
+        when(mediaService.attachBatch(1L, batchId)).thenReturn(new MediaBatchAttachResult(2));
+
+        mockMvc.perform(post("/api/media/uploads/batch/{batchId}/attach", batchId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(EMAIL)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã gắn batch"))
+                .andExpect(jsonPath("$.data.attached").value(2));
     }
 
     private void authenticate() {

@@ -26,53 +26,95 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-rule-strong: var(--rule-strong);
   --color-brand: var(--brand);
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
+  --color-signal-ink: var(--signal-ink);
   --color-accent: var(--accent);
   --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
   --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
   --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
   --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-container-border: var(--container-border);
+  --color-control-border: var(--control-border);
+  --color-control-border-hover: var(--control-border-hover);
+  --color-control-bg-hover: var(--control-bg-hover);
+  --color-control-hover-ink: var(--control-hover-ink);
+  --color-on-dark-border: var(--on-dark-border);
+  --color-on-dark-border-hover: var(--on-dark-border-hover);
+  --color-on-dark-bg-hover: var(--on-dark-bg-hover);
+  --color-on-dark-ink: var(--on-dark-ink);
   --color-dark: var(--dark);
   --color-cream: var(--cream);
   --color-unit-sand: var(--unit-accent-sand);
   --color-unit-teal: var(--unit-accent-teal);
   --color-unit-ink: var(--unit-accent-ink);
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-field: 2px;
   --radius-card-token: var(--radius-card);
 
   --shadow-soft-token: var(--shadow-soft);
 
-  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Saira Semi Condensed", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Saira Semi Condensed", ui-monospace, monospace;
 
   /* Named text styles from DESIGN.md's typography hierarchy: font-size plus
      its paired weight/line-height/letter-spacing, so e.g. `text-title` alone
      reproduces the full spec instead of stacking four separate utilities. */
-  --text-display: clamp(3.25rem, 7vw, 6rem);
-  --text-display--line-height: 0.98;
-  --text-display--letter-spacing: -0.055em;
-  --text-display--font-weight: 760;
+  --text-display: clamp(2.75rem, 6.4vw, 4.875rem);
+  --text-display--line-height: 0.95;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 700;
 
-  --text-title: clamp(2.15rem, 4.5vw, 3.7rem);
-  --text-title--line-height: 1.03;
-  --text-title--letter-spacing: -0.045em;
-  --text-title--font-weight: 750;
+  --text-title: 1.8125rem;
+  --text-title--line-height: 1.05;
+  --text-title--letter-spacing: -0.01em;
+  --text-title--font-weight: 700;
 
-  --text-body: 1rem;
+  --text-section: 1.125rem;
+  --text-section--line-height: 1.25;
+  --text-section--letter-spacing: 0;
+  --text-section--font-weight: 600;
+
+  --text-lead: 1rem;
+  --text-lead--line-height: 1.55;
+  --text-lead--font-weight: 400;
+
+  --text-body: 0.9375rem;
   --text-body--line-height: 1.55;
   --text-body--font-weight: 400;
 
-  --text-label: 0.8125rem;
-  --text-label--line-height: 1.35;
-  --text-label--font-weight: 750;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.45;
+  --text-small--font-weight: 400;
 
-  --text-mono: 0.625rem;
+  --text-button: 0.875rem;
+  --text-button--line-height: 1.2;
+  --text-button--font-weight: 600;
+
+  --text-label: 0.75rem;
+  --text-label--line-height: 1.4;
+  --text-label--font-weight: 600;
+
+  --text-mono: 0.875rem;
   --text-mono--line-height: 1.4;
   --text-mono--font-weight: 500;
+
+  --text-stat: 1.375rem;
+  --text-stat--line-height: 1.2;
+  --text-stat--font-weight: 500;
 }
 
 /*

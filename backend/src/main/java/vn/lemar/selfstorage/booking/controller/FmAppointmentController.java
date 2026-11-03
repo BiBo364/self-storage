@@ -81,17 +81,16 @@ public class FmAppointmentController {
 
     @Operation(summary = "Phân công FS cho lịch check-in",
             description = "Gán `Appointment.staff_id`, đơn `Scheduled → InProgress`, AuditLog `FS_ASSIGNED`, FS nhận "
-                    + "notification `FS_ASSIGNED`. Lịch đã có FS thì đổi sang FS mới: đơn giữ `InProgress`, FS cũ "
-                    + "nhận `FS_REASSIGNED`. Chỉ lịch `CHECKIN` đang `Pending`; FS phải thuộc cơ sở của lịch. "
-                    + "Quyền `appointment.assign` theo cơ sở.")
+                    + "notification `FS_ASSIGNED`. Chỉ lịch `CHECKIN` đang `Pending` và chưa có FS (đổi FS đã gán "
+                    + "không cho ở MVP → 409); FS phải thuộc cơ sở của lịch. Quyền `appointment.assign` theo cơ sở.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Đã phân công"),
             @ApiResponse(responseCode = "400", description = "Thiếu `staffId`, hoặc nhân viên không phải FS của cơ sở"),
             @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
             @ApiResponse(responseCode = "403", description = "Không phải role FM, hoặc ngoài phạm vi cơ sở"),
             @ApiResponse(responseCode = "404", description = "Lịch hẹn không tồn tại"),
-            @ApiResponse(responseCode = "409", description = "Lịch không phải check-in, không còn Pending, đã do "
-                    + "chính FS này phụ trách, hoặc đơn không ở trạng thái phù hợp (chờ phân công / đang tiếp đón)")
+            @ApiResponse(responseCode = "409", description = "Lịch không phải check-in, không còn Pending, đã có FS, "
+                    + "hoặc đơn không ở trạng thái chờ phân công")
     })
     @PostMapping("/appointments/{appointmentId}/staff")
     public ResponseEntity<ApiEnvelope<FmAppointmentResponse>> assignStaff(

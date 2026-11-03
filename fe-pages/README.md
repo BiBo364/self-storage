@@ -50,7 +50,7 @@ Inventory này là checklist bàn giao cho frontend. Mỗi page spec chi tiết 
 | 2 | [Đăng ký & xác minh email](shared/02-register-verify.md) | `/register`, `/verify-email?token=...` | Giúp customer hiểu account đang ở trạng thái nào và cần làm gì để hoàn tất xác minh. |
 | 3 | [Trung tâm thông báo](shared/03-notifications-center.md) | `/notifications` | Biến notification thành thông tin hoặc việc cần làm có thể scan, lọc và mở tới resource liên quan. |
 
-## Facility Manager — 11 page
+## Facility Manager — 12 page
 
 | # | Page | Route | UI/UX objective |
 |---|---|---|---|
@@ -65,6 +65,7 @@ Inventory này là checklist bàn giao cho frontend. Mỗi page spec chi tiết 
 | 9 | [Báo cáo cơ sở](fm/09-facility-report-dashboard.md) | `/fm/reports` | Giúp FM phát hiện nhanh vấn đề vận hành trong facility được giao. |
 | 10 | [Quản lý hóa đơn cơ sở](fm/10-invoice-management.md) | `/fm/invoices` | Giúp FM theo dõi công nợ theo facility mà không nhầm với thao tác thanh toán của customer. |
 | 11 | [Theo dõi khách hàng & hợp đồng](fm/11-customer-contract-overview.md) | `/fm/contracts` | Giúp FM chủ động theo dõi customer, thời hạn và payment status trong facility. |
+| 12 | [Theo dõi đơn thuê kho](fm/12-rental-order-list.md) | `/fm/rental-orders` | Giúp FM theo dõi toàn bộ đơn thuê, trạng thái xử lý và mở re-propose khi cần. |
 
 ## Facility Staff — 5 page
 
@@ -142,4 +143,4 @@ Mỗi page cần thiết kế các state phù hợp, không chỉ happy path:
 - Một số cross-flow page được suy ra từ actor description, chưa có UI flow đầy đủ: FM invoice, FM customer contract overview, FS support handling, BOM discount và BOM system-wide report.
 - Status, API contract, business rule và copy chỉ xuất hiện ở branch chưa merge vào `main` không được xem là product truth đã chốt.
 
-**Tổng: 42 business page specs** — 10 Customer, 3 Shared/Auth, 11 FM, 5 FS, 8 BOM và 5 Admin.
+**Tổng: 43 business page specs** — 10 Customer, 3 Shared/Auth, 12 FM, 5 FS, 8 BOM và 5 Admin.

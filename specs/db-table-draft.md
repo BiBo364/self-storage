@@ -559,7 +559,6 @@ Các bước:
 | `APPOINTMENT_CREATED` | Tạo lịch hẹn check-in, nội dung khác nhau theo recipient (xem NOTES) | Customer, FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron hủy lịch do khách không đến (nội dung gồm thời gian hẹn cũ và link đặt lịch mới) | Customer |
 | `FS_ASSIGNED` | FM phân công FS cho lịch hẹn, nội dung gồm thông tin lịch hẹn | FS |
-| `FS_REASSIGNED` | FM đổi FS phụ trách lịch hẹn sang người khác, gửi cho FS cũ (nội dung gồm mã đơn, thời gian hẹn, cơ sở) | FS |
 | `FS_ASSIGNMENT_REQUIRED` | FM cần phân công FS cho lịch check-in chưa có nhân viên phụ trách (nội dung gồm mã đơn, thời gian hẹn, cơ sở) | FM |
 | `HANDOVER_REJECTED` | Khách từ chối khoang tại check-in và muốn re-propose, nội dung gồm mã khoang và lý do | FM |
 | `HANDOVER_OVERDUE` | Cron đóng biên bản quá `due_at` khi khách đã đến, nội dung có link đặt lịch mới | Customer |
@@ -570,3 +569,24 @@ Các bước:
 | `DEPOSIT_REFUND_PENDING` | Cọc dư sẽ được hoàn | Customer |
 | `HANDOVER_COMPLETED` | Hoàn tất check-in và bàn giao khoang | Customer |
 | `OTHER` | Thông báo khẩn cấp thủ công khi chưa có type phù hợp | Recipient do người tạo chọn |
+
+# MediaUpload
+
+- id
+- account_id (N - 1: Account)
+- batch_id (UUID; các file cùng một đợt upload dùng chung)
+- public_id (nullable)
+- url (nullable)
+- bytes (nullable)
+- format (nullable)
+- status (`Uploading` / `Pending` / `Attached` / `Canceled` / `Deleted`)
+- created_at
+- updated_at
+
+**NOTES:**
+- Row `Uploading` tạo trước khi gọi storage; `Pending` sau khi lưu xong.
+- `DELETE /api/media/uploads/batch/{batchId}` mark `Canceled` + xoá asset `Uploading`/`Pending`;
+  `POST .../attach` mark `Attached` để Hủy không xoá.
+- Row `Uploading` chưa có `public_id`: upload completion thấy `Canceled` thì xoá asset vừa lưu.
+- Unique `public_id` khi khác null; index `(account_id, batch_id, status)`. Không audit upload/delete;
+  audit nằm ở flow gắn URL vào entity.

@@ -1,4 +1,4 @@
-import { Check, UserRound } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
 import {
   fsStaff,
@@ -10,16 +10,13 @@ import {
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 const TAB_LABEL: Record<ReturnRequestStatus, string> = {
   Pending: "Chờ phân công",
   Assigned: "Đã phân công",
 };
-
-const TAB_BUTTON =
-  "min-h-10 rounded-sm border border-border bg-surface px-4 text-[13px] font-bold text-muted transition-colors";
-const TAB_BUTTON_ACTIVE = "border-brand bg-brand-soft text-brand";
 
 function staffName(staffId: string | null) {
   return fsStaff.find((staff) => staff.id === staffId)?.name ?? null;
@@ -34,6 +31,7 @@ export function ReturnRequestQueuePage() {
 
   const list = items.filter((request) => request.status === tab);
   const pendingCount = items.filter((request) => request.status === "Pending").length;
+  const assignedCount = items.filter((request) => request.status === "Assigned").length;
   const openRequest = items.find((request) => request.id === openId) ?? null;
 
   function openDetails(request: ReturnRequest) {
@@ -56,35 +54,44 @@ export function ReturnRequestQueuePage() {
     }, 700);
   }
 
+  const counts: Record<ReturnRequestStatus, number> = {
+    Pending: pendingCount,
+    Assigned: assignedCount,
+  };
+
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Hàng chờ yêu cầu trả kho</h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Hàng chờ yêu cầu trả kho</h1>
+        <p className="mt-1.5 text-small text-muted">
           Yêu cầu trả kho khách gửi từ trang chi tiết hợp đồng — phân công FS phụ trách.
         </p>
       </div>
 
-      <div className="mb-6">
-        <DemoNotice tone="pending">
-          Sau khi phân công, hệ thống tự tạo lịch hẹn trả kho ở trang{" "}
-          <strong>Lịch hẹn &amp; phân công FS</strong> — không cần thao tác gì thêm ở đó.
-        </DemoNotice>
-      </div>
+      <DemoNotice tone="pending">
+        Sau khi phân công, hệ thống tự tạo lịch hẹn trả kho ở trang{" "}
+        <strong>Lịch hẹn &amp; phân công FS</strong> — không cần thao tác gì thêm ở đó.
+      </DemoNotice>
 
-      <div className="mb-6 flex items-center gap-2.5">
+      <div className="flex flex-wrap gap-1.5">
         {(["Pending", "Assigned"] as const).map((status) => (
           <button
             key={status}
-            className={`${TAB_BUTTON} ${tab === status ? TAB_BUTTON_ACTIVE : ""}`}
+            className={`inline-flex items-center gap-2 border-0 px-2.5 py-1.5 text-small font-semibold ${
+              tab === status
+                ? "bg-brand text-signal-ink"
+                : "bg-transparent text-muted hover:bg-surface-subtle hover:text-ink"
+            }`}
             onClick={() => setTab(status)}
           >
             {TAB_LABEL[status]}
-            {status === "Pending" && pendingCount > 0 && (
-              <span className="ml-2 rounded-full bg-warning/14 px-2 py-0.5 text-[11px] text-warning">
-                {pendingCount}
-              </span>
-            )}
+            <span
+              className={`px-1.5 text-label ${
+                tab === status ? "bg-signal-ink text-brand" : "bg-surface text-muted"
+              }`}
+            >
+              {counts[status]}
+            </span>
           </button>
         ))}
       </div>
@@ -92,30 +99,26 @@ export function ReturnRequestQueuePage() {
       {list.length === 0 ? (
         <SurfaceState variant="empty" title="Không có yêu cầu nào trong mục này" />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {list.map((request) => (
             <button
               key={request.id}
-              className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col"
+              className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
               onClick={() => openDetails(request)}
             >
               <div>
-                <p className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink">
-                  <UserRound size={15} /> {request.customerName}
-                </p>
-                <p className="mb-0 mt-1.5 text-[13px] text-muted">
+                <strong className="block text-small font-semibold text-ink">
+                  {request.customerName}
+                </strong>
+                <span className="mt-1 block text-label text-muted">
                   Khoang {request.unitCode} · Mong muốn trả ngày {request.preferredDate}
-                </p>
+                </span>
               </div>
-              {request.status === "Assigned" ? (
-                <span className="whitespace-nowrap rounded-full bg-success/14 px-[9px] py-[6px] text-[11px] font-extrabold text-success">
-                  FS: {staffName(request.staffId)}
-                </span>
-              ) : (
-                <span className="whitespace-nowrap rounded-full bg-warning/14 px-[9px] py-[6px] text-[11px] font-extrabold text-warning">
-                  Chờ phân công
-                </span>
-              )}
+              <StatusTag tone={request.status === "Assigned" ? "success" : "warning"}>
+                {request.status === "Assigned"
+                  ? `FS: ${staffName(request.staffId)}`
+                  : "Chờ phân công"}
+              </StatusTag>
             </button>
           ))}
         </div>
@@ -127,11 +130,9 @@ export function ReturnRequestQueuePage() {
           eyebrow={`Trả kho · ${openRequest.unitCode}`}
           onClose={() => setOpenId(null)}
         >
-          <div className="grid gap-2.5 text-[13px] text-muted">
-            <span>Mong muốn trả ngày {openRequest.preferredDate}</span>
-          </div>
+          <p className="text-small text-muted">Mong muốn trả ngày {openRequest.preferredDate}</p>
           {openRequest.reason && (
-            <p className="mb-0 mt-4 text-[13px] leading-[1.6] text-ink">{openRequest.reason}</p>
+            <p className="mt-4 text-small leading-relaxed text-ink">{openRequest.reason}</p>
           )}
 
           {openRequest.status === "Assigned" ? (
@@ -143,10 +144,10 @@ export function ReturnRequestQueuePage() {
             </div>
           ) : (
             <>
-              <label className="mt-6 grid gap-1.5 text-[12px] font-bold text-ink">
+              <label className="mt-6 grid gap-1.5 text-label text-muted">
                 Chọn nhân viên FS
                 <select
-                  className="rounded-sm border border-border bg-surface-subtle px-3 py-2.5 text-[13px] text-ink"
+                  className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
                   value={selectedStaffId}
                   onChange={(event) => setSelectedStaffId(event.target.value)}
                 >
@@ -172,6 +173,6 @@ export function ReturnRequestQueuePage() {
           )}
         </DetailPanel>
       )}
-    </main>
+    </div>
   );
 }

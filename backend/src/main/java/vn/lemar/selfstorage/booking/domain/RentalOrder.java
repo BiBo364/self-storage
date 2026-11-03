@@ -105,11 +105,6 @@ public class RentalOrder {
         return status == RentalOrderStatus.SCHEDULED;
     }
 
-    /** Đơn đã có FS phụ trách lịch check-in (đã qua bước phân công). */
-    public boolean isInProgress() {
-        return status == RentalOrderStatus.IN_PROGRESS;
-    }
-
     /** Spec 1.5: FM phân công FS cho lịch check-in → {@code Scheduled -> InProgress}. */
     public void startProgress() {
         if (status != RentalOrderStatus.SCHEDULED) {

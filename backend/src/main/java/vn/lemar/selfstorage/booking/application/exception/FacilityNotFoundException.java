@@ -5,4 +5,8 @@ public class FacilityNotFoundException extends RuntimeException {
     public FacilityNotFoundException() {
         super("Không tìm thấy cơ sở");
     }
+
+    public FacilityNotFoundException(String message) {
+        super(message);
+    }
 }

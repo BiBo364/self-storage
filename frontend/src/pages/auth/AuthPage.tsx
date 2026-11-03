@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Box, CalendarDays, Receipt } from "lucide-react";
 import { Navigate, View } from "../../app/types";
 import { Brand } from "../../components/ui/Brand";
 import type { Theme } from "../../components/ui/ThemeToggle";
@@ -6,6 +6,12 @@ import { ThemeToggle } from "../../components/ui/ThemeToggle";
 import { LoginForm } from "./LoginForm";
 import { RegisterForm } from "./RegisterForm";
 import { VerifyPanel } from "./VerifyPanel";
+
+const HIGHLIGHTS = [
+  { icon: Box, label: "Yêu cầu đặt kho", copy: "Theo dõi phản hồi từ FM." },
+  { icon: Receipt, label: "Hợp đồng & thanh toán", copy: "Xem hạn và hoá đơn." },
+  { icon: CalendarDays, label: "Lịch nhận kho", copy: "Chọn lịch bàn giao." },
+];
 
 export function AuthPage({
   view,
@@ -19,41 +25,55 @@ export function AuthPage({
   onThemeToggle: () => void;
 }) {
   const mode = view === "register" ? "register" : view === "verify" ? "verify" : "login";
+
   return (
-    <div className="block min-h-screen bg-background px-6 pb-20 pt-16 max-[760px]:px-4 max-[760px]:pb-[52px] max-[760px]:pt-[28px]">
-      <div className="grid w-[min(1060px,100%)] grid-cols-[minmax(0,0.85fr)_minmax(390px,1.15fr)] gap-[72px] max-[980px]:gap-[42px] max-[760px]:block mx-auto">
-        <div className="flex min-h-[620px] flex-col border-t-4 border-brand pb-5 pt-6 max-[760px]:min-h-0 max-[760px]:pb-0 max-[760px]:pt-[18px]">
-          <div className="mb-[18px] flex justify-end">
-            <ThemeToggle theme={theme} onToggle={onThemeToggle} />
-          </div>
-          <Brand
-            className="relative z-[1] self-start"
-            dotClassName="text-[#9ce0d3]"
-            onClick={() => navigate("/")}
-          />
-          <div className="my-auto max-w-[420px] max-[760px]:mb-9 max-[760px]:mt-[50px]">
-            <h1 className="m-0 text-[clamp(42px,5vw,60px)] leading-[1.06] tracking-[-0.045em] text-ink max-[760px]:text-[42px]">
-              Quản lý nhu cầu kho
-              <br />
-              <em className="not-italic text-brand">trong một nơi.</em>
-            </h1>
-            <p className="mt-6 max-w-[380px] text-[14px] leading-[1.7] text-muted max-[760px]:hidden">
-              Theo dõi yêu cầu lưu trữ, hợp đồng và hóa đơn.
-            </p>
-          </div>
-        </div>
-        <div className="block bg-transparent pt-6 max-[760px]:pt-[30px]">
-          <div className="mx-auto w-[min(430px,100%)] rounded-md border border-border bg-surface p-8 shadow-none max-[760px]:p-6">
+    <div className="min-h-screen bg-background px-6 pb-16 pt-7 max-[760px]:px-4 max-[760px]:pb-12 max-[760px]:pt-5">
+      <div className="mx-auto w-[min(1120px,100%)]">
+        <div className="flex items-center justify-between gap-4">
+          <Brand onClick={() => navigate("/")} />
+          <div className="flex items-center gap-4">
             <button
-              className="mb-[54px] inline-flex items-center gap-2 border-0 bg-transparent p-0 text-[12px] font-bold text-muted hover:text-brand max-[760px]:mb-[42px]"
+              className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
               onClick={() => navigate("/")}
             >
-              <ArrowLeft size={16} /> Trang chủ
+              <ArrowLeft size={15} /> Trang chủ
             </button>
+            <ThemeToggle theme={theme} onToggle={onThemeToggle} />
+          </div>
+        </div>
+
+        <div className="mt-12 grid grid-cols-[minmax(0,1.05fr)_minmax(390px,0.95fr)] gap-16 max-[980px]:gap-10 max-[860px]:mt-8 max-[860px]:grid-cols-1">
+          <section className="flex flex-col justify-between gap-12 max-[860px]:gap-7">
+            <div>
+              <span className="mb-5 block h-2 w-2 bg-brand" aria-hidden="true" />
+              <h1 className="m-0 max-w-[13ch] text-display text-ink">
+                Quản lý kho
+                <br />
+                <span className="text-accent">trong một nơi.</span>
+              </h1>
+              <p className="mt-6 max-w-[42ch] text-lead text-muted">
+                Theo dõi yêu cầu lưu trữ, hợp đồng và hoá đơn của bạn tại Kho Mộc.
+              </p>
+            </div>
+
+            <div className="grid max-w-[400px] gap-2 max-[860px]:hidden">
+              {HIGHLIGHTS.map(({ icon: Icon, label, copy }) => (
+                <div key={label} className="flex items-center gap-3 bg-surface px-4 py-3">
+                  <Icon size={17} className="shrink-0 text-muted" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <strong className="block text-small font-semibold text-ink">{label}</strong>
+                    <span className="block text-label text-muted">{copy}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="self-start border border-[var(--container-border)] bg-surface p-8 max-[760px]:p-5">
             {mode === "login" && <LoginForm navigate={navigate} />}
             {mode === "register" && <RegisterForm navigate={navigate} />}
             {mode === "verify" && <VerifyPanel navigate={navigate} />}
-          </div>
+          </section>
         </div>
       </div>
     </div>

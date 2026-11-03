@@ -1,9 +1,10 @@
-import { AlertTriangle, Loader2, Package, TrendingUp, Warehouse } from "lucide-react";
+import { AlertTriangle, Package, TrendingUp, Warehouse } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Navigate } from "../../app/types";
 import { formatPrice, unitTypes } from "../../mocks/catalog";
 import { FACILITY_OVERDUE_COUNT, fmUnits, type FmUnitStatus } from "../../mocks/fm";
 import { DemoNotice } from "../../components/ui/DemoNotice";
+import { FilterSelect } from "../../components/ui/FilterSelect";
 
 type PeriodFilter = "7d" | "30d" | "quarter";
 
@@ -35,9 +36,6 @@ const STATUS_BAR_COLOR: Record<FmUnitStatus, string> = {
   Maintenance: "bg-muted",
 };
 
-const FILTER_SELECT =
-  "min-w-[170px] rounded-sm border border-border bg-surface px-[11px] py-[10px] pr-[30px] text-[12px] font-semibold text-ink";
-
 function unitMonthlyPrice(unitTypeId: string) {
   return unitTypes.find((type) => type.id === unitTypeId)?.monthlyPrice ?? 0;
 }
@@ -47,8 +45,6 @@ export function FacilityReportPage({ navigate }: { navigate: Navigate }) {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
 
-  // Chỉ hẹn giờ tắt loading; việc bật loading nằm ở handler đổi filter để
-  // tránh setState đồng bộ trong effect (react-hooks/set-state-in-effect).
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 500);
     return () => window.clearTimeout(timer);
@@ -72,27 +68,25 @@ export function FacilityReportPage({ navigate }: { navigate: Navigate }) {
   }));
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Báo cáo cơ sở</h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Báo cáo cơ sở</h1>
+        <p className="mt-1.5 text-small text-muted">
           Tình hình vận hành của cơ sở bạn phụ trách — không bao gồm số liệu cơ sở khác.
         </p>
       </div>
 
-      <div className="mb-6">
-        <DemoNotice tone="pending">
-          Số liệu chỉ tính trong phạm vi cơ sở bạn quản lý — kiểm tra facility phải nằm ở tầng API,
-          không chỉ ẩn ở giao diện, để tránh rủi ro xem được số liệu cơ sở khác.
-        </DemoNotice>
-      </div>
+      <DemoNotice tone="pending">
+        Số liệu chỉ tính trong phạm vi cơ sở bạn quản lý — kiểm tra facility phải nằm ở tầng API,
+        không chỉ ẩn ở giao diện, để tránh rủi ro xem được số liệu cơ sở khác.
+      </DemoNotice>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <select
-          className={FILTER_SELECT}
+      <div className="grid grid-cols-2 items-end gap-3 max-[760px]:grid-cols-1">
+        <FilterSelect
+          label="Khoảng thời gian"
           value={period}
-          onChange={(event) => {
-            setPeriod(event.target.value as PeriodFilter);
+          onChange={(value) => {
+            setPeriod(value as PeriodFilter);
             setLoading(true);
           }}
         >
@@ -101,12 +95,12 @@ export function FacilityReportPage({ navigate }: { navigate: Navigate }) {
               {PERIOD_LABEL[value]}
             </option>
           ))}
-        </select>
-        <select
-          className={FILTER_SELECT}
+        </FilterSelect>
+        <FilterSelect
+          label="Loại kho"
           value={typeFilter}
-          onChange={(event) => {
-            setTypeFilter(event.target.value);
+          onChange={(value) => {
+            setTypeFilter(value);
             setLoading(true);
           }}
         >
@@ -116,84 +110,83 @@ export function FacilityReportPage({ navigate }: { navigate: Navigate }) {
               {type.name}
             </option>
           ))}
-        </select>
+        </FilterSelect>
       </div>
 
       {loading ? (
-        <div className="flex min-h-[200px] items-center justify-center gap-2 text-[13px] text-muted">
-          <Loader2 className="animate-[surface-state-spin_0.9s_linear_infinite]" size={18} />
-          Đang tính số liệu…
+        <div className="grid gap-2 bg-surface p-6" aria-label="Đang tính số liệu">
+          <span className="h-4 w-1/3 bg-surface-subtle" />
+          <span className="h-4 w-2/3 bg-surface-subtle" />
+          <span className="h-4 w-1/2 bg-surface-subtle" />
         </div>
       ) : (
         <>
-          <div className="mb-8 grid grid-cols-4 gap-4 max-[900px]:grid-cols-2 max-[520px]:grid-cols-1">
+          <div className="grid grid-cols-4 gap-2 max-[900px]:grid-cols-2 max-[520px]:grid-cols-1">
             <button
-              className="border border-border bg-surface p-5 text-left transition-colors hover:border-brand"
+              className="bg-surface p-5 text-left transition-colors hover:bg-surface-subtle"
               onClick={() => navigate("/fm/storage-units")}
             >
-              <p className="m-0 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-brand">
+              <span className="flex items-center gap-1.5 text-label text-muted">
                 <Warehouse size={13} /> Tỷ lệ lấp đầy
-              </p>
-              <p className="m-0 mt-2 text-[26px] font-bold text-ink">{occupancyRate}%</p>
-              <p className="mb-0 mt-1 text-[12px] text-muted">
+              </span>
+              <strong className="mt-2 block text-stat text-ink">{occupancyRate}%</strong>
+              <span className="mt-1 block text-label text-muted">
                 {rentedUnits.length}/{total} khoang đang cho thuê
-              </p>
+              </span>
             </button>
 
             <button
-              className="border border-border bg-surface p-5 text-left transition-colors hover:border-brand"
+              className="bg-surface p-5 text-left transition-colors hover:bg-surface-subtle"
               onClick={() => navigate("/fm/storage-units")}
             >
-              <p className="m-0 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-brand">
+              <span className="flex items-center gap-1.5 text-label text-muted">
                 <Package size={13} /> Khoang trống
-              </p>
-              <p className="m-0 mt-2 text-[26px] font-bold text-ink">{availableCount}</p>
-              <p className="mb-0 mt-1 text-[12px] text-muted">Sẵn sàng cho thuê ngay</p>
+              </span>
+              <strong className="mt-2 block text-stat text-ink">{availableCount}</strong>
+              <span className="mt-1 block text-label text-muted">Sẵn sàng cho thuê ngay</span>
             </button>
 
-            <div className="border border-border bg-surface p-5">
-              <p className="m-0 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-brand">
+            <div className="bg-surface p-5">
+              <span className="flex items-center gap-1.5 text-label text-muted">
                 <TrendingUp size={13} /> Doanh thu ước tính
-              </p>
-              <p className="m-0 mt-2 text-[22px] font-bold text-ink">
-                {formatPrice(estimatedRevenue)}đ
-              </p>
-              <p className="mb-0 mt-1 text-[12px] text-muted">Theo {PERIOD_LABEL[period]}</p>
+              </span>
+              <strong className="mt-2 block text-[22px] font-semibold text-ink">
+                {formatPrice(estimatedRevenue)} đ
+              </strong>
+              <span className="mt-1 block text-label text-muted">Theo {PERIOD_LABEL[period]}</span>
             </div>
 
             <button
-              className="border border-border bg-surface p-5 text-left transition-colors hover:border-brand"
+              className="bg-surface p-5 text-left transition-colors hover:bg-surface-subtle"
               onClick={() => navigate("/fm/support-requests")}
             >
-              <p className="m-0 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-danger">
+              <span className="flex items-center gap-1.5 text-label text-danger">
                 <AlertTriangle size={13} /> Ca quá hạn
-              </p>
-              <p className="m-0 mt-2 text-[26px] font-bold text-ink">{FACILITY_OVERDUE_COUNT}</p>
-              <p className="mb-0 mt-1 text-[12px] text-muted">Số liệu mẫu, chờ Flow 6</p>
+              </span>
+              <strong className="mt-2 block text-stat text-ink">{FACILITY_OVERDUE_COUNT}</strong>
+              <span className="mt-1 block text-label text-muted">Số liệu mẫu, chờ Flow 6</span>
             </button>
           </div>
 
-          <section className="border border-border bg-surface p-6">
-            <h2 className="m-0 mb-4 text-[15px] font-bold text-ink">
-              Phân bố khoang theo trạng thái
-            </h2>
-            <div className="grid gap-3">
+          <section className="bg-surface p-5">
+            <h2 className="text-[15px] font-semibold text-ink">Phân bố khoang theo trạng thái</h2>
+            <div className="mt-4 grid gap-3">
               {statusBreakdown.map(({ status, count }) => (
                 <div key={status} className="grid grid-cols-[120px_1fr_40px] items-center gap-3">
-                  <span className="text-[12px] font-bold text-muted">{STATUS_LABEL[status]}</span>
-                  <div className="h-2 overflow-hidden rounded-full bg-surface-subtle">
+                  <span className="text-label text-muted">{STATUS_LABEL[status]}</span>
+                  <div className="h-2 bg-surface-subtle">
                     <div
                       className={`h-full ${STATUS_BAR_COLOR[status]}`}
                       style={{ width: total === 0 ? "0%" : `${(count / total) * 100}%` }}
                     />
                   </div>
-                  <span className="text-right text-[12px] font-bold text-ink">{count}</span>
+                  <span className="text-right text-label font-semibold text-ink">{count}</span>
                 </div>
               ))}
             </div>
           </section>
         </>
       )}
-    </main>
+    </div>
   );
 }

@@ -1,9 +1,12 @@
-import { ArrowRight, CalendarClock, LifeBuoy, UserRound, Wallet } from "lucide-react";
+import { ArrowRight, CalendarClock, LifeBuoy, Wallet } from "lucide-react";
 import { useState } from "react";
 import type { Navigate } from "../../app/types";
 import { fmContracts, type FmContract } from "../../mocks/fm";
+import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { FilterSelect } from "../../components/ui/FilterSelect";
+import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 type LifecycleStatus = "Active" | "ExpiringSoon" | "Overdue";
@@ -15,21 +18,16 @@ const LIFECYCLE_LABEL: Record<LifecycleStatus, string> = {
   Overdue: "Quá hạn",
 };
 
-const LIFECYCLE_BADGE: Record<LifecycleStatus, string> = {
-  Active: "bg-success/14 text-success",
-  ExpiringSoon: "bg-warning/14 text-warning",
-  Overdue: "bg-danger/14 text-danger",
+const LIFECYCLE_TONE: Record<LifecycleStatus, "success" | "warning" | "danger"> = {
+  Active: "success",
+  ExpiringSoon: "warning",
+  Overdue: "danger",
 };
 
 const PAYMENT_LABEL: Record<FmContract["paymentStatus"], string> = {
   Paid: "Đã thanh toán",
   Overdue: "Chưa thanh toán",
 };
-
-const SECONDARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center gap-2 rounded-sm border border-brand bg-transparent px-4 text-[12.5px] font-[750] text-brand transition-colors duration-[180ms] ease hover:bg-brand hover:text-background";
-const FILTER_SELECT =
-  "min-w-[170px] rounded-sm border border-border bg-surface px-[11px] py-[10px] pr-[30px] text-[12px] font-semibold text-ink";
 
 const EXPIRING_SOON_DAYS = 14;
 
@@ -61,64 +59,60 @@ export function CustomerContractOverviewPage({ navigate }: { navigate: Navigate 
   const openContract = withStatus.find((contract) => contract.id === openId) ?? null;
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">
-          Theo dõi khách hàng &amp; hợp đồng
-        </h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Theo dõi khách hàng &amp; hợp đồng</h1>
+        <p className="mt-1.5 text-small text-muted">
           Toàn bộ hợp đồng đang hiệu lực tại cơ sở của bạn — chỉ xem, các thao tác duyệt thực hiện ở
           từng hàng chờ riêng.
         </p>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <select
-          className={FILTER_SELECT}
+      <div className="max-w-[320px]">
+        <FilterSelect
+          label="Trạng thái"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          onChange={(value) => setStatusFilter(value as StatusFilter)}
         >
           <option value="all">Tất cả trạng thái</option>
           <option value="Active">Còn hiệu lực</option>
           <option value="ExpiringSoon">Sắp hết hạn</option>
           <option value="Overdue">Quá hạn</option>
-        </select>
+        </FilterSelect>
       </div>
 
       {list.length === 0 ? (
         <SurfaceState variant="empty" title="Không có hợp đồng nào phù hợp bộ lọc" />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {list.map((contract) => (
             <button
               key={contract.id}
-              className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col"
+              className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
               onClick={() => setOpenId(contract.id)}
             >
               <div>
-                <p className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink">
-                  <UserRound size={15} /> {contract.customerName}
-                </p>
-                <p className="mb-0 mt-1.5 text-[13px] text-muted">
+                <strong className="block text-small font-semibold text-ink">
+                  {contract.customerName}
+                </strong>
+                <span className="mt-1 block text-label text-muted">
                   Khoang {contract.unitCode} · {contract.startDate} → {contract.endDate}
-                </p>
+                </span>
                 {(contract.hasOpenExtendRequest ||
                   contract.hasOpenReturnRequest ||
                   contract.hasOpenSupportRequest) && (
-                  <p className="mb-0 mt-1.5 flex items-center gap-1.5 text-[11px] font-bold text-brand">
+                  <span className="mt-1.5 flex items-center gap-1.5 text-label text-accent">
                     <ArrowRight size={12} /> Đang có yêu cầu mở liên quan
-                  </p>
+                  </span>
                 )}
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <span
-                  className={`whitespace-nowrap rounded-full px-[9px] py-[6px] text-[11px] font-extrabold ${LIFECYCLE_BADGE[contract.lifecycle]}`}
-                >
+              <div className="flex flex-col items-end gap-1.5">
+                <StatusTag tone={LIFECYCLE_TONE[contract.lifecycle]}>
                   {LIFECYCLE_LABEL[contract.lifecycle]}
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted">
-                  <Wallet size={12} /> {PAYMENT_LABEL[contract.paymentStatus]}
-                </span>
+                </StatusTag>
+                <StatusTag tone={contract.paymentStatus === "Paid" ? "success" : "danger"}>
+                  {PAYMENT_LABEL[contract.paymentStatus]}
+                </StatusTag>
               </div>
             </button>
           ))}
@@ -131,39 +125,49 @@ export function CustomerContractOverviewPage({ navigate }: { navigate: Navigate 
           eyebrow={`Hợp đồng · Khoang ${openContract.unitCode}`}
           onClose={() => setOpenId(null)}
         >
-          <div className="grid gap-2.5 text-[13px] text-muted">
+          <div className="grid gap-2 text-small text-muted">
             <span>
               Thời hạn: {openContract.startDate} → {openContract.endDate}
             </span>
             <span className="flex items-center gap-2">
-              Trạng thái:{" "}
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${LIFECYCLE_BADGE[openContract.lifecycle]}`}
-              >
+              Trạng thái:
+              <StatusTag tone={LIFECYCLE_TONE[openContract.lifecycle]}>
                 {LIFECYCLE_LABEL[openContract.lifecycle]}
-              </span>
+              </StatusTag>
             </span>
             <span>Thanh toán: {PAYMENT_LABEL[openContract.paymentStatus]}</span>
           </div>
 
-          <div className="mt-6 grid gap-2.5">
-            <button className={SECONDARY_BUTTON} onClick={() => navigate("/fm/invoices")}>
+          <div className="mt-6 grid gap-2">
+            <Button variant="secondary" className="w-full" onClick={() => navigate("/fm/invoices")}>
               <Wallet size={14} /> Xem hoá đơn liên quan
-            </button>
+            </Button>
             {openContract.hasOpenExtendRequest && (
-              <button className={SECONDARY_BUTTON} onClick={() => navigate("/fm/extend-requests")}>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => navigate("/fm/extend-requests")}
+              >
                 <CalendarClock size={14} /> Có yêu cầu gia hạn đang mở — xem hàng chờ
-              </button>
+              </Button>
             )}
             {openContract.hasOpenReturnRequest && (
-              <button className={SECONDARY_BUTTON} onClick={() => navigate("/fm/return-requests")}>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => navigate("/fm/return-requests")}
+              >
                 <ArrowRight size={14} /> Có yêu cầu trả kho đang mở — xem hàng chờ
-              </button>
+              </Button>
             )}
             {openContract.hasOpenSupportRequest && (
-              <button className={SECONDARY_BUTTON} onClick={() => navigate("/fm/support-requests")}>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => navigate("/fm/support-requests")}
+              >
                 <LifeBuoy size={14} /> Có yêu cầu hỗ trợ đang mở — xem hàng chờ
-              </button>
+              </Button>
             )}
           </div>
 
@@ -176,6 +180,6 @@ export function CustomerContractOverviewPage({ navigate }: { navigate: Navigate 
           )}
         </DetailPanel>
       )}
-    </main>
+    </div>
   );
 }
