@@ -18,10 +18,10 @@ Kiến trúc **modular monolith**: `vn.lemar.selfstorage` là package gốc,
 mỗi package con trực tiếp là một module độc lập (`identity`, `booking`, `facility`, ...).
 `ModuleStructureTest` chặn việc gọi sai chiều giữa các module ngay lúc build.
 
-Hiện tại `identity` xử lý xác thực/RBAC; `facility` cung cấp public API kiểm tra facility tồn tại
-và FM phụ trách facility; `audit` ghi vết thao tác nghiệp vụ nhạy cảm; `media` upload file
-(ảnh/PDF) lên Cloudinary; `booking` có luồng nội bộ convert request đã duyệt thành đơn + proposal
-([booking/conversion.md](booking/conversion.md)).
+Hiện tại `identity` xử lý xác thực/RBAC; `facility` cung cấp public API kiểm tra facility tồn tại,
+catalog cơ sở public và đọc khoang theo cơ sở; `audit` ghi vết thao tác nghiệp vụ nhạy cảm; `media`
+upload file (ảnh/PDF) lên Cloudinary và dọn asset theo batch; `booking` có luồng nội bộ convert
+request đã duyệt thành đơn + proposal ([booking/conversion.md](booking/conversion.md)).
 
 Layout trong một module:
 
@@ -91,7 +91,7 @@ hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V13__one_payment_success_per_invoice.sql`.
+Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V14__one_payment_success_per_invoice.sql`.
 V1/V2 có mirror ở `backend/sql/`
 — sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -114,9 +114,11 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
   khoang mới chưa reserve cho tới khi thanh toán cọc bổ sung; trường hợp `delta ≤ 0` cần follow-up reserve riêng.
 - V11 thêm type `DepositSupplement` cho hoá đơn chênh lệch cọc và 2 partial unique index: một `Deposit`
   active (Unpaid/Paid) + một `DepositSupplement` Unpaid trên mỗi đơn.
-- V12 thêm status `Duplicate` cho `payment_transactions` và audit action `PAYMENT_DUPLICATE`; dùng khi
+- V12 thêm `media_uploads` — theo dõi upload theo batch, dọn asset chưa attach khi Hủy (chi tiết ở
+  [routes/media/delete-batch.md](routes/media/delete-batch.md)).
+- V13 thêm status `Duplicate` cho `payment_transactions` và audit action `PAYMENT_DUPLICATE`; dùng khi
   một nguồn xác nhận Success thứ hai cho cùng invoice — tiền vào nhưng không ghi Success lần hai.
-- V13 thêm partial unique index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'`: DB
+- V14 thêm partial unique index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'`: DB
   chốt cuối cho bất biến một `PAY/Success` mỗi invoice. Migration fail nếu dữ liệu cũ đã vi phạm.
 
 Các migration khác trên main: V5 seed `order.expiry_days` (luồng convert), V6 bỏ `Expired` khỏi CHECK
@@ -174,14 +176,22 @@ chạy tay `backend/sql/dev/proposal-sample.sql` — **không** phải migration
 
 ## Upload file (module media)
 
-- FE upload qua `POST /api/media/uploads` (multipart, field `file`) → `{url, publicId, bytes, format}`;
-  URL dùng lại khi submit flow (ảnh hiện trạng, scan hợp đồng, ảnh giấy tờ).
+- FE upload qua `POST /api/media/uploads` (multipart, field `file`, `batchId` tuỳ chọn) →
+  `{url, publicId, bytes, format, batchId}`; URL dùng lại khi submit flow (ảnh hiện trạng,
+  scan hợp đồng, ảnh giấy tờ).
 - Validate JPEG/PNG/WebP/PDF ≤ 10MB (khớp cap free plan Cloudinary); sai → 400 message cụ thể.
 - Storage sau interface `FileStorage` (impl Cloudinary) — đổi provider chỉ thay impl.
 - File lưu theo folder `uploads/acc-{accountId}` — upload mồ côi vẫn truy vết được chủ sở hữu.
+- Mỗi upload ghi row `media_uploads` (`Uploading` → `Pending`). `DELETE /batch/{batchId}` dọn asset
+  chưa attach; `POST /batch/{batchId}/attach` đánh dấu `Attached` để không xoá nữa.
+- **Xoá media:** chỉ khi người dùng bấm X trên file đã upload **trong phase hiện tại**. Hủy/rời trang
+  không xoá; batch `Pending` được giữ để quay lại. Sau khi phase submit, file `Attached` — delete batch
+  bỏ qua. Order `Canceled` không xoá media (giữ evidence); order hard-delete/retention xử lý riêng.
 - Creds `CLOUDINARY_NAME/KEY/SECRET` để `@NotBlank` — thiếu là app chết lúc boot; test/CI dùng
   giá trị giả, không gọi mạng.
-- Chi tiết route: [routes/media/upload.md](routes/media/upload.md).
+- Chi tiết route: [routes/media/upload.md](routes/media/upload.md),
+  [routes/media/delete-batch.md](routes/media/delete-batch.md),
+  [routes/media/attach-batch.md](routes/media/attach-batch.md).
 
 ## Chạy & kiểm thử
 
@@ -244,4 +254,10 @@ bấm **Authorize** và dán token (không cần prefix `Bearer `) để gọi A
 | [routes/health.md](routes/health.md) | `GET /api/health` |
 | [routes/auth/login.md](routes/auth/login.md) | `POST /api/auth/login` |
 | [routes/auth/me.md](routes/auth/me.md) | `GET /api/auth/me` |
+| [routes/booking/invoice-list.md](routes/booking/invoice-list.md) | `GET /api/invoices` |
+| [routes/facility/public-list.md](routes/facility/public-list.md) | `GET /api/facilities` |
+| [routes/booking/fm-facility.md](routes/booking/fm-facility.md) | `GET /api/fm/facility` |
+| [routes/booking/fm-storage-units.md](routes/booking/fm-storage-units.md) | `GET /api/fm/storage-units` |
 | [routes/media/upload.md](routes/media/upload.md) | `POST /api/media/uploads` |
+| [routes/media/delete-batch.md](routes/media/delete-batch.md) | `DELETE /api/media/uploads/batch/{batchId}` |
+| [routes/media/attach-batch.md](routes/media/attach-batch.md) | `POST /api/media/uploads/batch/{batchId}/attach` |

@@ -12,7 +12,9 @@ import {
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { FilterSelect } from "../../components/ui/FilterSelect";
 import { FormField, SelectField } from "../../components/ui/FormField";
+import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 type StatusFilter = "all" | FmUnitStatus;
@@ -25,16 +27,13 @@ const STATUS_LABEL: Record<FmUnitStatus, string> = {
   Maintenance: "Bảo trì",
 };
 
-const STATUS_BADGE: Record<FmUnitStatus, string> = {
-  Available: "bg-success/14 text-success",
-  OnHold: "bg-warning/14 text-warning",
-  Reserved: "bg-warning/14 text-warning",
-  Rented: "bg-info/14 text-info",
-  Maintenance: "bg-surface-subtle text-muted",
+const STATUS_TONE: Record<FmUnitStatus, "success" | "warning" | "info" | "neutral"> = {
+  Available: "success",
+  OnHold: "warning",
+  Reserved: "warning",
+  Rented: "info",
+  Maintenance: "neutral",
 };
-
-const FILTER_SELECT =
-  "min-w-[170px] rounded-sm border border-border bg-surface px-[11px] py-[10px] pr-[30px] text-[12px] font-semibold text-ink";
 
 function unitTypeName(unitTypeId: string) {
   return unitTypes.find((type) => type.id === unitTypeId)?.name ?? unitTypeId;
@@ -89,11 +88,11 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
   }
 
   return (
-    <main>
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div className="grid gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Quản lý khoang chứa</h1>
-          <p className="mt-2 text-[13px] text-muted">
+          <h1 className="m-0 text-title text-ink">Quản lý khoang chứa</h1>
+          <p className="mt-1.5 text-small text-muted">
             Danh sách khoang vật lý tại cơ sở của bạn — giá thuê do BOM quản lý theo loại kho, không
             chỉnh ở đây.
           </p>
@@ -104,9 +103,9 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
       </div>
 
       {creating && (
-        <form onSubmit={submitCreate} className="mb-8 border border-border bg-surface p-6">
-          <h2 className="m-0 mb-4 text-[15px] font-bold text-ink">Khoang mới</h2>
-          <div className="grid grid-cols-3 gap-4 max-[760px]:grid-cols-1">
+        <form onSubmit={submitCreate} className="bg-surface p-5">
+          <h2 className="text-section text-ink">Khoang mới</h2>
+          <div className="mt-4 grid grid-cols-3 gap-4 max-[760px]:grid-cols-1">
             <FormField label="Mã khoang" name="unitCode" placeholder="VD: TD-108" required />
             <SelectField
               label="Loại kho"
@@ -116,13 +115,13 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
             />
             <FormField label="Vị trí" name="location" placeholder="VD: Tầng 2 · Dãy C" required />
           </div>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex items-center gap-2.5">
             <Button type="submit">
               <Check size={16} /> Lưu khoang
             </Button>
             <button
               type="button"
-              className="border-0 bg-transparent px-3 py-2 text-[12px] text-muted hover:text-brand"
+              className="border-0 bg-transparent px-3 py-2 text-small text-muted hover:text-ink"
               onClick={() => setCreating(false)}
             >
               Huỷ
@@ -131,11 +130,11 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
         </form>
       )}
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <select
-          className={FILTER_SELECT}
+      <div className="grid grid-cols-2 items-end gap-3 max-[760px]:grid-cols-1">
+        <FilterSelect
+          label="Trạng thái"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          onChange={(value) => setStatusFilter(value as StatusFilter)}
         >
           <option value="all">Tất cả trạng thái</option>
           <option value="Available">Trống</option>
@@ -143,42 +142,34 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
           <option value="Reserved">Đã đặt trước</option>
           <option value="Rented">Đang cho thuê</option>
           <option value="Maintenance">Bảo trì</option>
-        </select>
-        <select
-          className={FILTER_SELECT}
-          value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value)}
-        >
+        </FilterSelect>
+        <FilterSelect label="Loại kho" value={typeFilter} onChange={setTypeFilter}>
           <option value="all">Tất cả loại kho</option>
           {unitTypes.map((type) => (
             <option key={type.id} value={type.id}>
               {type.name}
             </option>
           ))}
-        </select>
+        </FilterSelect>
       </div>
 
       {list.length === 0 ? (
         <SurfaceState variant="empty" title="Không có khoang nào phù hợp bộ lọc" />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {list.map((unit) => (
             <button
               key={unit.id}
-              className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col"
+              className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
               onClick={() => openDetails(unit)}
             >
               <div>
-                <p className="m-0 text-[15px] font-bold text-ink">{unit.code}</p>
-                <p className="mb-0 mt-1.5 text-[13px] text-muted">
+                <strong className="block text-[1rem] font-medium text-ink">{unit.code}</strong>
+                <span className="mt-1 block text-label text-muted">
                   {unitTypeName(unit.unitTypeId)} · {unit.size} · {unit.location}
-                </p>
+                </span>
               </div>
-              <span
-                className={`whitespace-nowrap rounded-full px-[9px] py-[6px] text-[11px] font-extrabold ${STATUS_BADGE[unit.status]}`}
-              >
-                {STATUS_LABEL[unit.status]}
-              </span>
+              <StatusTag tone={STATUS_TONE[unit.status]}>{STATUS_LABEL[unit.status]}</StatusTag>
             </button>
           ))}
         </div>
@@ -190,15 +181,13 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
           eyebrow={`${unitTypeName(openUnit.unitTypeId)} · ${openUnit.size}`}
           onClose={() => setOpenId(null)}
         >
-          <div className="grid gap-2.5 text-[13px] text-muted">
+          <div className="grid gap-2 text-small text-muted">
             <span>Vị trí: {openUnit.location}</span>
-            <span>
-              Trạng thái hiện tại:{" "}
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${STATUS_BADGE[openUnit.status]}`}
-              >
+            <span className="flex items-center gap-2">
+              Trạng thái hiện tại:
+              <StatusTag tone={STATUS_TONE[openUnit.status]}>
                 {STATUS_LABEL[openUnit.status]}
-              </span>
+              </StatusTag>
             </span>
           </div>
 
@@ -211,11 +200,11 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
           )}
 
           {openUnit.status === "Available" && mode === "maintenance" && (
-            <div className="mt-6 border border-border bg-surface-subtle p-4">
-              <label className="grid gap-1.5 text-[12px] font-bold text-ink">
+            <div className="mt-6 bg-surface-subtle p-4">
+              <label className="grid gap-1.5 text-label text-muted">
                 Lý do chuyển bảo trì (bắt buộc, sẽ lưu vào nhật ký thao tác)
                 <textarea
-                  className="min-h-[80px] rounded-sm border border-border bg-surface p-2.5 text-[13px] font-normal text-ink"
+                  className="min-h-[80px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
                   value={maintenanceReason}
                   onChange={(event) => setMaintenanceReason(event.target.value)}
                   placeholder="VD: Phát hiện ẩm mốc, cần xử lý trước khi cho thuê tiếp…"
@@ -229,7 +218,7 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
                   <AlertTriangle size={16} /> Xác nhận chuyển bảo trì
                 </Button>
                 <button
-                  className="border-0 bg-transparent px-3 py-2 text-[12px] text-muted hover:text-brand"
+                  className="border-0 bg-transparent px-3 py-2 text-small text-muted hover:text-ink"
                   onClick={() => setMode("view")}
                 >
                   Quay lại
@@ -275,6 +264,6 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
           )}
         </DetailPanel>
       )}
-    </main>
+    </div>
   );
 }

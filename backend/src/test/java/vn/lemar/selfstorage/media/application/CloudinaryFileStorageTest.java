@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.cloudinary.Cloudinary;
@@ -27,6 +29,11 @@ class CloudinaryFileStorageTest {
     private void stubUpload(Map<String, Object> result) throws IOException {
         when(cloudinary.uploader()).thenReturn(uploader);
         when(uploader.upload(any(byte[].class), anyMap())).thenReturn(result);
+    }
+
+    private void stubDestroy(Map<String, Object> result) throws IOException {
+        when(cloudinary.uploader()).thenReturn(uploader);
+        when(uploader.destroy(eq("p"), anyMap())).thenReturn(result);
     }
 
     @Test
@@ -90,5 +97,48 @@ class CloudinaryFileStorageTest {
         assertThatThrownBy(() -> storage.store(new byte[]{1}, "fake.png", "image/png", "uploads/acc-1"))
                 .isInstanceOf(InvalidUploadException.class)
                 .hasMessage("File không đọc được hoặc không đúng định dạng ảnh/PDF");
+    }
+
+    @Test
+    void deletesAsset() throws IOException {
+        stubDestroy(Map.of("result", "ok"));
+
+        storage.delete("p");
+
+        verify(uploader).destroy(eq("p"), anyMap());
+    }
+
+    @Test
+    void treatsNotFoundAsSuccess() throws IOException {
+        stubDestroy(Map.of("result", "not found"));
+
+        storage.delete("p");
+
+        verify(uploader).destroy(eq("p"), anyMap());
+    }
+
+    @Test
+    void wrapsDeleteIOException() throws IOException {
+        when(cloudinary.uploader()).thenReturn(uploader);
+        when(uploader.destroy(eq("p"), anyMap())).thenThrow(new IOException("boom"));
+
+        assertThatThrownBy(() -> storage.delete("p"))
+                .isInstanceOf(MediaStorageException.class)
+                .hasCauseInstanceOf(IOException.class);
+    }
+
+    @Test
+    void rejectsUnexpectedDeleteResult() throws IOException {
+        stubDestroy(Map.of("result", "error"));
+
+        assertThatThrownBy(() -> storage.delete("p"))
+                .isInstanceOf(MediaStorageException.class);
+    }
+
+    @Test
+    void ignoresBlankPublicId() {
+        storage.delete(" ");
+
+        verifyNoInteractions(uploader);
     }
 }

@@ -15,6 +15,7 @@ import {
 import type { Navigate } from "../app/types";
 import { NotificationDetailDialog } from "../components/domain/NotificationDetailDialog";
 import { Button } from "../components/ui/Button";
+import { DemoNotice } from "../components/ui/DemoNotice";
 import { SurfaceState } from "../components/ui/SurfaceState";
 
 const GROUP_ICON: Record<NotificationGroup, typeof AlertTriangle> = {
@@ -28,11 +29,11 @@ const GROUP_ICON: Record<NotificationGroup, typeof AlertTriangle> = {
 const PAGE_SIZE = 20;
 
 const GROUP_ICON_CLASS: Record<NotificationGroup, string> = {
-  approval: "bg-success/14 text-success",
-  invoice: "bg-brand-soft text-brand",
-  assignment: "bg-brand-soft text-accent",
-  expiry: "bg-danger/14 text-danger",
-  other: "bg-muted/14 text-muted",
+  approval: "bg-success-soft text-success",
+  invoice: "bg-warning-soft text-warning",
+  assignment: "bg-info-soft text-info",
+  expiry: "bg-danger-soft text-danger",
+  other: "bg-surface-subtle text-muted",
 };
 
 export function NotificationsPage({ navigate }: { navigate: Navigate }) {
@@ -70,7 +71,6 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
     };
   }, []);
 
-  // Retry từ nút trong error state — setState nằm ở event handler, không phải effect.
   async function retry() {
     setIsLoading(true);
     setLoadError(false);
@@ -137,7 +137,6 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
       await markNotificationRead(notification.id);
       setItems((current) => {
         if (!current) return current;
-        // Đang lọc "Chưa đọc" thì item đã đọc phải rời danh sách.
         if (unreadOnly) return current.filter((item) => item.id !== notification.id);
         return current.map((item) =>
           item.id === notification.id ? { ...item, readAt: new Date().toISOString() } : item,
@@ -165,12 +164,20 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
     }
   }
 
+  function tabClass(active: boolean) {
+    return `border-0 px-2.5 py-1.5 text-small font-semibold ${
+      active
+        ? "bg-brand text-signal-ink"
+        : "bg-transparent text-muted hover:bg-surface-subtle hover:text-ink"
+    }`;
+  }
+
   return (
-    <main>
-      <div className="mb-8 flex items-start justify-between gap-5 max-[760px]:flex-col">
+    <div className="grid gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Trung tâm thông báo</h1>
-          <p className="mt-2 text-[13px] text-muted">
+          <h1 className="m-0 text-title text-ink">Trung tâm thông báo</h1>
+          <p className="mt-1.5 text-small text-muted">
             {isLoading
               ? "Đang tải thông báo…"
               : unreadCount > 0
@@ -178,34 +185,26 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
                 : "Bạn đã đọc hết thông báo"}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div
-            className="inline-flex overflow-hidden rounded-sm border border-border"
-            role="group"
-            aria-label="Lọc thông báo"
-          >
-            {(
-              [
-                ["all", "Tất cả"],
-                ["unread", "Chưa đọc"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                className={`border-0 px-[14px] py-[9px] text-[12px] font-bold transition-colors ${
-                  readFilter === value
-                    ? "bg-brand-soft text-ink"
-                    : "bg-transparent text-muted hover:text-ink"
-                }`}
-                aria-pressed={readFilter === value}
-                onClick={() => void changeFilter(value)}
-              >
-                {label}
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1.5" role="group" aria-label="Lọc thông báo">
+            <button
+              className={tabClass(readFilter === "all")}
+              aria-pressed={readFilter === "all"}
+              onClick={() => void changeFilter("all")}
+            >
+              Tất cả
+            </button>
+            <button
+              className={tabClass(readFilter === "unread")}
+              aria-pressed={readFilter === "unread"}
+              onClick={() => void changeFilter("unread")}
+            >
+              Chưa đọc
+            </button>
           </div>
           <Button
             variant="secondary"
+            size="sm"
             disabled={isLoading || unreadCount === 0}
             onClick={markAllRead}
           >
@@ -214,11 +213,7 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
         </div>
       </div>
 
-      {actionError && (
-        <p className="mb-4 mt-0 rounded-sm border border-danger/40 bg-danger/14 px-3 py-[11px] text-[12px] text-danger">
-          {actionError}
-        </p>
-      )}
+      {actionError && <DemoNotice tone="error">{actionError}</DemoNotice>}
 
       {isLoading ? (
         <SurfaceState variant="loading" title="Đang tải thông báo…" />
@@ -236,7 +231,7 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
         />
       ) : (
         <>
-          <div className="grid gap-2.5">
+          <div className="grid gap-2">
             {list.map((notification) => {
               const group = notificationGroup(notification.type);
               const Icon = GROUP_ICON[group];
@@ -244,26 +239,28 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
               return (
                 <button
                   key={notification.id}
-                  className={`flex items-start gap-4 border p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col max-[760px]:items-stretch ${
-                    isRead ? "border-border bg-surface" : "border-l-4 border-brand bg-brand-soft"
+                  className={`flex items-start gap-3 p-4 text-left transition-colors hover:bg-surface-subtle ${
+                    isRead ? "bg-surface" : "bg-brand-soft"
                   }`}
                   onClick={() => void openNotification(notification)}
                 >
                   <span
-                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${GROUP_ICON_CLASS[group]}`}
+                    className={`grid h-9 w-9 shrink-0 place-items-center ${GROUP_ICON_CLASS[group]}`}
                   >
                     <Icon size={17} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <p
-                        className={`m-0 text-[14px] ${isRead ? "font-semibold text-ink" : "font-bold text-ink"}`}
+                        className={`m-0 text-small ${isRead ? "font-normal text-muted" : "font-semibold text-ink"}`}
                       >
                         {notification.title}
                       </p>
-                      {!isRead && <span className="h-2 w-2 shrink-0 rounded-full bg-brand" />}
+                      {!isRead && (
+                        <span className="h-2 w-2 shrink-0 bg-brand" aria-label="Chưa đọc" />
+                      )}
                     </div>
-                    <p className="mb-0 mt-2 font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
+                    <p className="mt-1.5 text-label text-muted">
                       {formatNotificationTime(notification.createdAt)}
                     </p>
                   </div>
@@ -272,8 +269,13 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
             })}
           </div>
           {hasMore && (
-            <div className="mt-4 flex justify-center">
-              <Button variant="secondary" pending={isLoadingMore} onClick={() => void loadMore()}>
+            <div className="flex justify-center">
+              <Button
+                variant="secondary"
+                size="sm"
+                pending={isLoadingMore}
+                onClick={() => void loadMore()}
+              >
                 Xem thêm
               </Button>
             </div>
@@ -292,6 +294,6 @@ export function NotificationsPage({ navigate }: { navigate: Navigate }) {
           }}
         />
       )}
-    </main>
+    </div>
   );
 }

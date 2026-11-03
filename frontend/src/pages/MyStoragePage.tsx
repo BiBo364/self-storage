@@ -1,173 +1,198 @@
-import { ArrowRight, CalendarDays, MapPin, ReceiptText } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertTriangle, ArrowRight, Plus } from "lucide-react";
 import type { Navigate } from "../app/types";
-import { rentedStorage, StorageStatus } from "../mocks/customer";
-import { proposals } from "../mocks/proposals";
 import { formatPrice } from "../mocks/catalog";
+import { rentedStorage, type StorageStatus } from "../mocks/customer";
+import { proposals } from "../mocks/proposals";
 import { Button } from "../components/ui/Button";
-import { DemoNotice } from "../components/ui/DemoNotice";
+import { StatusTag } from "../components/ui/StatusTag";
 
-const statusLabel: Record<StorageStatus, string> = {
-  active: "Đang thuê",
-  expiring: "Sắp hết hạn",
-  overdue: "Đã quá hạn",
+const STATUS: Record<StorageStatus, { label: string; tone: "success" | "warning" | "danger" }> = {
+  active: { label: "Đang thuê", tone: "success" },
+  expiring: { label: "Sắp đến hạn", tone: "warning" },
+  overdue: { label: "Đã quá hạn", tone: "danger" },
 };
-
-const STATUS_BADGE: Record<StorageStatus, string> = {
-  active: "bg-success/18 text-success",
-  expiring: "bg-warning/18 text-warning",
-  overdue: "bg-danger/18 text-danger",
-};
-
-const FILTER_SELECT =
-  "min-w-[170px] rounded-sm border border-border bg-surface px-[11px] py-[10px] pr-[30px] text-[12px] font-semibold text-ink max-[760px]:w-full";
 
 export function MyStoragePage({ navigate }: { navigate: Navigate }) {
-  const [facility, setFacility] = useState("all");
-  const [sort, setSort] = useState("nearest");
-  const facilities = useMemo(
-    () => [...new Set(rentedStorage.map((storage) => storage.facility))],
-    [],
-  );
-  const filteredStorage = useMemo(() => {
-    const result = rentedStorage.filter(
-      (storage) => facility === "all" || storage.facility === facility,
-    );
-    return [...result].sort((left, right) => {
-      const leftDate = Date.parse(left.endDate.split("/").reverse().join("-"));
-      const rightDate = Date.parse(right.endDate.split("/").reverse().join("-"));
-      return sort === "nearest" ? leftDate - rightDate : rightDate - leftDate;
-    });
-  }, [facility, sort]);
-
   const pendingProposalCount = proposals.filter((proposal) => proposal.status === "pending").length;
+  const expiring = rentedStorage.filter((storage) => storage.status !== "active");
+  const rentalCount = rentedStorage.length;
+  const firstExpiring = expiring[0];
+  const taskCount = (pendingProposalCount > 0 ? 1 : 0) + (firstExpiring ? 1 : 0);
 
   return (
-    <main>
-      {pendingProposalCount > 0 && (
-        <div className="mb-6">
-          <DemoNotice tone="info">
-            <span className="flex flex-wrap items-center justify-between gap-3">
-              <span>Bạn có {pendingProposalCount} đề xuất khoang đang chờ xác nhận.</span>
-              <button
-                className="border-0 bg-transparent p-0 text-[11px] font-extrabold text-brand hover:underline"
-                onClick={() => navigate("/proposals")}
-              >
-                Xem đề xuất <ArrowRight size={14} className="inline" />
-              </button>
-            </span>
-          </DemoNotice>
+    <div className="grid gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="m-0 text-title text-ink">Kho của tôi</h1>
+          <p className="mt-1.5 text-small text-muted">
+            Theo dõi hợp đồng, thời hạn và việc cần làm tiếp theo.
+          </p>
         </div>
-      )}
-      <section aria-label="Kho đang thuê">
-        <div className="mb-[22px] flex items-center justify-between gap-6 max-[760px]:flex-col max-[760px]:items-stretch">
-          <Button
-            className="mr-auto max-[760px]:self-start"
-            onClick={() => navigate("/rental-requests/new")}
-          >
-            Thuê thêm kho <ArrowRight size={17} />
-          </Button>
-          <div className="flex items-center gap-2.5 max-[760px]:flex-col max-[760px]:items-stretch">
-            <label className="grid gap-[5px] font-mono text-[10px] font-medium uppercase leading-[1.4] text-muted">
-              Chi nhánh
-              <select
-                className={FILTER_SELECT}
-                value={facility}
-                onChange={(event) => setFacility(event.target.value)}
-              >
-                <option value="all">Tất cả chi nhánh</option>
-                {facilities.map((item) => (
-                  <option key={item} value={item}>
-                    {item.replace("Kho Mộc — ", "")}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-[5px] font-mono text-[10px] font-medium uppercase leading-[1.4] text-muted">
-              Sắp xếp
-              <select
-                className={FILTER_SELECT}
-                value={sort}
-                onChange={(event) => setSort(event.target.value)}
-              >
-                <option value="nearest">Sắp hết hạn trước</option>
-                <option value="farthest">Hạn xa nhất trước</option>
-              </select>
-            </label>
+        <Button onClick={() => navigate("/rental-requests/new")}>
+          Thuê thêm kho <Plus size={16} />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
+        <div className="bg-surface p-4">
+          <strong className="block text-stat text-ink">
+            {String(rentalCount).padStart(2, "0")}
+          </strong>
+          <span className="text-label text-muted">Khoang đang thuê</span>
+        </div>
+        <div className="bg-surface p-4">
+          <strong className="block text-stat text-ink">
+            {String(pendingProposalCount).padStart(2, "0")}
+          </strong>
+          <span className="text-label text-muted">Đề xuất chờ xác nhận</span>
+        </div>
+        <div className="bg-surface p-4">
+          <strong className="block text-stat text-ink">
+            {String(expiring.length).padStart(2, "0")}
+          </strong>
+          <span className="text-label text-muted">Khoang cần chú ý</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_312px] items-start gap-8 max-[1100px]:grid-cols-1">
+        <section>
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+              <span className="h-2 w-2 bg-brand" aria-hidden="true" />
+              Hợp đồng đang hoạt động
+            </h2>
+            <span className="text-label text-muted">{rentedStorage.length} hợp đồng</span>
           </div>
-        </div>
-        <div className="grid gap-3.5">
-          {filteredStorage.map((storage) => (
-            <StorageCard key={storage.id} storage={storage} navigate={navigate} />
-          ))}
-        </div>
-      </section>
-    </main>
-  );
-}
+          <div className="grid gap-3">
+            {rentedStorage.map((storage) => {
+              const status = STATUS[storage.status];
+              return (
+                <article key={storage.id} className="border border-border bg-surface p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <strong className="whitespace-nowrap text-stat text-ink">
+                          {storage.unitCode}
+                        </strong>
+                        <span className="text-label text-muted">{storage.size}</span>
+                      </div>
+                      <strong className="mt-1 block truncate text-small font-semibold text-ink">
+                        {storage.facility}
+                      </strong>
+                      <span className="mt-0.5 block truncate text-label text-muted">
+                        {storage.district}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <StatusTag tone={status.tone}>{status.label}</StatusTag>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate(`/my-storage/${storage.id}`)}
+                      >
+                        Xem
+                      </Button>
+                    </div>
+                  </div>
+                  <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-border pt-4 max-[760px]:grid-cols-1">
+                    <div>
+                      <dt className="text-label text-muted">Thời hạn</dt>
+                      <dd className="m-0 mt-1 whitespace-nowrap text-small text-ink">
+                        {storage.startDate} → {storage.endDate}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-label text-muted">Giá thuê</dt>
+                      <dd className="m-0 mt-1 text-small font-semibold text-ink">
+                        {formatPrice(storage.monthlyPrice)} đ / tháng
+                      </dd>
+                    </div>
+                  </dl>
+                  {/* Chỉ hiện khi sắp đến hạn / quá hạn. TẠM: mock dùng status; API thật trả is_expiring_soon / is_overdue / has_unpaid_invoice. */}
+                  {storage.status !== "active" && (
+                    <div
+                      className={`mt-4 flex items-center justify-between gap-4 px-3 py-2.5 ${
+                        storage.status === "overdue"
+                          ? "bg-danger-soft text-danger"
+                          : "bg-warning-soft text-warning"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-small font-semibold">
+                        <AlertTriangle size={16} /> {storage.paymentLabel}
+                      </span>
+                      <button
+                        className="inline-flex shrink-0 items-center gap-1 border-0 bg-transparent p-0 text-label font-bold hover:underline"
+                        onClick={() => navigate("/invoices")}
+                      >
+                        Thanh toán <ArrowRight size={14} />
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </section>
 
-function StorageCard({
-  storage,
-  navigate,
-}: {
-  storage: (typeof rentedStorage)[number];
-  navigate: Navigate;
-}) {
-  return (
-    <article className="grid grid-cols-[minmax(0,1fr)_290px] overflow-hidden border border-border bg-surface max-[760px]:grid-cols-1">
-      <div className="p-6">
-        <div className="flex items-center justify-between gap-5">
-          <div>
-            <p className="m-0 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-brand">
-              Khoang {storage.unitCode}
+        <aside className="grid gap-4">
+          <div className="bg-surface-subtle p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-small font-semibold text-ink">
+                <span className="h-2 w-2 bg-brand" aria-hidden="true" />
+                Việc cần làm
+              </h2>
+              <span className="text-label text-muted">{String(taskCount).padStart(2, "0")}</span>
+            </div>
+            <div className="grid gap-2">
+              {pendingProposalCount > 0 && (
+                <button
+                  className="flex items-start justify-between gap-3 bg-surface p-3 text-left"
+                  onClick={() => navigate("/proposals")}
+                >
+                  <span>
+                    <strong className="block text-small font-semibold text-ink">
+                      Xác nhận đề xuất khoang
+                    </strong>
+                    <span className="mt-0.5 block text-label text-muted">
+                      {pendingProposalCount} đề xuất đang chờ phản hồi.
+                    </span>
+                  </span>
+                  <ArrowRight size={16} className="mt-0.5 shrink-0 text-muted" />
+                </button>
+              )}
+              {firstExpiring && (
+                <button
+                  className="flex items-start justify-between gap-3 bg-surface p-3 text-left"
+                  onClick={() => navigate("/invoices")}
+                >
+                  <span>
+                    <strong className="block text-small font-semibold text-ink">
+                      Thanh toán khoang {firstExpiring.unitCode}
+                    </strong>
+                    <span className="mt-0.5 block text-label text-muted">
+                      {firstExpiring.paymentLabel}
+                    </span>
+                  </span>
+                  <ArrowRight size={16} className="mt-0.5 shrink-0 text-muted" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-[var(--dark)] p-4 text-[var(--on-dark-ink)]">
+            <h2 className="text-small font-semibold">Hỗ trợ nhanh</h2>
+            <p className="mt-1.5 text-small text-[rgba(233,234,230,.7)]">
+              Báo sự cố khoang, khoá truy cập hoặc yêu cầu hỗ trợ tại cơ sở.
             </p>
-            <h3 className="mb-0 mt-1 text-[18px] tracking-[-0.02em]">{storage.facility}</h3>
+            <a
+              className="mt-4 inline-flex min-h-[38px] items-center gap-2 border-2 border-on-dark-border px-3 text-small font-semibold text-on-dark-ink hover:border-on-dark-border-hover hover:bg-on-dark-bg-hover"
+              href="mailto:hello@khomoc.example"
+            >
+              Gửi yêu cầu hỗ trợ <ArrowRight size={16} />
+            </a>
           </div>
-          <span
-            className={`whitespace-nowrap rounded-full px-[9px] py-[6px] text-[11px] font-extrabold ${STATUS_BADGE[storage.status]}`}
-          >
-            {statusLabel[storage.status]}
-          </span>
-        </div>
-        <p className="mb-6 mt-3.5 flex items-center gap-[7px] text-[13px] text-muted">
-          <MapPin size={16} /> {storage.district}
-        </p>
-        <div className="flex items-center gap-10 max-[760px]:flex-wrap max-[760px]:gap-[18px_30px]">
-          <div className="grid gap-[3px]">
-            <span className="font-mono text-[10px] font-medium uppercase text-muted">
-              Diện tích
-            </span>
-            <strong className="text-[13px]">{storage.size}</strong>
-          </div>
-          <div className="grid gap-[3px]">
-            <span className="font-mono text-[10px] font-medium uppercase text-muted">
-              Thời hạn đến
-            </span>
-            <strong className="text-[13px]">{storage.endDate}</strong>
-          </div>
-          <div className="grid gap-[3px]">
-            <span className="font-mono text-[10px] font-medium uppercase text-muted">Giá thuê</span>
-            <strong className="text-[13px]">{formatPrice(storage.monthlyPrice)}đ / tháng</strong>
-          </div>
-        </div>
+        </aside>
       </div>
-      <div className="flex flex-col justify-between gap-7 border-l border-border bg-surface-subtle p-6 shadow-[inset_1px_0_var(--border)] max-[760px]:gap-5 max-[760px]:border-l-0 max-[760px]:border-t max-[760px]:border-border">
-        <div className="flex items-start gap-2 text-[12px] leading-[1.4] text-muted">
-          <ReceiptText size={16} />
-          <span>{storage.paymentLabel}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" onClick={() => navigate(`/my-storage/${storage.id}`)}>
-            Xem chi tiết <ArrowRight size={16} />
-          </Button>
-          <button
-            className="border-0 bg-transparent px-0 py-2 text-[12px] text-muted hover:text-brand"
-            onClick={() => navigate("/appointments/new")}
-          >
-            <CalendarDays size={16} /> Lịch hẹn
-          </button>
-        </div>
-      </div>
-    </article>
+    </div>
   );
 }

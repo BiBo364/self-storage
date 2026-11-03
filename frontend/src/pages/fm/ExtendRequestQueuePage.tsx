@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, UserRound, X } from "lucide-react";
+import { AlertTriangle, Check, X } from "lucide-react";
 import { useState } from "react";
 import { formatPrice } from "../../mocks/catalog";
 import {
@@ -9,6 +9,8 @@ import {
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { FilterSelect } from "../../components/ui/FilterSelect";
+import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 type StatusFilter = "all" | ExtendRequestStatus;
@@ -19,14 +21,11 @@ const STATUS_LABEL: Record<ExtendRequestStatus, string> = {
   Rejected: "Đã từ chối",
 };
 
-const STATUS_BADGE: Record<ExtendRequestStatus, string> = {
-  PendingApproval: "bg-warning/14 text-warning",
-  ApprovedPendingPayment: "bg-success/14 text-success",
-  Rejected: "bg-danger/14 text-danger",
+const STATUS_TONE: Record<ExtendRequestStatus, "warning" | "success" | "danger"> = {
+  PendingApproval: "warning",
+  ApprovedPendingPayment: "success",
+  Rejected: "danger",
 };
-
-const FILTER_SELECT =
-  "min-w-[220px] rounded-sm border border-border bg-surface px-[11px] py-[10px] pr-[30px] text-[12px] font-semibold text-ink";
 
 function estimatedInvoice(request: ExtendRequest) {
   return request.extraMonths * request.monthlyPrice;
@@ -76,56 +75,54 @@ export function ExtendRequestQueuePage() {
   }
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Hàng chờ yêu cầu gia hạn</h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Hàng chờ yêu cầu gia hạn</h1>
+        <p className="mt-1.5 text-small text-muted">
           Yêu cầu gia hạn hợp đồng khách gửi — duyệt để tạo hoá đơn gia hạn, hoặc từ chối.
         </p>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <select
-          className={FILTER_SELECT}
+      <div className="max-w-[320px]">
+        <FilterSelect
+          label="Trạng thái"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          onChange={(value) => setStatusFilter(value as StatusFilter)}
         >
           <option value="all">Tất cả trạng thái</option>
           <option value="PendingApproval">
-            Chờ duyệt {pendingCount > 0 && `(${pendingCount})`}
+            Chờ duyệt{pendingCount > 0 ? ` (${pendingCount})` : ""}
           </option>
           <option value="ApprovedPendingPayment">Đã duyệt · chờ thanh toán</option>
           <option value="Rejected">Đã từ chối</option>
-        </select>
+        </FilterSelect>
       </div>
 
       {list.length === 0 ? (
         <SurfaceState variant="empty" title="Không có yêu cầu nào phù hợp bộ lọc" />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {list.map((request) => (
             <button
               key={request.id}
-              className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col"
+              className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
               onClick={() => openDetails(request)}
             >
               <div>
-                <p className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink">
-                  <UserRound size={15} /> {request.customerName}
-                </p>
-                <p className="mb-0 mt-1.5 text-[13px] text-muted">
+                <strong className="block text-small font-semibold text-ink">
+                  {request.customerName}
+                </strong>
+                <span className="mt-1 block text-label text-muted">
                   Khoang {request.unitCode} · Gia hạn {request.extraMonths} tháng · Hết hạn hiện tại{" "}
                   {request.currentEndDate}
-                </p>
-                <p className="mb-0 mt-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
+                </span>
+                <span className="mt-1 block text-label text-muted">
                   Gửi lúc {request.requestedAt}
-                </p>
+                </span>
               </div>
-              <span
-                className={`whitespace-nowrap rounded-full px-[9px] py-[6px] text-[11px] font-extrabold ${STATUS_BADGE[request.status]}`}
-              >
+              <StatusTag tone={STATUS_TONE[request.status]}>
                 {STATUS_LABEL[request.status]}
-              </span>
+              </StatusTag>
             </button>
           ))}
         </div>
@@ -137,21 +134,21 @@ export function ExtendRequestQueuePage() {
           eyebrow={`Gia hạn · Khoang ${openRequest.unitCode}`}
           onClose={() => setOpenId(null)}
         >
-          <div className="grid gap-2.5 text-[13px] text-muted">
+          <div className="grid gap-2 text-small text-muted">
             <span>Hết hạn hiện tại: {openRequest.currentEndDate}</span>
             <span>Gia hạn thêm: {openRequest.extraMonths} tháng</span>
-            <span>Giá thuê hiện tại: {formatPrice(openRequest.monthlyPrice)}đ / tháng</span>
+            <span>Giá thuê hiện tại: {formatPrice(openRequest.monthlyPrice)} đ / tháng</span>
           </div>
 
-          <div className="mt-4 grid gap-2 border border-border bg-surface-subtle p-3.5 text-[12px]">
-            <div className="flex items-center justify-between">
-              <span className="text-muted">Hoá đơn gia hạn dự kiến</span>
-              <strong>{formatPrice(estimatedInvoice(openRequest))}đ</strong>
-            </div>
+          <div className="mt-4 flex items-center justify-between gap-4 bg-surface-subtle p-3.5 text-small">
+            <span className="text-muted">Hoá đơn gia hạn dự kiến</span>
+            <strong className="font-semibold text-ink">
+              {formatPrice(estimatedInvoice(openRequest))} đ
+            </strong>
           </div>
 
           {openRequest.status === "PendingApproval" && mode === "view" && (
-            <div className="mt-6 flex items-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-2.5">
               <Button pending={busyId === openRequest.id} onClick={() => approve(openRequest)}>
                 {busyId !== openRequest.id && <Check size={16} />}
                 Duyệt gia hạn
@@ -163,11 +160,11 @@ export function ExtendRequestQueuePage() {
           )}
 
           {openRequest.status === "PendingApproval" && mode === "reject" && (
-            <div className="mt-6 border border-border bg-surface-subtle p-4">
-              <label className="grid gap-1.5 text-[12px] font-bold text-ink">
+            <div className="mt-6 bg-surface-subtle p-4">
+              <label className="grid gap-1.5 text-label text-muted">
                 Lý do từ chối
                 <textarea
-                  className="min-h-[80px] rounded-sm border border-border bg-surface p-2.5 text-[13px] font-normal text-ink"
+                  className="min-h-[80px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
                   value={rejectReason}
                   onChange={(event) => setRejectReason(event.target.value)}
                   placeholder="Cho khách biết vì sao yêu cầu chưa được duyệt…"
@@ -178,7 +175,7 @@ export function ExtendRequestQueuePage() {
                   <AlertTriangle size={16} /> Xác nhận từ chối
                 </Button>
                 <button
-                  className="border-0 bg-transparent px-3 py-2 text-[12px] text-muted hover:text-brand"
+                  className="border-0 bg-transparent px-3 py-2 text-small text-muted hover:text-ink"
                   onClick={() => setMode("view")}
                 >
                   Quay lại
@@ -201,6 +198,6 @@ export function ExtendRequestQueuePage() {
           )}
         </DetailPanel>
       )}
-    </main>
+    </div>
   );
 }

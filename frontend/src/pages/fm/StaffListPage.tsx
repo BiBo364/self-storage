@@ -1,4 +1,4 @@
-import { CalendarDays, LifeBuoy, Mail, Phone, Undo2, UserRound } from "lucide-react";
+import { CalendarDays, LifeBuoy, Mail, Phone, Undo2 } from "lucide-react";
 import { useState } from "react";
 import {
   fmAppointments,
@@ -7,8 +7,9 @@ import {
   supportRequests,
   type FsStaff,
 } from "../../mocks/fm";
-import { SurfaceState } from "../../components/ui/SurfaceState";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { StatusTag } from "../../components/ui/StatusTag";
+import { SurfaceState } from "../../components/ui/SurfaceState";
 
 type WorkItem = {
   id: string;
@@ -46,10 +47,10 @@ export function StaffListPage() {
   const openStaff = fsStaff.find((staff) => staff.id === openId) ?? null;
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Danh sách nhân viên FS</h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Danh sách nhân viên FS</h1>
+        <p className="mt-1.5 text-small text-muted">
           Nhân viên hiện trường được gán vào cơ sở của bạn — chỉ xem, việc gán/xoá thuộc quyền
           Admin.
         </p>
@@ -62,33 +63,27 @@ export function StaffListPage() {
           description="Nếu cần thêm nhân sự, gửi yêu cầu qua Business Operation Manager."
         />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {fsStaff.map((staff) => {
             const workload = workItemsForStaff(staff.id).length;
             return (
               <button
                 key={staff.id}
-                className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col"
+                className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
                 onClick={() => setOpenId(staff.id)}
               >
                 <div>
-                  <p className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink">
-                    <UserRound size={15} /> {staff.name}
-                  </p>
-                  <p className="mb-0 mt-1.5 flex items-center gap-2 text-[13px] text-muted">
+                  <strong className="block text-small font-semibold text-ink">{staff.name}</strong>
+                  <span className="mt-1 flex items-center gap-1.5 text-label text-muted">
                     <Mail size={13} /> {staff.email}
-                  </p>
-                  <p className="mb-0 mt-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
+                  </span>
+                  <span className="mt-1 block text-label text-muted">
                     Gán vào cơ sở từ {staff.assignedAt}
-                  </p>
+                  </span>
                 </div>
-                <span
-                  className={`whitespace-nowrap rounded-full px-[9px] py-[6px] text-[11px] font-extrabold ${
-                    workload > 0 ? "bg-brand-soft text-brand" : "bg-surface-subtle text-muted"
-                  }`}
-                >
+                <StatusTag tone={workload > 0 ? "warning" : "neutral"}>
                   {workload > 0 ? `${workload} việc đang xử lý` : "Không có việc"}
-                </span>
+                </StatusTag>
               </button>
             );
           })}
@@ -96,7 +91,7 @@ export function StaffListPage() {
       )}
 
       {openStaff && <StaffDetailPanel staff={openStaff} onClose={() => setOpenId(null)} />}
-    </main>
+    </div>
   );
 }
 
@@ -105,31 +100,27 @@ function StaffDetailPanel({ staff, onClose }: { staff: FsStaff; onClose: () => v
 
   return (
     <DetailPanel title={staff.name} eyebrow="Nhân viên FS" onClose={onClose}>
-      <div className="grid gap-2.5 text-[13px] text-muted">
+      <div className="grid gap-2 text-small text-muted">
         <span className="flex items-center gap-2">
           <Mail size={14} /> {staff.email}
         </span>
         <span className="flex items-center gap-2">
           <Phone size={14} /> {staff.phone}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.06em]">
-          Gán vào cơ sở từ {staff.assignedAt}
-        </span>
+        <span>Gán vào cơ sở từ {staff.assignedAt}</span>
       </div>
 
-      <h3 className="mb-3 mt-6 text-[13px] font-bold text-ink">
-        Công việc đang được gán ({items.length})
-      </h3>
+      <h3 className="mt-6 text-label text-muted">Công việc đang được gán ({items.length})</h3>
       {items.length === 0 ? (
-        <p className="mb-0 text-[13px] text-muted">Hiện chưa có công việc nào được gán.</p>
+        <p className="mt-2 text-small text-muted">Hiện chưa có công việc nào được gán.</p>
       ) : (
-        <div className="grid gap-2">
+        <div className="mt-2 grid gap-2">
           {items.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-2.5 border border-border bg-surface-subtle p-3 text-[12.5px] text-ink"
+              className="flex items-center gap-2.5 bg-surface-subtle p-3 text-small text-ink"
             >
-              <item.icon size={14} className="shrink-0 text-brand" />
+              <item.icon size={14} className="shrink-0 text-accent" />
               {item.label}
             </div>
           ))}

@@ -7,11 +7,14 @@ import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.audit.domain.AuditAction;
 import vn.lemar.selfstorage.audit.domain.AuditEntityType;
+import vn.lemar.selfstorage.booking.domain.Appointment;
+import vn.lemar.selfstorage.booking.domain.AppointmentStatus;
 import vn.lemar.selfstorage.booking.domain.Invoice;
 import vn.lemar.selfstorage.booking.domain.InvoiceStatus;
 import vn.lemar.selfstorage.booking.domain.ProposalFeedback;
 import vn.lemar.selfstorage.booking.domain.ProposalStatus;
 import vn.lemar.selfstorage.booking.domain.RentalOrder;
+import vn.lemar.selfstorage.booking.repository.AppointmentRepository;
 import vn.lemar.selfstorage.booking.repository.InvoiceRepository;
 import vn.lemar.selfstorage.booking.repository.ProposalFeedbackRepository;
 import vn.lemar.selfstorage.facility.application.StorageUnitService;
@@ -23,7 +26,9 @@ import vn.lemar.selfstorage.notification.application.NotificationType;
  *
  * <p>Chưa xử lý (chưa có code ở module tương ứng, booking cũng không được gọi sang handover/tenancy):
  * {@code RentalContract Draft/Signed -> Canceled}, {@code HandoverRecord IN_PROGRESS -> CANCELED},
- * {@code Appointment Pending -> Canceled}, xử lý tiền cọc theo Flow 4.
+ * xử lý tiền cọc theo Flow 4.
+ *
+ * <p>Khoá: caller đã khoá đơn; cascade khoá lịch {@code Pending} sau đó, giữ thứ tự đơn → lịch.
  */
 @Component
 class RentalOrderCancellation {
@@ -32,15 +37,17 @@ class RentalOrderCancellation {
 
     private final ProposalFeedbackRepository proposalRepository;
     private final InvoiceRepository invoiceRepository;
+    private final AppointmentRepository appointmentRepository;
     private final StorageUnitService storageUnitService;
     private final AuditRecorder auditRecorder;
     private final OrderNotifier orderNotifier;
 
     RentalOrderCancellation(ProposalFeedbackRepository proposalRepository, InvoiceRepository invoiceRepository,
-                            StorageUnitService storageUnitService, AuditRecorder auditRecorder,
-                            OrderNotifier orderNotifier) {
+                            AppointmentRepository appointmentRepository, StorageUnitService storageUnitService,
+                            AuditRecorder auditRecorder, OrderNotifier orderNotifier) {
         this.proposalRepository = proposalRepository;
         this.invoiceRepository = invoiceRepository;
+        this.appointmentRepository = appointmentRepository;
         this.storageUnitService = storageUnitService;
         this.auditRecorder = auditRecorder;
         this.orderNotifier = orderNotifier;
@@ -74,6 +81,13 @@ class RentalOrderCancellation {
                     reason, actorAccountId);
         }
 
+        // Lịch Pending chưa diễn ra bị huỷ theo đơn; actor = System theo catalog audit.
+        for (Long appointmentId : appointmentRepository.findPendingIdsByOrderId(order.getId())) {
+            appointmentRepository.findByIdForUpdate(appointmentId)
+                    .filter(appointment -> appointment.getStatus() == AppointmentStatus.Pending)
+                    .ifPresent(appointment -> cancelAppointment(appointment, reason));
+        }
+
         // Chỉ nhả khoang khi đơn thực sự đang giữ nó: nhiều đơn có thể cùng unit_id (đã đồng ý, chưa cọc),
         // trả khoang của đơn khác đã cọc là sai.
         if (heldUnit && order.getUnitId() != null
@@ -89,6 +103,13 @@ class RentalOrderCancellation {
                 "outcome", OUTCOME_CANCELED, "reason", notifyReason);
         orderNotifier.notifyCustomer(order, NotificationType.RENTAL_ORDER_CANCELED, values);
         orderNotifier.notifyFacilityManager(order.getId(), NotificationType.RENTAL_ORDER_CANCELED, values);
+    }
+
+    private void cancelAppointment(Appointment appointment, String reason) {
+        appointment.cancel(reason);
+        record(AuditAction.APPOINTMENT_CANCELED, AuditEntityType.APPOINTMENT, appointment.getId(),
+                Map.of("status", AppointmentStatus.Pending.name()),
+                Map.of("status", AppointmentStatus.Canceled.name()), reason, null);
     }
 
     private void record(AuditAction action, AuditEntityType type, Long entityId, Object oldValue, Object newValue,

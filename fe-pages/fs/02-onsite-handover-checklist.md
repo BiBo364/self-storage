@@ -27,6 +27,30 @@ Một trang duy nhất dẫn dắt FS qua toàn bộ tiến trình bàn giao kho
 - [Sinh hợp đồng] → [Upload ảnh hợp đồng đã ký]
 - [Xác nhận đã thanh toán] (theo dõi trạng thái `Invoice`, không tự nhập tay)
 - [Hoàn tất bàn giao] — chỉ enable khi đủ 4 cờ
+- [Xoá ảnh/file] — chỉ hiện trên file đã upload **trong phase hiện tại**; xoá file khỏi checklist.
+
+## Upload media
+
+- Ảnh hiện trạng và bản scan hợp đồng upload qua `POST /api/media/uploads` (field `file`, `batchId`
+  optional); response trả `batchId`.
+- Mỗi file có một `batchId`. Trong phase hiện tại, mỗi ảnh/file có nút X →
+  `DELETE /api/media/uploads/batch/{batchId}`; `deleted > 0` thì file biến mất khỏi checklist.
+- Delete trả `deleted=0, skipped>0` (batch đã `Attached`, ví dụ reload sau submit) → **giữ file**
+  và báo “File đã được gắn với bước trước, không xoá được”. Delete 404 coi như file đã mất, bỏ khỏi
+  checklist.
+- Hủy/rời trang **không xoá**; batch `Pending` được giữ để quay lại. Hủy chỉ abort request: upload
+  có thể vẫn hoàn tất server-side và để lại row `Pending` với `batchId` FE không nhận được; row đó
+  do sweep/retention xử lý, không xoá ngay.
+- Khi submit phase (“Khách đồng ý” / “Xác nhận đã ký”), gọi
+  `POST /api/media/uploads/batch/{batchId}/attach`; sau đó file không sửa/xoá từ checklist.
+  - “Khách đồng ý” / “Xác nhận đã ký”: attach lỗi → chặn submit, hiện lỗi, bấm lại để retry;
+    `attached=0` là idempotent.
+  - “Khách từ chối”: attach best-effort (`Promise.allSettled`), không chặn reject; file có thể còn
+    `Pending` nếu attach lỗi.
+- `sessionStorage` key `kho-moc-fs-upload-v2:{appointmentId}` giữ `{url, publicId, name, format,
+  batchId}` cho ảnh hiện trạng và hợp đồng; reload khôi phục file. Prototype reset state bước về
+  `Pending` sau reload, nên file đã attach vẫn hiện X và delete sẽ trả `skipped`.
+- Order `Canceled` không xoá media (giữ evidence); order hard-delete/retention xử lý riêng.
 
 ## States / UI trạng thái
 - Stepper hiển thị rõ bước hiện tại, các bước đã hoàn thành có dấu tick + timestamp
@@ -35,6 +59,9 @@ Một trang duy nhất dẫn dắt FS qua toàn bộ tiến trình bàn giao kho
 - [Hoàn tất bàn giao] bị disable + tooltip giải thích rõ đang thiếu cờ nào nếu bấm sớm
 
 ## API liên quan
+- `POST /api/media/uploads` (field `file`, `batchId` optional)
+- `DELETE /api/media/uploads/batch/{batchId}` (X trên file trong phase hiện tại)
+- `POST /api/media/uploads/batch/{batchId}/attach` (submit phase)
 - `POST /api/staff/handover-records/{id}/verify-identity`
 - `POST /api/staff/handover-records/{id}/inspection` (body: `inspection_notes`, `inspection_photos[]`)
 - `POST /api/staff/handover-records/{id}/reject` (body: `reject_reason`)

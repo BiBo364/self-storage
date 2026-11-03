@@ -473,7 +473,7 @@ Các bước:
 | `MANUAL_REFUND_RECORDED` | Ghi nhận hoàn tiền thủ công | `PaymentTransaction` | Admin/FM |
 | `DEPOSIT_REFUND_REQUIRED` | Đổi khoang sau khi cọc dư — cần hoàn tiền | `RentalOrder` | Customer |
 | `APPOINTMENT_CREATED` | Tạo lịch hẹn check-in | `Appointment` | System |
-| `FS_ASSIGNED` | FM phân công FS | `Appointment` | FM |
+| `FS_ASSIGNED` | FM phân công FS | `Appointment`, `RentalOrder` | FM |
 | `APPOINTMENT_RESCHEDULED` | Lịch hẹn được đặt lại | `Appointment` | Customer/FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron xử lý khách không đến | `Appointment` | System |
 | `APPOINTMENT_CANCELED` | Hủy lịch chưa diễn ra khi đơn bị hủy (cancellation cascade) | `Appointment` | System |
@@ -571,3 +571,24 @@ Các bước:
 | `DEPOSIT_REFUND_PENDING` | Cọc dư sẽ được hoàn | Customer |
 | `HANDOVER_COMPLETED` | Hoàn tất check-in và bàn giao khoang | Customer |
 | `OTHER` | Thông báo khẩn cấp thủ công khi chưa có type phù hợp | Recipient do người tạo chọn |
+
+# MediaUpload
+
+- id
+- account_id (N - 1: Account)
+- batch_id (UUID; các file cùng một đợt upload dùng chung)
+- public_id (nullable)
+- url (nullable)
+- bytes (nullable)
+- format (nullable)
+- status (`Uploading` / `Pending` / `Attached` / `Canceled` / `Deleted`)
+- created_at
+- updated_at
+
+**NOTES:**
+- Row `Uploading` tạo trước khi gọi storage; `Pending` sau khi lưu xong.
+- `DELETE /api/media/uploads/batch/{batchId}` mark `Canceled` + xoá asset `Uploading`/`Pending`;
+  `POST .../attach` mark `Attached` để Hủy không xoá.
+- Row `Uploading` chưa có `public_id`: upload completion thấy `Canceled` thì xoá asset vừa lưu.
+- Unique `public_id` khi khác null; index `(account_id, batch_id, status)`. Không audit upload/delete;
+  audit nằm ở flow gắn URL vào entity.

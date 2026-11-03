@@ -3,6 +3,7 @@ import {
   Bell,
   CalendarClock,
   CalendarDays,
+  ClipboardList,
   Inbox,
   LifeBuoy,
   Receipt,
@@ -25,6 +26,13 @@ const navigation: (WorkspaceNavItem & { view: View; ready: boolean })[] = [
     path: "/fm/rental-requests",
     view: "fm-rental-requests",
     icon: Inbox,
+    ready: true,
+  },
+  {
+    label: "Đơn thuê kho",
+    path: "/fm/rental-orders",
+    view: "fm-orders",
+    icon: ClipboardList,
     ready: true,
   },
   {
@@ -91,9 +99,8 @@ export function FmShell({
   const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const session = authGateway.getSession();
   const unreadNotifications = useUnreadNotificationCount();
-  // Re-propose là trang chi tiết của luồng yêu cầu đặt kho (spec fm/02) —
-  // highlight mục cha thay vì để sidebar không có mục nào active.
-  const activeView = view === "fm-proposal-redo" ? "fm-rental-requests" : view;
+  // Re-propose là trang chi tiết của đơn thuê — highlight mục "Đơn thuê kho".
+  const activeView = view === "fm-proposal-redo" ? "fm-orders" : view;
   const activeItem = navigation.find((item) => item.ready && item.view === activeView);
 
   const navItems = navigation.map((item) =>

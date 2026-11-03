@@ -37,7 +37,8 @@ public enum AuditAction {
     RENTAL_ORDER_CREATED(AuditEntityType.RENTAL_ORDER),
     STORAGE_UNIT_RESERVED(AuditEntityType.STORAGE_UNIT),
     APPOINTMENT_CREATED(AuditEntityType.APPOINTMENT),
-    FS_ASSIGNED(AuditEntityType.APPOINTMENT),
+    /** Gán FS: một bản ghi cho Appointment (staff) và một cho RentalOrder (Scheduled → InProgress). */
+    FS_ASSIGNED(AuditEntityType.APPOINTMENT, AuditEntityType.RENTAL_ORDER),
     APPOINTMENT_RESCHEDULED(AuditEntityType.APPOINTMENT),
     APPOINTMENT_CANCELED_NO_SHOW(AuditEntityType.APPOINTMENT),
     APPOINTMENT_CANCELED(AuditEntityType.APPOINTMENT),

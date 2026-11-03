@@ -14,7 +14,7 @@ BEGIN
 
     IF duplicate_invoice IS NOT NULL THEN
         RAISE EXCEPTION
-            'Invoice % có nhiều hơn một PAY/Success; dọn dữ liệu trước khi chạy V13',
+            'Invoice % có nhiều hơn một PAY/Success; dọn dữ liệu trước khi chạy V14',
             duplicate_invoice;
     END IF;
 END $$;

@@ -1,11 +1,12 @@
 import type { UserRole } from "./auth";
 import { View } from "./types";
 
-// Trang chủ của mỗi role sau khi đăng nhập. Role chưa có trang (ADMIN/BOM/FS)
+// Trang chủ của mỗi role sau khi đăng nhập. Role chưa có trang (ADMIN/BOM)
 // không có entry — LoginForm giữ thông báo "đang được hoàn thiện".
 export const ROLE_HOME: Partial<Record<UserRole, string>> = {
   CUSTOMER: "/my-storage",
   FM: "/fm/rental-requests",
+  FS: "/staff/schedule",
 };
 
 export function viewFromLocation(): View {
@@ -22,6 +23,7 @@ export function viewFromLocation(): View {
   if (path === "/appointments/new") return "appointments";
   if (path === "/notifications") return "notifications";
   if (path === "/fm/rental-requests") return "fm-rental-requests";
+  if (path === "/fm/rental-orders") return "fm-orders";
   if (path.startsWith("/fm/rental-orders/") && path.endsWith("/re-propose")) {
     return "fm-proposal-redo";
   }
@@ -34,5 +36,9 @@ export function viewFromLocation(): View {
   if (path === "/fm/reports") return "fm-reports";
   if (path === "/fm/invoices") return "fm-invoices";
   if (path === "/fm/contracts") return "fm-contracts";
+  if (path === "/staff/schedule") return "fs-schedule";
+  if (path.startsWith("/staff/appointments/") && path.endsWith("/handover")) {
+    return "fs-handover";
+  }
   return "home";
 }

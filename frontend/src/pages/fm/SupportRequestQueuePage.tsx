@@ -1,4 +1,4 @@
-import { Check, UserRound } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
 import {
   fsStaff,
@@ -10,6 +10,7 @@ import {
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 const TAB_LABEL: Record<SupportRequestStatus, string> = {
@@ -24,16 +25,12 @@ const ISSUE_LABEL: Record<SupportIssueType, string> = {
   Other: "Khác",
 };
 
-const ISSUE_BADGE: Record<SupportIssueType, string> = {
-  LostKey: "bg-warning/14 text-warning",
-  AccessCode: "bg-info/14 text-info",
-  UnitDamage: "bg-danger/14 text-danger",
-  Other: "bg-surface-subtle text-muted",
+const ISSUE_TONE: Record<SupportIssueType, "warning" | "info" | "danger" | "neutral"> = {
+  LostKey: "warning",
+  AccessCode: "info",
+  UnitDamage: "danger",
+  Other: "neutral",
 };
-
-const TAB_BUTTON =
-  "min-h-10 rounded-sm border border-border bg-surface px-4 text-[13px] font-bold text-muted transition-colors";
-const TAB_BUTTON_ACTIVE = "border-brand bg-brand-soft text-brand";
 
 function staffName(staffId: string | null) {
   return fsStaff.find((staff) => staff.id === staffId)?.name ?? null;
@@ -48,6 +45,7 @@ export function SupportRequestQueuePage() {
 
   const list = items.filter((request) => request.status === tab);
   const openCount = items.filter((request) => request.status === "Open").length;
+  const assignedCount = items.filter((request) => request.status === "Assigned").length;
   const openRequest = items.find((request) => request.id === openId) ?? null;
 
   function openDetails(request: SupportRequest) {
@@ -69,28 +67,39 @@ export function SupportRequestQueuePage() {
     }, 700);
   }
 
+  const counts: Record<SupportRequestStatus, number> = {
+    Open: openCount,
+    Assigned: assignedCount,
+  };
+
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Hàng chờ yêu cầu hỗ trợ</h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Hàng chờ yêu cầu hỗ trợ</h1>
+        <p className="mt-1.5 text-small text-muted">
           Sự cố khách báo hoặc FS tự ghi nhận tại kho — phân công FS xử lý.
         </p>
       </div>
 
-      <div className="mb-6 flex items-center gap-2.5">
+      <div className="flex flex-wrap gap-1.5">
         {(["Open", "Assigned"] as const).map((status) => (
           <button
             key={status}
-            className={`${TAB_BUTTON} ${tab === status ? TAB_BUTTON_ACTIVE : ""}`}
+            className={`inline-flex items-center gap-2 border-0 px-2.5 py-1.5 text-small font-semibold ${
+              tab === status
+                ? "bg-brand text-signal-ink"
+                : "bg-transparent text-muted hover:bg-surface-subtle hover:text-ink"
+            }`}
             onClick={() => setTab(status)}
           >
             {TAB_LABEL[status]}
-            {status === "Open" && openCount > 0 && (
-              <span className="ml-2 rounded-full bg-warning/14 px-2 py-0.5 text-[11px] text-warning">
-                {openCount}
-              </span>
-            )}
+            <span
+              className={`px-1.5 text-label ${
+                tab === status ? "bg-signal-ink text-brand" : "bg-surface text-muted"
+              }`}
+            >
+              {counts[status]}
+            </span>
           </button>
         ))}
       </div>
@@ -98,38 +107,32 @@ export function SupportRequestQueuePage() {
       {list.length === 0 ? (
         <SurfaceState variant="empty" title="Không có yêu cầu nào trong mục này" />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {list.map((request) => (
             <button
               key={request.id}
-              className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col"
+              className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
               onClick={() => openDetails(request)}
             >
               <div>
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ISSUE_BADGE[request.issueType]}`}
-                  >
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusTag tone={ISSUE_TONE[request.issueType]}>
                     {ISSUE_LABEL[request.issueType]}
-                  </span>
-                  <p className="m-0 text-[15px] font-bold text-ink">Khoang {request.unitCode}</p>
+                  </StatusTag>
+                  <strong className="text-small font-semibold text-ink">
+                    Khoang {request.unitCode}
+                  </strong>
                 </div>
-                <p className="mb-0 mt-1.5 flex items-center gap-1.5 text-[13px] text-muted">
-                  <UserRound size={13} /> {request.reporterName}{" "}
-                  <span className="font-mono text-[10px] uppercase text-muted">
-                    ({request.reporterRole === "Customer" ? "Khách" : "FS"})
-                  </span>
-                </p>
+                <span className="mt-1.5 block text-label text-muted">
+                  {request.reporterName} ·{" "}
+                  {request.reporterRole === "Customer" ? "Khách thuê" : "Nhân viên FS"}
+                </span>
               </div>
-              {request.status === "Assigned" ? (
-                <span className="whitespace-nowrap rounded-full bg-success/14 px-[9px] py-[6px] text-[11px] font-extrabold text-success">
-                  FS: {staffName(request.staffId)}
-                </span>
-              ) : (
-                <span className="whitespace-nowrap rounded-full bg-warning/14 px-[9px] py-[6px] text-[11px] font-extrabold text-warning">
-                  Chưa phân công
-                </span>
-              )}
+              <StatusTag tone={request.status === "Assigned" ? "success" : "warning"}>
+                {request.status === "Assigned"
+                  ? `FS: ${staffName(request.staffId)}`
+                  : "Chưa phân công"}
+              </StatusTag>
             </button>
           ))}
         </div>
@@ -141,7 +144,7 @@ export function SupportRequestQueuePage() {
           eyebrow={ISSUE_LABEL[openRequest.issueType]}
           onClose={() => setOpenId(null)}
         >
-          <div className="grid gap-2.5 text-[13px] text-muted">
+          <div className="grid gap-2 text-small text-muted">
             <span>
               Người báo: {openRequest.reporterName} (
               {openRequest.reporterRole === "Customer" ? "Khách thuê" : "Nhân viên FS"})
@@ -150,7 +153,7 @@ export function SupportRequestQueuePage() {
               Hợp đồng liên quan: {openRequest.contractId ?? "Không có hợp đồng liên quan"}
             </span>
           </div>
-          <p className="mb-0 mt-4 text-[13px] leading-[1.6] text-ink">{openRequest.description}</p>
+          <p className="mt-4 text-small leading-relaxed text-ink">{openRequest.description}</p>
 
           {openRequest.status === "Assigned" ? (
             <div className="mt-6">
@@ -160,10 +163,10 @@ export function SupportRequestQueuePage() {
             </div>
           ) : (
             <>
-              <label className="mt-6 grid gap-1.5 text-[12px] font-bold text-ink">
+              <label className="mt-6 grid gap-1.5 text-label text-muted">
                 Chọn nhân viên FS
                 <select
-                  className="rounded-sm border border-border bg-surface-subtle px-3 py-2.5 text-[13px] text-ink"
+                  className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
                   value={selectedStaffId}
                   onChange={(event) => setSelectedStaffId(event.target.value)}
                 >
@@ -189,6 +192,6 @@ export function SupportRequestQueuePage() {
           )}
         </DetailPanel>
       )}
-    </main>
+    </div>
   );
 }

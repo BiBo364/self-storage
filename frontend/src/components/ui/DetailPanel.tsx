@@ -3,11 +3,9 @@ import { useId, type ReactNode } from "react";
 import { useModalA11y } from "./useModalA11y";
 
 /**
- * Shared slide-over panel for record detail (Proposal, Invoice, Extend
- * request, Return request, Support request, Unit/contract...). The fe-pages
- * spec lists these as panels on an existing route, not separate pages, so
- * every role renders them through this one pattern instead of a bespoke
- * modal per record type.
+ * Shared slide-over panel for record detail. It follows the Bãi kho system:
+ * a surface panel with a container border, no rounded corners and no internal
+ * divider lines; sections are separated by spacing.
  */
 export function DetailPanel({
   title,
@@ -27,44 +25,36 @@ export function DetailPanel({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex justify-end bg-[rgba(7,16,19,0.6)]"
+      className="fixed inset-0 z-[70] flex justify-end bg-[rgba(16,20,19,0.55)]"
       role="presentation"
       onClick={onClose}
     >
       <aside
         ref={containerRef}
         tabIndex={-1}
-        className="flex h-full w-[min(480px,100%)] flex-col border-l border-border bg-surface shadow-soft-token max-[760px]:w-full focus:outline-none"
+        className="flex h-full w-[min(480px,100%)] flex-col border-l border-[var(--container-border)] bg-surface shadow-[var(--shadow-soft)] max-[760px]:w-full focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-border px-6 pb-4 pt-6">
+        <header className="flex items-start justify-between gap-4 p-5">
           <div>
-            {eyebrow && (
-              <p className="font-mono text-mono uppercase tracking-[0.08em] text-brand">
-                {eyebrow}
-              </p>
-            )}
-            <h2 id={titleId} className="mt-1 text-[19px] tracking-[-0.03em]">
+            {eyebrow && <p className="text-label text-muted">{eyebrow}</p>}
+            <h2 id={titleId} className="mt-1 text-section text-ink">
               {title}
             </h2>
           </div>
           <button
-            className="grid h-[38px] w-[38px] place-items-center rounded-sm border border-border bg-surface text-ink transition-colors hover:border-brand hover:text-brand"
+            className="grid h-9 w-9 place-items-center border-0 bg-transparent text-muted hover:text-ink"
             onClick={onClose}
             aria-label="Đóng"
           >
-            <X size={18} />
+            <X size={19} />
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
-        {footer && (
-          <footer className="flex justify-end gap-2.5 border-t border-border px-6 py-4">
-            {footer}
-          </footer>
-        )}
+        <div className="flex-1 overflow-y-auto px-5 pb-5">{children}</div>
+        {footer && <footer className="flex justify-end gap-2.5 p-5">{footer}</footer>}
       </aside>
     </div>
   );

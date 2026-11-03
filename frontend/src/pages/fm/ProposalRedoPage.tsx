@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Check, History, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, History } from "lucide-react";
 import { useState } from "react";
 import type { Navigate } from "../../app/types";
 import { formatPrice, unitTypes } from "../../mocks/catalog";
@@ -10,6 +10,8 @@ import {
 } from "../../mocks/fm";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
+import { SectionTitle } from "../../components/ui/SectionTitle";
+import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 const SOURCE_LABEL: Record<ProposalFeedbackEntry["source"], string> = {
@@ -18,7 +20,6 @@ const SOURCE_LABEL: Record<ProposalFeedbackEntry["source"], string> = {
 };
 
 function getOrderId() {
-  // /fm/rental-orders/:id/re-propose — id is the second-to-last segment.
   const segments = window.location.pathname.split("/").filter(Boolean);
   return segments[segments.length - 2] ?? "";
 }
@@ -37,13 +38,11 @@ export function ProposalRedoPage({ navigate }: { navigate: Navigate }) {
 
   if (!order) {
     return (
-      <main>
-        <SurfaceState
-          variant="not-found"
-          title="Không tìm thấy đơn hàng"
-          action={{ label: "Về hàng chờ yêu cầu", onClick: () => navigate("/fm/rental-requests") }}
-        />
-      </main>
+      <SurfaceState
+        variant="not-found"
+        title="Không tìm thấy đơn hàng"
+        action={{ label: "Về hàng chờ yêu cầu", onClick: () => navigate("/fm/rental-requests") }}
+      />
     );
   }
 
@@ -66,50 +65,50 @@ export function ProposalRedoPage({ navigate }: { navigate: Navigate }) {
   }
 
   return (
-    <main>
+    <div className="grid gap-6">
       <button
-        className="mb-6 inline-flex items-center gap-2 border-0 bg-transparent p-0 text-[12px] font-bold text-muted hover:text-brand"
+        className="inline-flex w-fit items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
         onClick={() => navigate("/fm/rental-requests")}
       >
         <ArrowLeft size={16} /> Về hàng chờ yêu cầu
       </button>
 
-      <div className="mb-8">
-        <p className="m-0 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-brand">
-          <UserRound size={14} /> {order.customerName}
-        </p>
-        <h1 className="mb-0 mt-1.5 text-[28px] tracking-[-0.03em] text-ink">Đề xuất lại khoang</h1>
-        <p className="mt-2 text-[13px] text-muted">
+      <div>
+        <span className="text-label text-muted">{order.customerName}</span>
+        <h1 className="mt-1 text-title text-ink">Đề xuất lại khoang</h1>
+        <p className="mt-1.5 text-small text-muted">
           Cần: {unitTypeName(order.unitTypeId)} · {order.desiredSize}
         </p>
       </div>
 
-      <div className="grid grid-cols-[1fr_360px] gap-8 max-[980px]:grid-cols-1">
-        <div className="grid gap-6">
-          <section className="border border-border bg-surface p-6">
-            <h2 className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink">
-              <History size={16} /> Lịch sử đề xuất trước
-            </h2>
-            <div className="mt-4 grid gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6 max-[980px]:grid-cols-1">
+        <div className="grid gap-3">
+          <section className="bg-surface p-5">
+            <SectionTitle>
+              <span className="inline-flex items-center gap-2">
+                <History size={16} /> Lịch sử đề xuất trước
+              </span>
+            </SectionTitle>
+            <div className="mt-4 grid gap-2">
               {order.rejectionHistory.map((entry) => (
                 <div
                   key={`${entry.unitCode}-${entry.rejectedAt}`}
-                  className="border-l-2 border-danger pl-3.5"
+                  className="bg-surface-subtle p-3.5"
                 >
-                  <p className="m-0 flex items-center gap-2 text-[12px] font-bold text-ink">
-                    Khoang {entry.unitCode}
-                    <span className="rounded-full bg-danger/14 px-2 py-0.5 text-[10px] font-bold text-danger">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="text-small font-semibold text-ink">
+                      Khoang {entry.unitCode}
+                    </strong>
+                    <StatusTag tone={entry.source === "customer" ? "danger" : "warning"}>
                       {SOURCE_LABEL[entry.source]}
-                    </span>
-                  </p>
-                  <p className="mb-0 mt-1 text-[12px] text-muted">{entry.note}</p>
-                  <p className="mb-0 mt-1 font-mono text-[10px] uppercase text-muted">
-                    {entry.rejectedAt}
-                  </p>
+                    </StatusTag>
+                  </div>
+                  <p className="mt-1.5 text-small text-muted">{entry.note}</p>
+                  <p className="mt-1 text-label text-muted">{entry.rejectedAt}</p>
                 </div>
               ))}
             </div>
-            <p className="mb-0 mt-4 text-[12px] font-bold text-muted">
+            <p className="mt-4 text-label text-muted">
               Đã từ chối {order.rejectionHistory.length}/{MAX_ORDER_REJECTIONS} lần cho phép.
             </p>
           </section>
@@ -126,8 +125,8 @@ export function ProposalRedoPage({ navigate }: { navigate: Navigate }) {
               nhận.
             </DemoNotice>
           ) : (
-            <section className="border border-border bg-surface p-6">
-              <h2 className="m-0 text-[15px] font-bold text-ink">Chọn khoang mới</h2>
+            <section className="bg-surface p-5">
+              <SectionTitle>Chọn khoang mới</SectionTitle>
               {order.afterDeposit && (
                 <div className="mt-4">
                   <DemoNotice tone="pending">
@@ -136,10 +135,10 @@ export function ProposalRedoPage({ navigate }: { navigate: Navigate }) {
                   </DemoNotice>
                 </div>
               )}
-              <label className="mt-5 grid gap-1.5 text-[12px] font-bold text-ink">
+              <label className="mt-5 grid gap-1.5 text-label text-muted">
                 Khoang trống phù hợp
                 <select
-                  className="rounded-sm border border-border bg-surface-subtle px-3 py-2.5 text-[13px] text-ink"
+                  className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
                   value={selectedUnitId}
                   onChange={(event) => setSelectedUnitId(event.target.value)}
                 >
@@ -152,25 +151,31 @@ export function ProposalRedoPage({ navigate }: { navigate: Navigate }) {
                 </select>
               </label>
               {availableUnits.length === 0 && (
-                <p className="mb-0 mt-2 flex items-center gap-2 text-[12px] text-danger">
+                <p className="mt-2 flex items-center gap-2 text-small text-danger">
                   <AlertTriangle size={14} /> Hiện không còn khoang trống đúng loại yêu cầu.
                 </p>
               )}
               {order.afterDeposit && selectedUnit && (
-                <div className="mt-4 grid gap-2 border border-border bg-surface-subtle p-3.5 text-[12px]">
-                  <div className="flex items-center justify-between">
+                <div className="mt-4 grid gap-2 bg-surface-subtle p-3.5 text-small">
+                  <div className="flex items-center justify-between gap-4">
                     <span className="text-muted">Cọc đã thu (khoang cũ)</span>
-                    <strong>{formatPrice(order.previousDeposit ?? 0)}đ</strong>
+                    <strong className="font-semibold text-ink">
+                      {formatPrice(order.previousDeposit ?? 0)} đ
+                    </strong>
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-4">
                     <span className="text-muted">Cọc ước tính (khoang mới)</span>
-                    <strong>{formatPrice(newDepositEstimate)}đ</strong>
+                    <strong className="font-semibold text-ink">
+                      {formatPrice(newDepositEstimate)} đ
+                    </strong>
                   </div>
-                  <div className="flex items-center justify-between border-t border-border pt-2">
+                  <div className="flex items-center justify-between gap-4">
                     <span className="text-muted">Chênh lệch</span>
-                    <strong className={depositDiff >= 0 ? "text-danger" : "text-success"}>
+                    <strong
+                      className={`font-semibold ${depositDiff >= 0 ? "text-danger" : "text-success"}`}
+                    >
                       {depositDiff >= 0 ? "+" : ""}
-                      {formatPrice(depositDiff)}đ
+                      {formatPrice(depositDiff)} đ
                     </strong>
                   </div>
                 </div>
@@ -188,20 +193,22 @@ export function ProposalRedoPage({ navigate }: { navigate: Navigate }) {
           )}
         </div>
 
-        <aside className="grid content-start gap-2 border border-border bg-surface p-5 text-[13px]">
-          <p className="m-0 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-brand">
-            Tóm tắt yêu cầu
-          </p>
-          <div className="grid gap-[3px]">
-            <span className="font-mono text-[10px] uppercase text-muted">Loại kho</span>
-            <strong>{unitTypeName(order.unitTypeId)}</strong>
+        <aside className="grid gap-3 bg-surface p-5">
+          <SectionTitle>Tóm tắt yêu cầu</SectionTitle>
+          <div>
+            <span className="text-label text-muted">Loại kho</span>
+            <strong className="mt-0.5 block text-small font-semibold text-ink">
+              {unitTypeName(order.unitTypeId)}
+            </strong>
           </div>
-          <div className="grid gap-[3px]">
-            <span className="font-mono text-[10px] uppercase text-muted">Diện tích mong muốn</span>
-            <strong>{order.desiredSize}</strong>
+          <div>
+            <span className="text-label text-muted">Diện tích mong muốn</span>
+            <strong className="mt-0.5 block text-small font-semibold text-ink">
+              {order.desiredSize}
+            </strong>
           </div>
         </aside>
       </div>
-    </main>
+    </div>
   );
 }

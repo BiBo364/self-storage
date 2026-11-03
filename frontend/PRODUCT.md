@@ -62,7 +62,8 @@ Kiến trúc frontend hiện tại được xem là baseline tốt và phải đ
 ## Evidence on Hand
 
 - `README.md`: phạm vi prototype hiện tại, cách chạy và boundary frontend/backend.
-- `DESIGN.md`: visual context hiện tại; một số quyết định trong file này đang được rà soát lại.
+- `DESIGN.md`: visual source of truth cho hướng **Bãi kho** (concrete + signal yellow + Saira/Source Sans 3); token set đã áp dụng trong `src/`.
+- `../fe-pages/README.md` và các page spec trong `../fe-pages/`: route, actor, mục đích, dữ liệu, actions, states và edge cases.
 - `../fe-pages/README.md` và các page spec trong `../fe-pages/`: route, actor, mục đích, dữ liệu, actions, states và edge cases.
 - `../draft.md` và `../db-table-draft.md`: nguồn tham khảo cho terminology và dữ liệu hiển thị, không phải giấy phép tự khóa business rule.
 - `src/mocks/`: dữ liệu mock dùng để kiểm tra hierarchy, wrapping và các state của UI.
@@ -101,8 +102,11 @@ Các tài liệu nghiệp vụ và UI spec đang được phát triển rải r�
 
 Tên **Kho Mộc** đang được dùng trong design context và tài liệu frontend hiện tại. Đây là repository evidence cần được giữ nhất quán trong prototype, trừ khi có quyết định sản phẩm mới.
 
+Hướng hình ảnh đã được duyệt: **Bãi kho** — concrete lạnh, signal yellow hi-vis, Saira Semi Condensed + Source Sans 3, light-first kèm dark theme. Đây là brand commitment cho các surface mới; không quay lại hệ cream/terracotta hoặc dark teal/lime cũ.
+
 ## Open Decisions
 
 - Business rule, status và API chưa chốt phải được giữ ở mức provisional trong UI.
 - Phạm vi và thứ tự triển khai các slice sau public/auth chưa được xem là cam kết release.
-- Prototype ưu tiên một visual system phổ thông, polished, dark-first và dễ nhận diện; không cố tạo visual metaphor khác biệt khi chưa có nhu cầu sản phẩm rõ ràng.
+- Prototype ưu tiên một visual system phổ thông, polished, light-first và dễ nhận diện; dark theme là biến thể đầy đủ, không phải mặc định.
+- Hướng **Bãi kho** đã được duyệt và migrate token/component trong `src/`; không trộn hai hệ trong cùng một surface.
