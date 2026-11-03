@@ -166,8 +166,8 @@ class MigrationTest {
             assertThat(count(connection, "account_facility_assignments")).isEqualTo(1);
             // V3: permission catalog + mapping mặc định (A3b, #57).
             assertThat(count(connection, "permissions")).isEqualTo(24);
-            assertThat(count(connection, "role_permissions")).isEqualTo(31);
-            assertThat(countWhere(connection, "role_permissions", "scope = 'FACILITY'")).isEqualTo(23);
+            assertThat(count(connection, "role_permissions")).isEqualTo(32);
+            assertThat(countWhere(connection, "role_permissions", "scope = 'FACILITY'")).isEqualTo(24);
             assertThat(countWhere(connection, "role_permissions", "scope = 'GLOBAL'")).isEqualTo(8);
 
             // #57: quan hệ FM–Facility 1–1 trên facilities.

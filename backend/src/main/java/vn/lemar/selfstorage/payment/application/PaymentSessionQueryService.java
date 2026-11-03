@@ -2,10 +2,13 @@ package vn.lemar.selfstorage.payment.application;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.lemar.selfstorage.payment.application.dto.PaymentStateView;
 import vn.lemar.selfstorage.payment.application.dto.SuccessfulPayment;
 import vn.lemar.selfstorage.payment.domain.PaymentDirection;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
@@ -59,5 +62,20 @@ public class PaymentSessionQueryService implements PaymentSessionQuery {
                 .map(transaction -> new SuccessfulPayment(
                         transaction.getInvoiceId(), transaction.getVnpTxnRef(),
                         transaction.getAmount(), transaction.getPaidAt()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, PaymentStateView> latestPayments(Collection<Long> invoiceIds) {
+        if (invoiceIds == null || invoiceIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, PaymentStateView> latest = new LinkedHashMap<>();
+        repository.findByInvoiceIdInAndDirectionOrderByCreatedAtDesc(invoiceIds, PaymentDirection.PAY)
+                .forEach(transaction -> latest.putIfAbsent(transaction.getInvoiceId(),
+                        new PaymentStateView(transaction.getInvoiceId(),
+                                transaction.getStatus().dbValue(), transaction.getVnpTxnRef(),
+                                transaction.getCreatedAt(), transaction.getPaidAt())));
+        return latest;
     }
 }

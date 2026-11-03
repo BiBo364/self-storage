@@ -3,6 +3,7 @@ package vn.lemar.selfstorage.payment.repository;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -56,4 +57,8 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     /** Giao dịch PAY/Success gần nhất của invoice — job booking dùng để sửa state sau listener lỗi. */
     Optional<PaymentTransaction> findFirstByInvoiceIdAndDirectionAndStatusOrderByPaidAtDesc(
             Long invoiceId, PaymentDirection direction, PaymentStatus status);
+
+    /** Toàn bộ giao dịch PAY của nhóm invoice, mới nhất trước — read model cho FM. */
+    List<PaymentTransaction> findByInvoiceIdInAndDirectionOrderByCreatedAtDesc(
+            Collection<Long> invoiceIds, PaymentDirection direction);
 }

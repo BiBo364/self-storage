@@ -68,6 +68,30 @@ public class BookingReadRepository {
                 customerId);
     }
 
+    /** Hoá đơn của cơ sở, mới nhất trước; join đơn/khoang/khách để FM hiển thị. */
+    public List<FacilityInvoiceRow> findFacilityInvoices(Long facilityId, String status) {
+        String sql = "select i.id, i.order_id, i.code, i.title, i.description, i.type, i.status, i.amount, "
+                + "i.created_at, i.due_date, o.unit_id, u.code as unit_code, f.id as facility_id, "
+                + "f.name as facility_name, i.customer_id, a.email as customer_email, "
+                + "coalesce(r.customer_name, a.email) as customer_name "
+                + "from invoices i "
+                + "join rental_orders o on o.id = i.order_id "
+                + "join storage_units u on u.id = o.unit_id "
+                + "join facilities f on f.id = u.facility_id "
+                + "join accounts a on a.id = i.customer_id "
+                + "left join rental_requests r on r.id = o.request_id "
+                + "where f.id = ? and (cast(? as varchar) is null or i.status = ?) "
+                + "order by i.created_at desc, i.id desc";
+        return jdbc.query(sql, (rs, rowNum) -> new FacilityInvoiceRow(
+                rs.getLong("id"), rs.getLong("order_id"), rs.getString("code"), rs.getString("title"),
+                rs.getString("description"), rs.getString("type"), rs.getString("status"),
+                rs.getBigDecimal("amount"), instant(rs, "created_at"), instant(rs, "due_date"),
+                rs.getLong("unit_id"), rs.getString("unit_code"), rs.getLong("facility_id"),
+                rs.getString("facility_name"), rs.getLong("customer_id"),
+                rs.getString("customer_name"), rs.getString("customer_email")),
+                facilityId, status, status);
+    }
+
     /** Đơn + thông tin form yêu cầu; rỗng nếu đơn không tồn tại. */
     public Optional<OrderRow> findOrder(Long orderId) {
         String sql = "select o.id, o.status, o.cancel_reason, o.expires_at, o.unit_id, o.customer_id, "
@@ -111,6 +135,14 @@ public class BookingReadRepository {
     private static Instant instant(ResultSet rs, String column) throws SQLException {
         Timestamp value = rs.getTimestamp(column);
         return value == null ? null : value.toInstant();
+    }
+
+    /** Một dòng hoá đơn của cơ sở, chưa ghép trạng thái thanh toán. */
+    public record FacilityInvoiceRow(Long id, Long orderId, String code, String title, String description,
+                                     String type, String status, java.math.BigDecimal amount,
+                                     Instant createdAt, Instant dueDate, Long unitId, String unitCode,
+                                     Long facilityId, String facilityName, Long customerId,
+                                     String customerName, String customerEmail) {
     }
 
     /** Một dòng đơn thuê đã join form yêu cầu. */

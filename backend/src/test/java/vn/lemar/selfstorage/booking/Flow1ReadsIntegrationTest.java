@@ -105,6 +105,84 @@ class Flow1ReadsIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    // --------------------------------------------------------------- FM invoice list
+
+    @Test
+    void fmInvoiceListReturnsFacilityInvoicesAndHighlightsStalePending() throws Exception {
+        long order = insertOrder(customer1, unitA01, "Deposited");
+        insertInvoice(order, customer1, "INV-FM-PENDING", "Đặt cọc", "Deposit", "Unpaid", "500000",
+                "20 minutes");
+        long invoiceId = invoiceId("INV-FM-PENDING");
+        jdbc.update("""
+                insert into payment_transactions (invoice_id, vnp_txn_ref, amount, direction, status, created_at)
+                values (?, 'TXN-FM-PENDING', 500000, 'PAY', 'Pending', now() - interval '30 minutes')
+                """, invoiceId);
+
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(q7))
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Lấy danh sách hoá đơn cơ sở thành công"))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].code").value("INV-FM-PENDING"))
+                .andExpect(jsonPath("$.data[0].customerName").value("Khách test"))
+                .andExpect(jsonPath("$.data[0].unitCode").value("A-01"))
+                .andExpect(jsonPath("$.data[0].paymentStatus").value("Pending"))
+                .andExpect(jsonPath("$.data[0].needsReconciliation").value(true))
+                .andExpect(jsonPath("$.data[0].pendingAgeMinutes")
+                        .value(org.hamcrest.Matchers.greaterThanOrEqualTo(15)));
+    }
+
+    @Test
+    void fmInvoiceListFiltersByPaymentStatusAndAge() throws Exception {
+        long order = insertOrder(customer1, unitA01, "Deposited");
+        insertInvoice(order, customer1, "INV-FM-FILTER", "Đặt cọc", "Deposit", "Unpaid", "500000",
+                "1 minute");
+        long invoiceId = invoiceId("INV-FM-FILTER");
+        jdbc.update("""
+                insert into payment_transactions (invoice_id, vnp_txn_ref, amount, direction, status, created_at)
+                values (?, 'TXN-FM-FILTER', 500000, 'PAY', 'Pending', now() - interval '1 minute')
+                """, invoiceId);
+
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(q7))
+                        .param("paymentStatus", "Pending")
+                        .param("olderThanMinutes", "15")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void fmInvoiceListRejectsCrossFacilityAndCustomer() throws Exception {
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(td))
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(q7))
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("customer1@lemar.vn")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void fmInvoiceListRejectsInvalidFilters() throws Exception {
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(q7))
+                        .param("status", "Broken")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Trạng thái hoá đơn không hợp lệ: Broken"));
+
+        mockMvc.perform(get("/api/fm/invoices")
+                        .param("facilityId", String.valueOf(q7))
+                        .param("paymentStatus", "Broken")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Trạng thái thanh toán không hợp lệ: Broken"));
+    }
+
     // ------------------------------------------------------------ public facilities
 
     @Test
@@ -249,6 +327,10 @@ class Flow1ReadsIntegrationTest {
 
     private long unitId(String code) {
         return jdbc.queryForObject("select id from storage_units where code = ?", Long.class, code);
+    }
+
+    private long invoiceId(String code) {
+        return jdbc.queryForObject("select id from invoices where code = ?", Long.class, code);
     }
 
     private long insertOrder(long customerId, Long unitId, String status) {

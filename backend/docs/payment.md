@@ -142,6 +142,9 @@ Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`
 - **Ghi như IPN:** `markSucceeded`/`markFailed`, audit `PAYMENT_SUCCEEDED`/`PAYMENT_FAILED`
   (`newValue` của Success gồm `gatewayTransactionNo` + `paidAt`; reason của manual ghi email
   admin), phát `PaymentSucceeded`/`PaymentFailed`; listener booking cập nhật invoice/order/unit.
+- **FM xem danh sách:** `GET /api/fm/invoices?facilityId=...` trả hoá đơn cơ sở kèm
+  `paymentStatus`, `pendingAgeMinutes`, `needsReconciliation`; đây là tín hiệu để FE highlight,
+  không tự đối soát.
 - **Quy trình ops:** lọc `PaymentTransaction(Pending)` quá 15'; tra portal VNPay theo `vnp_TxnRef`;
   nếu đã trả → gọi endpoint với `outcome=SUCCESS`, `paidAt`, `gatewayTransactionNo`; nếu không →
   `outcome=FAILED` + note. Không sửa DB tay.
