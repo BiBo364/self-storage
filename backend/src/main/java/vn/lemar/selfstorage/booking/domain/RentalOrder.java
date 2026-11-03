@@ -100,6 +100,19 @@ public class RentalOrder {
         this.unitId = agreedUnitId;
     }
 
+    /** Đơn đã có lịch check-in và đang chờ FM phân công FS. */
+    public boolean isScheduled() {
+        return status == RentalOrderStatus.SCHEDULED;
+    }
+
+    /** Spec 1.5: FM phân công FS cho lịch check-in → {@code Scheduled -> InProgress}. */
+    public void startProgress() {
+        if (status != RentalOrderStatus.SCHEDULED) {
+            throw new IllegalStateException("Đơn " + id + " không ở Scheduled: " + status);
+        }
+        this.status = RentalOrderStatus.IN_PROGRESS;
+    }
+
     /** Cancellation Cascade bước 1: {@code status -> Canceled}, ghi {@code cancel_reason}. */
     public void cancel(String reason) {
         if (status.isClosed()) {
