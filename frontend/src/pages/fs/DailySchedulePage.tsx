@@ -1,32 +1,110 @@
-import { ChevronRight, Clock3, MapPin } from "lucide-react";
-import { useState } from "react";
-import type { Navigate } from "../../app/types";
-import { Button } from "../../components/ui/Button";
-import { DemoNotice } from "../../components/ui/DemoNotice";
+import { Clock3, MapPin } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ApiError } from "../../app/api";
+import { fetchStaffAppointments, type StaffAppointment } from "../../app/staffSchedule";
+import { FilterSelect } from "../../components/ui/FilterSelect";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
-import { fsAppointments, TODAY, type FsAppointment } from "../../mocks/fs";
 
-const STATUS: Record<
-  FsAppointment["status"],
-  { label: string; tone: "success" | "warning" | "neutral" }
-> = {
-  Pending: { label: "Chờ tiếp nhận", tone: "warning" },
+const TIME_FORMAT = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const STATUS: Record<string, { label: string; tone: "success" | "warning" | "neutral" }> = {
+  Pending: { label: "Đang chờ", tone: "warning" },
   Done: { label: "Đã đến", tone: "success" },
   Canceled: { label: "Đã huỷ", tone: "neutral" },
 };
 
-function formatDate(iso: string) {
-  const date = new Date(`${iso}T00:00:00`);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+const TYPE_LABEL: Record<string, string> = {
+  CHECKIN: "Check-in",
+  RETURN: "Trả kho",
+  HANDOVER: "Bàn giao",
+};
+
+function pad(value: number) {
+  return String(value).padStart(2, "0");
 }
 
-export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
-  const [date, setDate] = useState(TODAY);
-  const appointments = fsAppointments.filter((appointment) => appointment.date === date);
+function todayIso() {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function formatDateVN(value: string) {
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function formatTimeRange(appointment: StaffAppointment) {
+  if (!appointment.startedAt) return formatDateVN(appointment.date);
+  const start = TIME_FORMAT.format(new Date(appointment.startedAt));
+  if (!appointment.endAt) return start;
+  return `${start}–${TIME_FORMAT.format(new Date(appointment.endAt))}`;
+}
+
+function typeLabel(type: string) {
+  return TYPE_LABEL[type] ?? type;
+}
+
+function statusOf(status: string) {
+  return STATUS[status] ?? { label: status, tone: "neutral" as const };
+}
+
+export function DailySchedulePage() {
+  const [date, setDate] = useState(todayIso);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<{ status: number; message: string } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        const list = await fetchStaffAppointments(date);
+        if (!active) return;
+        setAppointments(list);
+      } catch (caught) {
+        if (!active) return;
+        setError(
+          caught instanceof ApiError
+            ? { status: caught.status, message: caught.message }
+            : { status: 0, message: "Không thể kết nối tới máy chủ." },
+        );
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [date, reloadKey]);
+
   const pending = appointments.filter((appointment) => appointment.status === "Pending").length;
   const done = appointments.filter((appointment) => appointment.status === "Done").length;
+  const filtered =
+    statusFilter === "all"
+      ? appointments
+      : appointments.filter((appointment) => appointment.status === statusFilter);
+
+  function changeDate(next: string) {
+    if (!next) return;
+    setDate(next);
+    setIsLoading(true);
+    setError(null);
+  }
+
+  function retry() {
+    setIsLoading(true);
+    setError(null);
+    setReloadKey((key) => key + 1);
+  }
 
   return (
     <div className="grid gap-6">
@@ -37,20 +115,26 @@ export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
             Các lịch hẹn được FM phân công cho bạn tại cơ sở.
           </p>
         </div>
-        <label className="grid gap-1 text-label text-muted">
-          Ngày
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="min-h-[42px] border border-border bg-surface px-3 text-small text-ink"
-          />
-        </label>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="grid gap-1 text-label text-muted">
+            Ngày
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => changeDate(event.target.value)}
+              className="min-h-[42px] border border-border bg-surface px-3 text-small text-ink"
+            />
+          </label>
+          <div className="min-w-[170px]">
+            <FilterSelect label="Lọc trạng thái" value={statusFilter} onChange={setStatusFilter}>
+              <option value="all">Tất cả</option>
+              <option value="Pending">Đang chờ</option>
+              <option value="Done">Đã đến</option>
+              <option value="Canceled">Đã huỷ</option>
+            </FilterSelect>
+          </div>
+        </div>
       </div>
-
-      <DemoNotice tone="info">
-        Prototype — dữ liệu minh hoạ; API lịch hẹn FS chưa có. Ngày đang xem: {formatDate(date)}.
-      </DemoNotice>
 
       <div className="grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
         <div className="bg-surface p-4">
@@ -61,7 +145,7 @@ export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
         </div>
         <div className="bg-surface p-4">
           <strong className="block text-stat text-ink">{String(pending).padStart(2, "0")}</strong>
-          <span className="text-label text-muted">Chờ tiếp nhận</span>
+          <span className="text-label text-muted">Đang chờ</span>
         </div>
         <div className="bg-surface p-4">
           <strong className="block text-stat text-ink">{String(done).padStart(2, "0")}</strong>
@@ -69,63 +153,70 @@ export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
         </div>
       </div>
 
-      {appointments.length === 0 ? (
+      {isLoading ? (
+        <SurfaceState variant="loading" title="Đang tải lịch làm việc…" />
+      ) : error ? (
+        error.status === 403 || error.status === 404 ? (
+          <SurfaceState
+            variant="forbidden"
+            title="Bạn không có quyền xem lịch làm việc"
+            description={error.message}
+          />
+        ) : (
+          <SurfaceState
+            variant="error"
+            title="Không tải được lịch làm việc"
+            description={error.message}
+            action={{ label: "Thử lại", onClick: retry }}
+          />
+        )
+      ) : filtered.length === 0 ? (
         <SurfaceState
           variant="empty"
-          title="Không có lịch hẹn trong ngày"
+          title={
+            appointments.length === 0
+              ? `Không có lịch hẹn ngày ${formatDateVN(date)}`
+              : "Không có lịch ở trạng thái này"
+          }
           description="Chọn ngày khác hoặc liên hệ FM nếu bạn cần được phân công thêm."
         />
       ) : (
         <div className="grid gap-3">
-          {appointments.map((appointment) => {
-            const status = STATUS[appointment.status];
+          {filtered.map((appointment) => {
+            const status = statusOf(appointment.status);
             return (
               <article key={appointment.id} className="border border-border bg-surface p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 font-mono text-label text-muted">
-                        <Clock3 size={14} /> {appointment.timeSlot}
+                        <Clock3 size={14} /> {formatTimeRange(appointment)}
                       </span>
-                      <span className="bg-surface-subtle px-2 py-1 text-label font-semibold text-muted">
-                        {appointment.type === "CHECKIN" ? "Check-in" : "Trả kho"}
-                      </span>
-                      <StatusTag tone={status.tone}>{status.label}</StatusTag>
+                      {appointment.type !== "CHECKIN" && (
+                        <span className="bg-surface-subtle px-2 py-1 text-label font-semibold text-muted">
+                          {typeLabel(appointment.type)}
+                        </span>
+                      )}
+                      {status && <StatusTag tone={status.tone}>{status.label}</StatusTag>}
                     </div>
-                    <h2 className="mb-0 mt-2 text-section text-ink">{appointment.customerName}</h2>
-                    <p className="mb-0 mt-1 flex items-center gap-1.5 text-small text-muted">
-                      <MapPin size={14} /> {appointment.unitCode} · {appointment.unitType}
+                    <h2 className="mb-0 mt-2 text-section text-ink">
+                      {appointment.customer.name ?? appointment.customer.email}
+                    </h2>
+                    <p className="mb-0 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-small text-muted">
+                      <span className="flex items-center gap-1.5">
+                        <MapPin size={14} /> {appointment.unitCode ?? "—"}
+                      </span>
+                      {appointment.customer.phone && <span>{appointment.customer.phone}</span>}
                     </p>
                   </div>
                   <div className="text-right max-[760px]:text-left">
-                    <span className="block text-label text-muted">{appointment.orderCode}</span>
+                    {appointment.orderId !== null && (
+                      <span className="block text-label text-muted">Đơn {appointment.orderId}</span>
+                    )}
                     <span className="mt-0.5 block text-label text-muted">
-                      {appointment.facility}
+                      {appointment.facility.name}
                     </span>
                   </div>
-                </div>
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                  <span className="text-label text-muted">
-                    {appointment.status === "Done"
-                      ? "Khách đã đến — biên bản đã chốt."
-                      : appointment.type === "CHECKIN"
-                        ? "Mở checklist để xác minh và bàn giao."
-                        : "Checklist trả kho chưa có trong prototype."}
-                  </span>
-                  {appointment.type === "CHECKIN" ? (
-                    <Button
-                      size="sm"
-                      variant={appointment.status === "Done" ? "secondary" : "primary"}
-                      onClick={() => navigate(`/staff/appointments/${appointment.id}/handover`)}
-                    >
-                      {appointment.status === "Done" ? "Xem biên bản" : "Mở checklist"}
-                      <ChevronRight size={14} />
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="secondary" disabled>
-                      Checklist trả kho — sắp có
-                    </Button>
-                  )}
                 </div>
               </article>
             );
