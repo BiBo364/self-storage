@@ -61,6 +61,12 @@ function statusOf(status: string) {
   return STATUS[status] ?? { label: status, tone: "neutral" as const };
 }
 
+const CANCEL_REASON_LABELS: Record<string, string> = { NoShow: "Khách không đến" };
+
+function cancelReasonLabel(reason: string) {
+  return CANCEL_REASON_LABELS[reason] ?? reason;
+}
+
 export function DailySchedulePage() {
   const [date, setDate] = useState(todayIso);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -257,6 +263,11 @@ export function DailySchedulePage() {
                       </span>
                       {appointment.customer.phone && <span>{appointment.customer.phone}</span>}
                     </p>
+                    {appointment.status === "Canceled" && appointment.cancelReason && (
+                      <p className="mb-0 mt-1 text-small text-muted">
+                        Lý do huỷ: {cancelReasonLabel(appointment.cancelReason)}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right max-[760px]:text-left">
                     {appointment.orderId !== null && (

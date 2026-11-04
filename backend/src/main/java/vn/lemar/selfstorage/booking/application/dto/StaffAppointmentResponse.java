@@ -19,7 +19,8 @@ public record StaffAppointmentResponse(
         @Schema(description = "Mã khoang") String unitCode,
         @Schema(description = "Cơ sở") Facility facility,
         @Schema(description = "Khách") Customer customer,
-        @Schema(description = "Đã quá end_at mà chưa đến — cron no-show sẽ xử lý") boolean noShowDue
+        @Schema(description = "Đã quá end_at mà chưa đến — cron no-show sẽ xử lý") boolean noShowDue,
+        @Schema(description = "Lý do huỷ; null nếu chưa huỷ; NoShow là cron no-show") String cancelReason
 ) {
 
     @Schema(name = "StaffAppointmentFacility")
@@ -35,6 +36,6 @@ public record StaffAppointmentResponse(
                 row.endAt(), row.arrivedAt(), row.orderId(), row.unitCode(),
                 new Facility(row.facilityId(), row.facilityName()),
                 new Customer(row.customerName(), row.customerEmail(), row.customerPhone()),
-                AppointmentNoShowPolicy.isDue(row.type(), row.status(), row.endAt(), now));
+                AppointmentNoShowPolicy.isDue(row.type(), row.status(), row.endAt(), now), row.cancelReason());
     }
 }

@@ -102,6 +102,7 @@ class StaffAppointmentActionIntegrationTest {
 
         assertThat(result.status()).isEqualTo("Done");
         assertThat(result.arrivedAt()).isNotNull();
+        assertThat(result.cancelReason()).isNull();
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Done");
         assertThat(jdbc.queryForObject("select arrived_at from appointments where id = ?", Object.class,
@@ -124,6 +125,7 @@ class StaffAppointmentActionIntegrationTest {
         StaffAppointmentResponse result = service.cancel(appointmentId, "Khách yêu cầu huỷ");
 
         assertThat(result.status()).isEqualTo("Canceled");
+        assertThat(result.cancelReason()).isEqualTo("Khách yêu cầu huỷ");
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Canceled");
         assertThat(jdbc.queryForObject("select cancel_reason from appointments where id = ?", String.class,

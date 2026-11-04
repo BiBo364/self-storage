@@ -184,7 +184,7 @@ class StaffAppointmentControllerTest {
                 Instant.parse("2026-11-04T01:00:00Z"), Instant.parse("2026-11-04T03:00:00Z"), arrivedAt,
                 5L, "A-01", new StaffAppointmentResponse.Facility(1L, "Self Storage Quận 7"),
                 new StaffAppointmentResponse.Customer("Khách Demo", "customer1@lemar.vn", "0900000000"),
-                false);
+                false, "Canceled".equals(status) ? "Khách yêu cầu huỷ" : null);
     }
 
     private MockHttpServletRequestBuilder as(MockHttpServletRequestBuilder request, String email) {

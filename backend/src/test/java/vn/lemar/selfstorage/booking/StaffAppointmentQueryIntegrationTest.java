@@ -107,6 +107,7 @@ class StaffAppointmentQueryIntegrationTest {
             assertThat(row.date()).isEqualTo(day);
             assertThat(row.arrivedAt()).isNull();
             assertThat(row.noShowDue()).isFalse();
+            assertThat(row.cancelReason()).isNull();
             assertThat(row.orderId()).isEqualTo(orderId);
             assertThat(row.unitCode()).isEqualTo("A-01");
             assertThat(row.facility().id()).isEqualTo(q7);
@@ -133,6 +134,21 @@ class StaffAppointmentQueryIntegrationTest {
         assertThat(result).singleElement().satisfies(row -> {
             assertThat(row.id()).isEqualTo(dueId);
             assertThat(row.noShowDue()).isTrue();
+            assertThat(row.cancelReason()).isNull();
+        });
+    }
+
+    @Test
+    void returnsCancelReasonForCanceledAppointment() {
+        jdbc.update("update appointments set status = 'Canceled', cancel_reason = 'NoShow' where id = ?",
+                appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        List<StaffAppointmentResponse> result = service.listForCurrentStaff(day);
+
+        assertThat(result).singleElement().satisfies(row -> {
+            assertThat(row.status()).isEqualTo("Canceled");
+            assertThat(row.cancelReason()).isEqualTo("NoShow");
         });
     }
 
