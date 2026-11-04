@@ -59,6 +59,9 @@ public class Appointment {
     @Column(name = "cancel_reason")
     private String cancelReason;
 
+    @Column(name = "arrived_at")
+    private Instant arrivedAt;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -82,7 +85,17 @@ public class Appointment {
         this.updatedAt = Instant.now();
     }
 
-    /** Cancellation Cascade: lịch {@code Pending} chưa diễn ra bị huỷ theo đơn, ghi lý do. */
+    /** Flow 2.1: FS xác nhận khách đã đến; lịch chỉ đổi từ {@code Pending}. */
+    public void arrive() {
+        if (status != AppointmentStatus.Pending) {
+            throw new IllegalStateException("Lịch hẹn " + id + " không còn Pending: " + status);
+        }
+        this.status = AppointmentStatus.Done;
+        this.arrivedAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    /** Cancellation Cascade / FS chủ động: lịch {@code Pending} chưa diễn ra bị huỷ, ghi lý do. */
     public void cancel(String reason) {
         if (status != AppointmentStatus.Pending) {
             throw new IllegalStateException("Lịch hẹn " + id + " không còn Pending: " + status);

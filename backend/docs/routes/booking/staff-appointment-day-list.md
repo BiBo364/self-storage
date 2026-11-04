@@ -18,7 +18,7 @@ Lịch hẹn đã gán cho FS đang đăng nhập trong một ngày, kèm khách
 - Chỉ trả lịch của FS hiện tại; FS khác / cơ sở ngoài phạm vi không thấy. Không lộ lịch của FS khác.
 - Mỗi dòng: `id`, `type`, `status`, `date`, `startedAt`, `endAt`, `arrivedAt` (null khi chưa đến),
   `orderId`, `unitCode`, `facility {id, name}`, `customer {name, email, phone}`.
-- Read-only: **chưa có** endpoint `arrive`/Done (C1 #170; giá trị `handover.due_days` và audit chờ #171).
+- Action: [arrive](staff-appointment-arrive.md) (`Pending → Done`) và [cancel](staff-appointment-cancel.md) (FS chủ động, chưa quá `end_at`).
 - Sai định dạng `date` hiện trả 500 do lỗi chung của API khi query sai kiểu, không riêng route này.
 
 ## Ví dụ
@@ -33,4 +33,4 @@ curl -s "http://localhost:8080/api/staff/appointments?date=2026-11-03" -H "Autho
 
 ## Liên quan
 
-- [fm-appointment-assign-staff.md](fm-appointment-assign-staff.md) · [routes.md](../../routes.md)
+- [staff-appointment-arrive.md](staff-appointment-arrive.md) · [staff-appointment-cancel.md](staff-appointment-cancel.md) · [routes.md](../../routes.md)

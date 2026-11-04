@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,6 +18,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -26,8 +28,12 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import vn.lemar.selfstorage.SecurityConfig;
+import vn.lemar.selfstorage.booking.application.StaffAppointmentActionService;
 import vn.lemar.selfstorage.booking.application.StaffAppointmentQueryService;
 import vn.lemar.selfstorage.booking.application.dto.StaffAppointmentResponse;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentForbiddenException;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.identity.application.AccountJwtAuthenticationConverter;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
 import vn.lemar.selfstorage.identity.config.JwtConfiguration;
@@ -55,6 +61,8 @@ class StaffAppointmentControllerTest {
 
     @MockBean
     private StaffAppointmentQueryService queryService;
+    @MockBean
+    private StaffAppointmentActionService actionService;
     @MockBean
     private AccountQueryService accountQueryService;
     @MockBean
@@ -105,11 +113,75 @@ class StaffAppointmentControllerTest {
         mockMvc.perform(get("/api/staff/appointments")).andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void fsArrivesAppointment() throws Exception {
+        authenticate(FS, "FS");
+        when(actionService.arrive(1L)).thenReturn(appointment("Done"));
+
+        mockMvc.perform(as(post("/api/staff/appointments/1/arrive"), FS))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(StaffAppointmentController.ARRIVE_MESSAGE))
+                .andExpect(jsonPath("$.data.status").value("Done"))
+                .andExpect(jsonPath("$.data.arrivedAt").exists());
+    }
+
+    @Test
+    void fsCancelsAppointment() throws Exception {
+        authenticate(FS, "FS");
+        when(actionService.cancel(1L, "Khách yêu cầu huỷ")).thenReturn(appointment("Canceled"));
+
+        mockMvc.perform(as(post("/api/staff/appointments/1/cancel")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Khách yêu cầu huỷ\"}"), FS))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(StaffAppointmentController.CANCEL_MESSAGE))
+                .andExpect(jsonPath("$.data.status").value("Canceled"));
+    }
+
+    @Test
+    void cancelRequiresReason() throws Exception {
+        authenticate(FS, "FS");
+
+        mockMvc.perform(as(post("/api/staff/appointments/1/cancel")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"), FS))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void actionErrorsMapToStatusCodes() throws Exception {
+        authenticate(FS, "FS");
+        when(actionService.arrive(9L)).thenThrow(new AppointmentNotFoundException());
+        when(actionService.arrive(8L))
+                .thenThrow(new AppointmentForbiddenException("Bạn không phải FS phụ trách lịch này"));
+        when(actionService.arrive(7L))
+                .thenThrow(new AppointmentConflictException("Lịch hẹn không còn ở trạng thái chờ"));
+        when(actionService.cancel(6L, "x"))
+                .thenThrow(new AppointmentConflictException("Lịch đã quá giờ, chờ cron no-show"));
+
+        mockMvc.perform(as(post("/api/staff/appointments/9/arrive"), FS)).andExpect(status().isNotFound());
+        mockMvc.perform(as(post("/api/staff/appointments/8/arrive"), FS)).andExpect(status().isForbidden());
+        mockMvc.perform(as(post("/api/staff/appointments/7/arrive"), FS)).andExpect(status().isConflict());
+        mockMvc.perform(as(post("/api/staff/appointments/6/cancel")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"), FS))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void fmCannotUseStaffActions() throws Exception {
+        authenticate(FM, "FM");
+
+        mockMvc.perform(as(post("/api/staff/appointments/1/arrive"), FM)).andExpect(status().isForbidden());
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private static StaffAppointmentResponse appointment() {
-        return new StaffAppointmentResponse(1L, "CHECKIN", "Pending", DAY,
-                Instant.parse("2026-11-04T01:00:00Z"), Instant.parse("2026-11-04T03:00:00Z"), null,
+        return appointment("Pending");
+    }
+
+    private static StaffAppointmentResponse appointment(String status) {
+        Instant arrivedAt = "Done".equals(status) ? Instant.parse("2026-11-04T02:00:00Z") : null;
+        return new StaffAppointmentResponse(1L, "CHECKIN", status, DAY,
+                Instant.parse("2026-11-04T01:00:00Z"), Instant.parse("2026-11-04T03:00:00Z"), arrivedAt,
                 5L, "A-01", new StaffAppointmentResponse.Facility(1L, "Self Storage Quận 7"),
                 new StaffAppointmentResponse.Customer("Khách Demo", "customer1@lemar.vn", "0900000000"));
     }

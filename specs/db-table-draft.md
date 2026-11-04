@@ -477,7 +477,8 @@ Các bước:
 | `FS_ASSIGNED` | FM phân công FS | `Appointment`, `RentalOrder` | FM |
 | `APPOINTMENT_RESCHEDULED` | Lịch hẹn được đặt lại | `Appointment` | Customer/FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron xử lý khách không đến | `Appointment` | System |
-| `APPOINTMENT_CANCELED` | Hủy lịch chưa diễn ra khi đơn bị hủy (cancellation cascade) | `Appointment` | System |
+| `APPOINTMENT_CANCELED` | Hủy lịch Pending (cancellation cascade hoặc FS chủ động) | `Appointment` | System, FS |
+| `APPOINTMENT_ARRIVED` | FS xác nhận khách đến (Pending → Done) | `Appointment` | FS |
 | `IDENTITY_VERIFIED` | FS xác minh danh tính người đến | `HandoverRecord` | FS |
 | `UNIT_INSPECTED` | Khách xác nhận hiện trạng khoang | `HandoverRecord` | FS |
 | `HANDOVER_REJECTED` | Khách từ chối khoang tại chỗ | `HandoverRecord` | FS |
