@@ -1,21 +1,10 @@
 package vn.lemar.selfstorage.booking.config;
 
-import net.javacrumbs.shedlock.core.LockProvider;
-import net.javacrumbs.shedlock.provider.redis.spring.RedisLockProvider;
-import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-/** Scheduling + ShedLock cho job booking; một instance chạy, nhiều instance không chạy trùng. */
+/** Bật scheduler cho job booking; một instance chạy job. */
 @Configuration
 @EnableScheduling
-@EnableSchedulerLock(defaultLockAtMostFor = "PT5M")
 public class BookingSchedulingConfig {
-
-    @Bean
-    LockProvider lockProvider(RedisConnectionFactory connectionFactory) {
-        return new RedisLockProvider(connectionFactory);
-    }
 }

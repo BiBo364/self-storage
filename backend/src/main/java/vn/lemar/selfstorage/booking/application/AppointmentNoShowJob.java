@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 
 /** Cron 5 phút: quét lịch check-in quá giờ chưa đến và huỷ no-show. */
 @Component
@@ -22,7 +21,6 @@ public class AppointmentNoShowJob {
     @Scheduled(
             fixedDelayString = "${booking.appointment-no-show.fixed-delay-ms:300000}",
             initialDelayString = "${booking.appointment-no-show.initial-delay-ms:60000}")
-    @SchedulerLock(name = "appointmentNoShow", lockAtMostFor = "PT4M")
     public void cancelNoShow() {
         List<Long> due = service.findDueIds();
         int canceled = 0;
