@@ -26,3 +26,21 @@ export function fetchStaffAppointments(date: string): Promise<StaffAppointment[]
     { accessToken: accessToken() },
   );
 }
+
+export function arriveStaffAppointment(appointmentId: number): Promise<StaffAppointment> {
+  return apiRequest<StaffAppointment>(`/api/staff/appointments/${appointmentId}/arrive`, {
+    method: "POST",
+    accessToken: accessToken(),
+  });
+}
+
+export function cancelStaffAppointment(
+  appointmentId: number,
+  reason: string,
+): Promise<StaffAppointment> {
+  return apiRequest<StaffAppointment>(`/api/staff/appointments/${appointmentId}/cancel`, {
+    method: "POST",
+    body: { reason },
+    accessToken: accessToken(),
+  });
+}

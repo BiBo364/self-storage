@@ -1,7 +1,15 @@
 import { Clock3, MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../app/api";
-import { fetchStaffAppointments, type StaffAppointment } from "../../app/staffSchedule";
+import {
+  arriveStaffAppointment,
+  cancelStaffAppointment,
+  fetchStaffAppointments,
+  type StaffAppointment,
+} from "../../app/staffSchedule";
+import { Button } from "../../components/ui/Button";
+import { DemoNotice } from "../../components/ui/DemoNotice";
+import { DetailPanel } from "../../components/ui/DetailPanel";
 import { FilterSelect } from "../../components/ui/FilterSelect";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
@@ -56,6 +64,14 @@ function statusOf(status: string) {
 export function DailySchedulePage() {
   const [date, setDate] = useState(todayIso);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [action, setAction] = useState<{
+    appointment: StaffAppointment;
+    kind: "arrive" | "cancel";
+  } | null>(null);
+  const [reason, setReason] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(0);
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
@@ -69,6 +85,7 @@ export function DailySchedulePage() {
         const list = await fetchStaffAppointments(date);
         if (!active) return;
         setAppointments(list);
+        setNow(Date.now());
       } catch (caught) {
         if (!active) return;
         setError(
@@ -85,6 +102,8 @@ export function DailySchedulePage() {
       active = false;
     };
   }, [date, reloadKey]);
+
+  // now is set when the day loads; the schedule re-evaluates expiration on refresh.
 
   const pending = appointments.filter((appointment) => appointment.status === "Pending").length;
   const done = appointments.filter((appointment) => appointment.status === "Done").length;
@@ -104,6 +123,44 @@ export function DailySchedulePage() {
     setIsLoading(true);
     setError(null);
     setReloadKey((key) => key + 1);
+  }
+
+  function openAction(appointment: StaffAppointment, kind: "arrive" | "cancel") {
+    setAction({ appointment, kind });
+    setReason("");
+    setActionError(null);
+  }
+
+  async function submitAction() {
+    if (!action) return;
+    if (action.kind === "cancel" && !reason.trim()) {
+      setActionError("Vui lòng nhập lý do huỷ");
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      if (action.kind === "arrive") {
+        await arriveStaffAppointment(action.appointment.id);
+      } else {
+        await cancelStaffAppointment(action.appointment.id, reason.trim());
+      }
+      setAction(null);
+      setReloadKey((key) => key + 1);
+    } catch (caught) {
+      setActionError(
+        caught instanceof ApiError ? caught.message : "Không thực hiện được thao tác.",
+      );
+      if (caught instanceof ApiError && caught.status === 409) {
+        setReloadKey((key) => key + 1);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function isExpired(appointment: StaffAppointment) {
+    return appointment.endAt !== null && new Date(appointment.endAt).getTime() < now;
   }
 
   return (
@@ -218,10 +275,76 @@ export function DailySchedulePage() {
                     </span>
                   </div>
                 </div>
+
+                {appointment.status === "Pending" && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                    <span className="text-label text-muted">
+                      {isExpired(appointment)
+                        ? "Đã quá giờ — chờ cron no-show."
+                        : "Khách chưa đến."}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <Button onClick={() => openAction(appointment, "arrive")}>
+                        Khách đã đến
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        disabled={isExpired(appointment)}
+                        onClick={() => openAction(appointment, "cancel")}
+                      >
+                        Hủy
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </article>
             );
           })}
         </div>
+      )}
+
+      {action && (
+        <DetailPanel
+          title={action.kind === "arrive" ? "Xác nhận khách đã đến" : "Huỷ lịch hẹn"}
+          eyebrow={`Check-in · ${formatDateVN(action.appointment.date)}`}
+          onClose={() => setAction(null)}
+        >
+          <div className="grid gap-2 text-small text-muted">
+            <span>{action.appointment.customer.name ?? action.appointment.customer.email}</span>
+            <span>
+              {formatTimeRange(action.appointment)} · {action.appointment.unitCode ?? "—"}
+            </span>
+            <span>{action.appointment.facility.name}</span>
+          </div>
+
+          {actionError && (
+            <div className="mt-4">
+              <DemoNotice tone="error">{actionError}</DemoNotice>
+            </div>
+          )}
+
+          {action.kind === "cancel" && (
+            <label className="mt-4 grid gap-1.5 text-label text-muted">
+              Lý do huỷ
+              <textarea
+                className="min-h-[90px] rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink outline-0 transition-colors focus:border-brand"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Ví dụ: Khách yêu cầu huỷ"
+                maxLength={1000}
+              />
+            </label>
+          )}
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button pending={busy} onClick={submitAction}>
+              {action.kind === "arrive" ? "Xác nhận khách đã đến" : "Huỷ lịch"}
+            </Button>
+            <Button variant="secondary" onClick={() => setAction(null)}>
+              Đóng
+            </Button>
+          </div>
+        </DetailPanel>
       )}
     </div>
   );
