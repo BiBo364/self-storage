@@ -42,6 +42,7 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | GET | `/api/payments/vnpay/ipn` | Public (chữ ký VNPay) | VNPay xác nhận thanh toán — nguồn xác nhận duy nhất | [routes/payment/vnpay-ipn.md](routes/payment/vnpay-ipn.md) |
 | GET | `/api/payments/vnpay/return` | Public (redirect VNPay) | Trang kết quả cho khách — không ghi dữ liệu | [routes/payment/vnpay-return.md](routes/payment/vnpay-return.md) |
 | POST | `/api/invoices/{invoiceId}/pay` | Chủ hóa đơn + đã xác minh email | Mở phiên thanh toán hóa đơn cọc (Flow 1.4) | [routes/booking/invoice-pay.md](routes/booking/invoice-pay.md) |
+| POST | `/api/admin/payments/{txnRef}/reconcile` | Bearer + role `ADMIN` | Chốt thủ công giao dịch Pending theo portal VNPay | [routes/payment/manual-reconcile.md](routes/payment/manual-reconcile.md) |
 | POST | `/api/media/uploads` | Bearer + `ACCOUNT_ACTIVE` | Upload file (ảnh/PDF ≤ 10MB), trả URL + batchId dùng lại trong flow | [routes/media/upload.md](routes/media/upload.md) |
 | DELETE | `/api/media/uploads/batch/{batchId}` | Bearer + `ACCOUNT_ACTIVE`; chủ batch | Xoá batch upload khi user bấm X trên file trong phase hiện tại | [routes/media/delete-batch.md](routes/media/delete-batch.md) |
 | POST | `/api/media/uploads/batch/{batchId}/attach` | Bearer + `ACCOUNT_ACTIVE`; chủ batch | Gắn batch upload, chặn Hủy xoá asset đã dùng | [routes/media/attach-batch.md](routes/media/attach-batch.md) |

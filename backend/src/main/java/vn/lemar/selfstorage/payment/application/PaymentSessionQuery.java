@@ -2,6 +2,7 @@ package vn.lemar.selfstorage.payment.application;
 
 import java.util.Collection;
 import java.util.Optional;
+import vn.lemar.selfstorage.payment.application.dto.SuccessfulPayment;
 
 /**
  * Cho module nghiệp vụ hỏi "hóa đơn này có phiên thanh toán đang mở không" mà không phải chạm
@@ -29,4 +30,7 @@ public interface PaymentSessionQuery {
 
     /** URL còn hạn của phiên cũ; rỗng khi cache hết hạn hoặc Redis lỗi. */
     Optional<String> openPaymentUrl(Long invoiceId);
+
+    /** Giao dịch PAY/Success của invoice — dùng cho job sửa state booking khi listener IPN lỗi. */
+    Optional<SuccessfulPayment> findSuccessfulPayment(Long invoiceId);
 }

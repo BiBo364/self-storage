@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -14,22 +15,34 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import vn.lemar.selfstorage.payment.application.PaymentGateway;
+import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
+import vn.lemar.selfstorage.audit.domain.AuditAction;
 import vn.lemar.selfstorage.payment.application.PaymentService;
 import vn.lemar.selfstorage.payment.application.PaymentUrlCache;
+import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationOutcome;
+import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationRequest;
 import vn.lemar.selfstorage.payment.application.dto.PaymentRequest;
+import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
+import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationNotFoundException;
+import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationValidationException;
 import vn.lemar.selfstorage.payment.application.event.PaymentFailed;
 import vn.lemar.selfstorage.payment.application.event.PaymentSucceeded;
 import vn.lemar.selfstorage.payment.config.VnPayProperties;
+import vn.lemar.selfstorage.payment.domain.PaymentDirection;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
 import vn.lemar.selfstorage.payment.repository.PaymentTransactionRepository;
@@ -246,4 +259,230 @@ class PaymentServiceTest {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("invoiceId");
     }
+    @Test
+    void manualSuccessMarksTransactionAndPublishesEvent() {
+        Instant paidAt = Instant.now();
+
+        var response = service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", paidAt, "79357284"), "admin@lemar.vn");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(transaction.getGatewayTransactionNo()).isEqualTo("79357284");
+        assertThat(transaction.getPaidAt()).isEqualTo(paidAt);
+        assertThat(response.txnRef()).isEqualTo(TXN_REF);
+        assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
+        ArgumentCaptor<PaymentSucceeded> event = ArgumentCaptor.forClass(PaymentSucceeded.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().amount()).isEqualByComparingTo(transaction.getAmount());
+
+        ArgumentCaptor<AuditEntry> auditEntry = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(audit).record(auditEntry.capture());
+        assertThat(auditEntry.getValue().reason()).contains("admin@lemar.vn");
+        assertThat(auditEntry.getValue().newValue().toString())
+                .contains("paidAt", paidAt.toString());
+    }
+
+    @Test
+    void manualSuccessAcceptsPaidAtTruncatedToTheTransactionSecond() {
+        Instant paidAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        var response = service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", paidAt, "GW-SAME-SECOND"), "admin@lemar.vn");
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(transaction.getPaidAt()).isEqualTo(paidAt);
+    }
+
+    @Test
+    void manualSuccessMapsGatewayConstraintRaceToConflict() {
+        doThrow(new DataIntegrityViolationException("duplicate gateway no",
+                new SQLException("duplicate", "23505"))).when(repository).flush();
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "GW-RACE"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationConflictException.class)
+                .hasMessageContaining("xung đột");
+    }
+
+    @Test
+    void manualSuccessDoesNotMaskNonUniqueConstraintFailure() {
+        DataIntegrityViolationException failure = new DataIntegrityViolationException(
+                "check violation", new SQLException("check", "23514"));
+        doThrow(failure).when(repository).flush();
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "GW-CHECK"), "admin@lemar.vn"))
+                .isSameAs(failure);
+    }
+
+    @Test
+    void manualSuccessRequiresPaidAt() {
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", null, "GW-NO-PAIDAT"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationValidationException.class)
+                .hasMessageContaining("paidAt");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessRequiresGatewayTransactionNo() {
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "  "), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationValidationException.class)
+                .hasMessageContaining("gatewayTransactionNo");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessRejectsFuturePaidAt() {
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now().plusSeconds(60), "GW-FUTURE"),
+                "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationValidationException.class)
+                .hasMessageContaining("tương lai");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessRejectsPaidAtBeforeTransactionCreation() {
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now().minusSeconds(60), "GW-PAST"),
+                "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationValidationException.class)
+                .hasMessageContaining("trước thời điểm tạo giao dịch");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualSuccessMarksDuplicateWhenInvoiceAlreadyHasSuccessfulPayment() {
+        Instant paidAt = Instant.now();
+        when(repository.existsByInvoiceIdAndDirectionAndStatus(
+                7L, PaymentDirection.PAY, PaymentStatus.SUCCESS)).thenReturn(true);
+
+        var response = service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", paidAt, "GW-NEW"), "admin@lemar.vn");
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.DUPLICATE);
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.DUPLICATE);
+        ArgumentCaptor<Object> event = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue()).isInstanceOf(
+                vn.lemar.selfstorage.payment.application.event.PaymentDuplicateDetected.class);
+        ArgumentCaptor<AuditEntry> auditEntry = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(audit).record(auditEntry.capture());
+        assertThat(auditEntry.getValue().action()).isEqualTo(AuditAction.PAYMENT_DUPLICATE);
+        assertThat(auditEntry.getValue().newValue().toString())
+                .contains("paidAt", paidAt.toString());
+    }
+
+    @Test
+    void secondSuccessIpnForSameInvoiceMarksDuplicate() {
+        when(repository.existsByInvoiceIdAndDirectionAndStatus(
+                7L, PaymentDirection.PAY, PaymentStatus.SUCCESS)).thenReturn(true);
+
+        var response = service.handleIpn(ipn());
+
+        assertThat(response.rspCode()).isEqualTo("02");
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.DUPLICATE);
+        verify(events).publishEvent(any(
+                vn.lemar.selfstorage.payment.application.event.PaymentDuplicateDetected.class));
+        verify(audit).record(argThat(entry -> entry.action() == AuditAction.PAYMENT_DUPLICATE));
+        verify(events, never()).publishEvent(any(PaymentSucceeded.class));
+    }
+
+    @Test
+    void manualSuccessRejectsDuplicateGatewayTransactionNo() {
+        when(repository.existsByGatewayTransactionNo("GW-DUP")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "portal says paid", Instant.now(), "GW-DUP"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationConflictException.class)
+                .hasMessageContaining("đã được dùng cho giao dịch khác");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(events, never()).publishEvent(any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void manualFailureMarksTransactionFailedAndPublishesEvent() {
+        var response = service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.FAILED,
+                        "portal says failed", null, null), "admin@lemar.vn");
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(transaction.getFailureReason()).isEqualTo("manual: portal says failed");
+        assertThat(response.status()).isEqualTo(PaymentStatus.FAILED);
+        verify(events).publishEvent(any(PaymentFailed.class));
+    }
+
+    @Test
+    void manualFailureAuditRecordsTheAdminActor() {
+        service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.FAILED,
+                        "portal says failed", null, null), "admin@lemar.vn");
+
+        ArgumentCaptor<AuditEntry> auditEntry = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(audit).record(auditEntry.capture());
+        assertThat(auditEntry.getValue().action()).isEqualTo(AuditAction.PAYMENT_FAILED);
+        assertThat(auditEntry.getValue().reason()).contains("admin@lemar.vn");
+    }
+
+    @Test
+    void manualReconcileRefusesAlreadySettledTransaction() {
+        service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "first", Instant.now(), "GW-1"), "admin@lemar.vn");
+        reset(events);
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "second", Instant.now(), "GW-2"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationConflictException.class);
+        verify(events, never()).publishEvent(any());
+    }
+
+    @Test
+    void manualReconcileRefusesDuplicateTransaction() {
+        transaction.markDuplicate("GW-OLD", Instant.now(), "duplicate", "{}");
+
+        assertThatThrownBy(() -> service.reconcileManually(TXN_REF,
+                new ManualReconciliationRequest(ManualReconciliationOutcome.SUCCESS,
+                        "retry", Instant.now(), "GW-NEW"), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationConflictException.class)
+                .hasMessageContaining("Duplicate");
+    }
+
+    @Test
+    void manualReconcileReturnsNotFoundForUnknownTxnRef() {
+        when(repository.findByVnpTxnRef("missing")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.reconcileManually("missing",
+                new ManualReconciliationRequest(ManualReconciliationOutcome.FAILED,
+                        "not found", null, null), "admin@lemar.vn"))
+                .isInstanceOf(ManualReconciliationNotFoundException.class);
+    }
+
 }

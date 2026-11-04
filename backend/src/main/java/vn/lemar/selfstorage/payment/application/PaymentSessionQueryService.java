@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.lemar.selfstorage.payment.application.dto.SuccessfulPayment;
 import vn.lemar.selfstorage.payment.domain.PaymentDirection;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.repository.PaymentTransactionRepository;
@@ -48,5 +49,15 @@ public class PaymentSessionQueryService implements PaymentSessionQuery {
     @Override
     public Optional<String> openPaymentUrl(Long invoiceId) {
         return urlCache.get(invoiceId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<SuccessfulPayment> findSuccessfulPayment(Long invoiceId) {
+        return repository.findFirstByInvoiceIdAndDirectionAndStatusOrderByPaidAtDesc(
+                        invoiceId, PaymentDirection.PAY, PaymentStatus.SUCCESS)
+                .map(transaction -> new SuccessfulPayment(
+                        transaction.getInvoiceId(), transaction.getVnpTxnRef(),
+                        transaction.getAmount(), transaction.getPaidAt()));
     }
 }

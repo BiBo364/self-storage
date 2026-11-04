@@ -112,6 +112,7 @@ public class BookingExceptionHandler {
     public ResponseEntity<ApiError> handleDepositNotAllowed(DepositNotAllowedException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.now(ex.getMessage()));
     }
+
     // ---- Lịch hẹn check-in (spec 1.5)
 
     @ExceptionHandler(AppointmentNotFoundException.class)

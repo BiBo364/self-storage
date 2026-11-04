@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import vn.lemar.selfstorage.payment.application.PaymentSessionQueryService;
 import vn.lemar.selfstorage.payment.application.PaymentUrlCache;
 import vn.lemar.selfstorage.payment.domain.PaymentDirection;
+import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
 import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.repository.PaymentTransactionRepository;
 
@@ -53,6 +55,27 @@ class PaymentSessionQueryServiceTest {
         when(urlCache.get(1L)).thenReturn(Optional.of("https://pay/session"));
 
         assertThat(service.openPaymentUrl(1L)).contains("https://pay/session");
+    }
+
+    @Test
+    void successfulPaymentDetailsAreReturnedForTheBookingRepairJob() {
+        PaymentTransaction transaction = mock(PaymentTransaction.class);
+        when(transaction.getInvoiceId()).thenReturn(1L);
+        when(transaction.getVnpTxnRef()).thenReturn("TXN1");
+        when(transaction.getAmount()).thenReturn(new BigDecimal("10000"));
+        when(transaction.getPaidAt()).thenReturn(Instant.parse("2026-10-28T12:00:00Z"));
+        when(repository.findFirstByInvoiceIdAndDirectionAndStatusOrderByPaidAtDesc(
+                1L, PaymentDirection.PAY, PaymentStatus.SUCCESS))
+                .thenReturn(Optional.of(transaction));
+
+        var payment = service.findSuccessfulPayment(1L);
+
+        assertThat(payment).hasValueSatisfying(found -> {
+            assertThat(found.invoiceId()).isEqualTo(1L);
+            assertThat(found.vnpTxnRef()).isEqualTo("TXN1");
+            assertThat(found.amount()).isEqualByComparingTo(new BigDecimal("10000"));
+            assertThat(found.paidAt()).isEqualTo(Instant.parse("2026-10-28T12:00:00Z"));
+        });
     }
 
     @Test
