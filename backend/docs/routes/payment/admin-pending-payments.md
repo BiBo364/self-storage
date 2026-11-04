@@ -40,6 +40,7 @@ Trả các case `Open` cho giao dịch `PAY/Pending` quá ngưỡng. Route read-
 ```bash
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
   "http://localhost:8080/api/admin/payments/pending?olderThanMinutes=15&page=0&size=20"
+# {"message":"Lấy danh sách giao dịch Pending thành công","data":{"items":[{"caseId":1,"transactionId":1,"invoiceId":1,"vnpTxnRef":"TXN-E2E-216","amount":500000.00,"transactionCreatedAt":"2026-11-04T13:51:44.947742Z","detectedAt":"2026-11-04T14:22:06.253465Z","notifiedAt":"2026-11-04T14:22:06.312388Z","pendingAgeMinutes":30,"status":"Open","resolution":null,"gatewayTransactionNo":null,"paidAt":null,"note":null,"evidenceUrl":null,"resolvedAt":null,"resolvedByEmail":null}],"page":0,"size":20,"totalElements":1,"totalPages":1}}
 ```
 
 ## Liên quan
