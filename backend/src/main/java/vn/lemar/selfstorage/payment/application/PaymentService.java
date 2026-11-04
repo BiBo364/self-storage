@@ -64,10 +64,12 @@ public class PaymentService {
     private final ObjectMapper objectMapper;
     private final AuditRecorder audit;
     private final PaymentUrlCache urlCache;
+    private final PaymentReconciliationCaseService reconciliationCases;
 
     public PaymentService(PaymentGateway gateway, PaymentTransactionRepository repository,
                           VnPayProperties properties, ApplicationEventPublisher events,
-                          ObjectMapper objectMapper, AuditRecorder audit, PaymentUrlCache urlCache) {
+                          ObjectMapper objectMapper, AuditRecorder audit, PaymentUrlCache urlCache,
+                          PaymentReconciliationCaseService reconciliationCases) {
         this.gateway = gateway;
         this.repository = repository;
         this.properties = properties;
@@ -75,6 +77,7 @@ public class PaymentService {
         this.objectMapper = objectMapper;
         this.audit = audit;
         this.urlCache = urlCache;
+        this.reconciliationCases = reconciliationCases;
     }
 
     /**
@@ -163,18 +166,24 @@ public class PaymentService {
         // PaymentDuplicateDetected.
         if (gatewayReportedSuccess(params)) {
             repository.lockInvoiceForPayment(transaction.getInvoiceId());
+            String gatewayTransactionNo = params.get("vnp_TransactionNo");
+            Instant paidAt = parsePayDate(params.get("vnp_PayDate"));
             if (repository.existsByInvoiceIdAndDirectionAndStatus(transaction.getInvoiceId(),
                     PaymentDirection.PAY, PaymentStatus.SUCCESS)) {
-                applyDuplicate(transaction, params.get("vnp_TransactionNo"),
-                        parsePayDate(params.get("vnp_PayDate")), responsePayload, null);
+                applyDuplicate(transaction, gatewayTransactionNo, paidAt, responsePayload, null);
+                reconciliationCases.resolve(transaction.getId(), "Duplicate", gatewayTransactionNo,
+                        paidAt, "IPN duplicate", null, "IPN");
                 return IpnResponse.alreadyConfirmed();
             }
-            applySuccess(transaction, params.get("vnp_TransactionNo"),
-                    parsePayDate(params.get("vnp_PayDate")), responsePayload, null);
+            applySuccess(transaction, gatewayTransactionNo, paidAt, responsePayload, null);
+            reconciliationCases.resolve(transaction.getId(), "Success", gatewayTransactionNo,
+                    paidAt, "IPN", null, "IPN");
         } else {
             String reason = "vnp_ResponseCode=" + params.get("vnp_ResponseCode")
                     + ", vnp_TransactionStatus=" + params.get("vnp_TransactionStatus");
             applyFailure(transaction, reason, responsePayload, reason);
+            reconciliationCases.resolve(transaction.getId(), "Failed", null, null,
+                    reason, null, "IPN");
         }
         return IpnResponse.success();
     }
@@ -221,9 +230,13 @@ public class PaymentService {
             if (duplicate) {
                 applyDuplicate(transaction, gatewayTransactionNo, request.paidAt(),
                         responsePayload, actorEmail);
+                reconciliationCases.resolve(transaction.getId(), "Duplicate", gatewayTransactionNo,
+                        request.paidAt(), request.note(), request.evidenceUrl(), actorEmail);
             } else {
                 applySuccess(transaction, gatewayTransactionNo, request.paidAt(),
                         responsePayload, actorEmail);
+                reconciliationCases.resolve(transaction.getId(), "Success", gatewayTransactionNo,
+                        request.paidAt(), request.note(), request.evidenceUrl(), actorEmail);
             }
             try {
                 repository.flush();
@@ -238,6 +251,8 @@ public class PaymentService {
         } else {
             applyFailure(transaction, "manual: " + request.note(), responsePayload,
                     actorEmail == null ? "manual reconcile" : "manual reconcile by " + actorEmail);
+            reconciliationCases.resolve(transaction.getId(), "Failed", null, null,
+                    request.note(), request.evidenceUrl(), actorEmail);
         }
         return new ManualReconciliationResponse(transaction.getVnpTxnRef(), transaction.getStatus(),
                 transaction.getGatewayTransactionNo(), transaction.getPaidAt());

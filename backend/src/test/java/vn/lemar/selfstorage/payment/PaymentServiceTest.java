@@ -31,6 +31,7 @@ import vn.lemar.selfstorage.payment.application.PaymentGateway;
 import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.audit.domain.AuditAction;
+import vn.lemar.selfstorage.payment.application.PaymentReconciliationCaseService;
 import vn.lemar.selfstorage.payment.application.PaymentService;
 import vn.lemar.selfstorage.payment.application.PaymentUrlCache;
 import vn.lemar.selfstorage.payment.application.dto.ManualReconciliationOutcome;
@@ -58,6 +59,7 @@ class PaymentServiceTest {
     private ApplicationEventPublisher events;
     private AuditRecorder audit;
     private PaymentUrlCache urlCache;
+    private PaymentReconciliationCaseService reconciliationCases;
     private PaymentService service;
     private PaymentTransaction transaction;
 
@@ -68,9 +70,10 @@ class PaymentServiceTest {
         events = mock(ApplicationEventPublisher.class);
         audit = mock(AuditRecorder.class);
         urlCache = mock(PaymentUrlCache.class);
+        reconciliationCases = mock(PaymentReconciliationCaseService.class);
         service = new PaymentService(gateway, repository,
                 new VnPayProperties(TMN_CODE, "secret", "https://pay", "https://return"), events,
-                new ObjectMapper(), audit, urlCache);
+                new ObjectMapper(), audit, urlCache, reconciliationCases);
 
         transaction = new PaymentTransaction(7L, TXN_REF, new BigDecimal("10000"), "Thanh toan");
         when(gateway.verifySignature(any())).thenReturn(true);
@@ -172,7 +175,7 @@ class PaymentServiceTest {
         when(failingMapper.writeValueAsString(any())).thenThrow(new JsonGenerationException("boom"));
         PaymentService failingService = new PaymentService(gateway, repository,
                 new VnPayProperties(TMN_CODE, "secret", "https://pay", "https://return"), events,
-                failingMapper, audit, urlCache);
+                failingMapper, audit, urlCache, reconciliationCases);
         Map<String, String> params = ipn();
 
         var response = failingService.handleIpn(params);

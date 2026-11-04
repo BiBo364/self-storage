@@ -115,6 +115,10 @@ public class NotificationTemplateCatalog {
                 "Có thanh toán trùng cần hoàn tiền",
                 "Đơn {{orderCode}} có thêm giao dịch {{vnpTxnRef}} số tiền {{amount}} sau khi đã "
                         + "thanh toán. Cần hoàn tiền thủ công.");
+        put(NotificationType.PAYMENT_PENDING_REVIEW_REQUIRED, NotificationRecipient.ADMIN,
+                "Có giao dịch Pending cần đối soát",
+                "Giao dịch {{vnpTxnRef}} của hoá đơn {{invoiceId}} số tiền {{amount}} đã Pending "
+                        + "{{pendingAgeMinutes}} phút. Vui lòng tra portal VNPay và đối soát.");
         put(NotificationType.UNIT_CHANGE_PAYMENT_REQUIRED, NotificationRecipient.CUSTOMER,
                 "Thanh toán để giữ khoang mới",
                 "Đơn {{orderCode}}: cần thanh toán thêm {{amount}} để giữ khoang mới. "
