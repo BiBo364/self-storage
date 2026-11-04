@@ -169,7 +169,20 @@ class StaffAppointmentActionIntegrationTest {
 
         assertThatThrownBy(() -> service.cancel(appointmentId, "Khách không đến"))
                 .isInstanceOf(AppointmentConflictException.class)
-                .hasMessage("Lịch đã quá giờ, chờ cron no-show");
+                .hasMessage("Lịch đã quá giờ");
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
+                .isEqualTo("Pending");
+    }
+
+    @Test
+    void arrivingAfterTheSlotConflicts() {
+        jdbc.update("update appointments set started_at = now() - interval '3 hours', "
+                + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        assertThatThrownBy(() -> service.arrive(appointmentId))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessage("Lịch đã quá khung giờ, không thể xác nhận khách đến");
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Pending");
     }

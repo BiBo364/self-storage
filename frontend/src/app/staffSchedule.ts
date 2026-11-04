@@ -14,6 +14,7 @@ export type StaffAppointment = {
   unitCode: string | null;
   facility: { id: number; name: string };
   customer: { name: string | null; email: string; phone: string | null };
+  noShowDue: boolean;
 };
 
 function accessToken(): string | undefined {

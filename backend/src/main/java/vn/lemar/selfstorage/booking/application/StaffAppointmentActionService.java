@@ -58,6 +58,9 @@ public class StaffAppointmentActionService {
     public StaffAppointmentResponse arrive(Long appointmentId) {
         Appointment appointment = lockAssigned(appointmentId);
         requirePending(appointment);
+        if (appointment.isNoShowDue(Instant.now())) {
+            throw new AppointmentConflictException("Lịch đã quá khung giờ, không thể xác nhận khách đến");
+        }
         appointment.arrive();
         Long actorId = currentAccount.getCurrentAccountId();
         Map<String, Object> newValue = new HashMap<>();
@@ -76,7 +79,7 @@ public class StaffAppointmentActionService {
         Appointment appointment = lockAssigned(appointmentId);
         requirePending(appointment);
         if (appointment.getEndAt() != null && appointment.getEndAt().isBefore(Instant.now())) {
-            throw new AppointmentConflictException("Lịch đã quá giờ, chờ cron no-show");
+            throw new AppointmentConflictException("Lịch đã quá giờ");
         }
         appointment.cancel(reason);
         Long actorId = currentAccount.getCurrentAccountId();
@@ -109,7 +112,8 @@ public class StaffAppointmentActionService {
 
     private StaffAppointmentResponse response(Long appointmentId) {
         appointmentRepository.flush();
-        return readRepository.findById(appointmentId).map(StaffAppointmentResponse::from)
+        return readRepository.findById(appointmentId)
+                .map(row -> StaffAppointmentResponse.from(row, Instant.now()))
                 .orElseThrow(AppointmentNotFoundException::new);
     }
 }

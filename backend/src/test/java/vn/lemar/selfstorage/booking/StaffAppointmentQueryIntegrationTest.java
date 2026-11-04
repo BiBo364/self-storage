@@ -106,6 +106,7 @@ class StaffAppointmentQueryIntegrationTest {
             assertThat(row.status()).isEqualTo("Pending");
             assertThat(row.date()).isEqualTo(day);
             assertThat(row.arrivedAt()).isNull();
+            assertThat(row.noShowDue()).isFalse();
             assertThat(row.orderId()).isEqualTo(orderId);
             assertThat(row.unitCode()).isEqualTo("A-01");
             assertThat(row.facility().id()).isEqualTo(q7);
@@ -115,6 +116,24 @@ class StaffAppointmentQueryIntegrationTest {
             assertThat(row.customer().phone()).isEqualTo("0900000000");
         });
         assertThat(result).extracting(StaffAppointmentResponse::id).doesNotContain(otherAppointmentId);
+    }
+
+    @Test
+    void marksOverduePendingAppointmentAsNoShowDue() {
+        LocalDate today = LocalDate.now(FACILITY_ZONE);
+        long dueId = jdbc.queryForObject("""
+                insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
+                values (?, ?, ?, 'CHECKIN', ?, now() - interval '3 hours', now() - interval '1 hour',
+                        'Pending') returning id""",
+                Long.class, customerId, q7, fsId, today);
+        loginAs("fs1@lemar.vn");
+
+        List<StaffAppointmentResponse> result = service.listForCurrentStaff(today);
+
+        assertThat(result).singleElement().satisfies(row -> {
+            assertThat(row.id()).isEqualTo(dueId);
+            assertThat(row.noShowDue()).isTrue();
+        });
     }
 
     @Test

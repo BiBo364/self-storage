@@ -85,6 +85,11 @@ public class Appointment {
         this.updatedAt = Instant.now();
     }
 
+    /** Lịch check-in Pending đã quá end_at — guard dùng chung cron no-show và action FS. */
+    public boolean isNoShowDue(Instant now) {
+        return AppointmentNoShowPolicy.isDue(type, status, endAt, now);
+    }
+
     /** Flow 2.1: FS xác nhận khách đã đến; lịch chỉ đổi từ {@code Pending}. */
     public void arrive() {
         if (status != AppointmentStatus.Pending) {
