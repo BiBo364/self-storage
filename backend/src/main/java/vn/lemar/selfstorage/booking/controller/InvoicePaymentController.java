@@ -17,7 +17,7 @@ import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.ApiError;
 import vn.lemar.selfstorage.booking.application.DepositPaymentService;
 import vn.lemar.selfstorage.booking.application.InvoiceQueryService;
-import vn.lemar.selfstorage.booking.application.InvoiceView;
+import vn.lemar.selfstorage.booking.application.InvoiceListView;
 import vn.lemar.selfstorage.booking.application.dto.StartDepositResponse;
 
 /** Khách xem và tự mở phiên thanh toán cho hóa đơn của mình. */
@@ -43,7 +43,8 @@ public class InvoicePaymentController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy hóa đơn thành công"),
             @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
-            @ApiResponse(responseCode = "403", description = "Tài khoản không còn hoạt động"),
+            @ApiResponse(responseCode = "403",
+                    description = "Tài khoản không còn hoạt động hoặc chưa xác minh email"),
             @ApiResponse(responseCode = "404",
                     description = "Hóa đơn không tồn tại, hoặc không thuộc về người gọi",
                     content = @Content(mediaType = "application/json",
@@ -53,7 +54,7 @@ public class InvoicePaymentController {
                                     "timestamp":"2026-11-02T08:14:28.048550698Z"}""")))
     })
     @GetMapping("/{invoiceId}")
-    public ResponseEntity<ApiEnvelope<InvoiceView>> detail(@PathVariable Long invoiceId) {
+    public ResponseEntity<ApiEnvelope<InvoiceListView>> detail(@PathVariable Long invoiceId) {
         return ResponseEntity.ok(ApiEnvelope.ok(DETAIL_MESSAGE, invoiceQuery.findOwn(invoiceId)));
     }
 

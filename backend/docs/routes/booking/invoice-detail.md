@@ -18,14 +18,18 @@ Hóa đơn còn `Unpaid` ngay sau khi trả tiền là trạng thái hợp lệ,
 
 ## Hành vi
 
-- Trả `Invoice` theo id: `code`, `title`, `description`, `type`, `status`, `amount`, `dueDate`,
-  `orderId`. Giá trị `type`/`status` giữ nguyên dạng PascalCase như trong DB.
+- Projection **dùng chung với danh sách hóa đơn** ([invoice-list.md](invoice-list.md)): `id`,
+  `orderId`, `code`, `title`, `description`, `type`, `status`, `amount`, `createdAt`, `dueDate`,
+  `unitId`, `unitCode`, `facilityId`, `facilityName`. Một hợp đồng thì một chỗ dựng — cùng đọc qua
+  `BookingReadRepository`, không map entity thành dạng thứ hai.
+- `unitId` / `unitCode` / `facilityId` / `facilityName` là `null` khi hóa đơn không gắn đơn thuê
+  (hóa đơn theo hợp đồng). Giá trị `type`/`status` giữ nguyên dạng PascalCase như trong DB.
 - Hóa đơn không tồn tại và hóa đơn của người khác trả **cùng một** 404 — khác nhau là tiết lộ id
-  nào đang có thật.
-- **Không** kiểm xác minh email như đường mở phiên thanh toán: đây là phép đọc dữ liệu của chính
-  người gọi, và khách phải xác minh xong mới đi tới được bước có hóa đơn.
+  nào đang có thật. Quyền sở hữu nằm trong điều kiện truy vấn, không lọc sau khi đã đọc.
+- Không kiểm xác minh email trong service: account chưa xác minh không được cấp `ACCOUNT_ACTIVE`
+  nên đã bị chặn 403 ở tầng filter trước khi tới đây.
 - Chỉ đọc, không đổi gì, không ghi audit.
 
 ## Liên quan
 
-- [invoice-pay.md](invoice-pay.md) · [routes.md](../../routes.md)
+- [invoice-list.md](invoice-list.md) · [invoice-pay.md](invoice-pay.md) · [routes.md](../../routes.md)

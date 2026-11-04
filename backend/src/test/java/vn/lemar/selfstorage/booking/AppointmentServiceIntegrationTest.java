@@ -23,7 +23,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.lemar.selfstorage.booking.application.AppointmentQueryService;
 import vn.lemar.selfstorage.booking.application.AppointmentService;
 import vn.lemar.selfstorage.booking.application.dto.FmAppointmentResponse;
-import vn.lemar.selfstorage.booking.application.dto.FmFacilityStaffResponse;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationException;
@@ -258,6 +257,7 @@ class AppointmentServiceIntegrationTest {
             assertThat(row.orderId()).isEqualTo(orderId);
             assertThat(row.orderStatus()).isEqualTo("Scheduled");
             assertThat(row.unitCode()).isEqualTo("A-01");
+            assertThat(row.customerName()).isEqualTo("Khách Demo");
             assertThat(row.customerEmail()).isEqualTo("customer1@lemar.vn");
             assertThat(row.staffId()).isNull();
         });
@@ -311,8 +311,10 @@ class AppointmentServiceIntegrationTest {
     void staffListContainsOnlyActiveStaffOfTheFacility() {
         loginAs("fm1@lemar.vn");
 
-        assertThat(queryService.staffOfFacility(q7)).extracting(FmFacilityStaffResponse::email)
-                .containsExactly("fs1@lemar.vn");
+        assertThat(queryService.staffOfFacility(q7)).singleElement().satisfies(staff -> {
+            assertThat(staff.name()).isEqualTo("FS Quận 7");
+            assertThat(staff.assignedAt()).isNotNull();
+        });
 
         jdbc.update("update accounts set status = 'BANNED' where id = ?", fsId);
         assertThat(queryService.staffOfFacility(q7)).isEmpty();

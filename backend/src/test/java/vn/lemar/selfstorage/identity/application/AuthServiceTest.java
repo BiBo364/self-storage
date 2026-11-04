@@ -135,13 +135,16 @@ class AuthServiceTest {
 
     @Test
     void meReturnsEmailAndRoleForCurrentAccount() {
-        Account account = new Account("Customer@Example.com ", "hash", new Role("CUSTOMER"));
+        Account account = new Account("Customer@Example.com ", "hash", "Nguyễn Văn A", "0900000000",
+                new Role("CUSTOMER"));
         when(accountRepository.findWithRoleByEmail("customer@example.com")).thenReturn(Optional.of(account));
 
         MeResponse response = authService.me("customer@example.com");
 
         assertThat(response.email()).isEqualTo("customer@example.com");
         assertThat(response.role()).isEqualTo("CUSTOMER");
+        assertThat(response.name()).isEqualTo("Nguyễn Văn A");
+        assertThat(response.phone()).isEqualTo("0900000000");
     }
 
     @Test

@@ -20,8 +20,8 @@ khoang và FS phụ trách.
   `Done`/`Canceled` không thuộc màn này.
 - Ngoài phạm vi cơ sở / thiếu quyền → 403; cơ sở không tồn tại → 404 (theo `Access`).
 - Mỗi dòng: `id`, `type`, `status`, `date`, `startedAt`, `endAt`, `orderId`, `orderStatus`, `unitCode`,
-  `customerEmail`, `staffId`, `staffEmail` (hai trường cuối `null` khi chưa phân công). Lịch chưa có giờ bắt đầu
-  xếp cuối.
+  `customerName`, `customerEmail`, `staffId`, `staffEmail` (`staffId`/`staffEmail` null khi chưa phân
+  công). Lịch chưa có giờ bắt đầu xếp cuối.
 
 ## Ghi chú nghiệp vụ
 
@@ -36,8 +36,8 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login -H 'Content-Type: a
   -d '{"email":"fm1@lemar.vn","password":"Test@1234"}' | jq -r .data.token)
 
 # 200 — lịch check-in 08:00–10:00 (giờ VN) của đơn 1, chưa có FS
-curl -s "http://localhost:8080/api/fm/appointments?facilityId=1&date=2026-10-27" -H "Authorization: Bearer $TOKEN"
-# {"message":"Lấy danh sách lịch hẹn thành công","data":[{"id":1,"type":"CHECKIN","status":"Pending","date":"2026-10-27","startedAt":"2026-10-27T01:00:00Z","endAt":"2026-10-27T03:00:00Z","orderId":1,"orderStatus":"Scheduled","unitCode":"A-01","customerEmail":"customer1@lemar.vn","staffId":null,"staffEmail":null}]}
+curl -s "http://localhost:8080/api/fm/appointments?facilityId=1&date=2026-11-06" -H "Authorization: Bearer $TOKEN"
+# {"message":"Lấy danh sách lịch hẹn thành công","data":[{"id":1,"type":"CHECKIN","status":"Pending","date":"2026-11-06","startedAt":"2026-11-06T01:00:00Z","endAt":"2026-11-06T03:00:00Z","orderId":1,"orderStatus":"Scheduled","unitCode":"A-01","customerName":"Khách Demo","customerEmail":"customer1@lemar.vn","staffId":null,"staffEmail":null}]}
 
 # 200 — ngày không có lịch
 curl -s "http://localhost:8080/api/fm/appointments?facilityId=1&date=2026-10-28" -H "Authorization: Bearer $TOKEN"

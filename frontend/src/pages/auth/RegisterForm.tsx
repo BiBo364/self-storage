@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { ArrowRight, LockKeyhole, Mail } from "lucide-react";
+import { ArrowRight, Box, LockKeyhole, Mail, Phone } from "lucide-react";
 import { Navigate, Notice } from "../../app/types";
 import { authApi } from "../../app/auth";
 import { Button } from "../../components/ui/Button";
@@ -13,12 +13,14 @@ export function RegisterForm({ navigate }: { navigate: Navigate }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const name = String(data.get("name") ?? "").trim();
     const email = String(data.get("email") ?? "").trim();
+    const phone = String(data.get("phone") ?? "").trim();
     const password = String(data.get("password") ?? "");
     const confirmPassword = String(data.get("confirmPassword") ?? "");
 
-    if (!email || !password) {
-      setNotice({ tone: "error", message: "Vui lòng nhập email và mật khẩu." });
+    if (!name || !email || !password) {
+      setNotice({ tone: "error", message: "Vui lòng nhập họ tên, email và mật khẩu." });
       return;
     }
     if (password.length < 8) {
@@ -35,7 +37,7 @@ export function RegisterForm({ navigate }: { navigate: Navigate }) {
     }
 
     setIsSubmitting(true);
-    const result = await authApi.register(email, password);
+    const result = await authApi.register(name, email, phone || undefined, password);
     setIsSubmitting(false);
     if (!result.ok) {
       setNotice({
@@ -60,12 +62,25 @@ export function RegisterForm({ navigate }: { navigate: Navigate }) {
       </div>
       <form className="grid gap-0" onSubmit={submit}>
         <FormField
+          label="Họ và tên / doanh nghiệp"
+          name="name"
+          required
+          placeholder="Công ty ABC / Nguyễn Minh An"
+          icon={<Box size={17} />}
+        />
+        <FormField
           label="Email"
           name="email"
           type="email"
           required
           placeholder="ban@example.com"
           icon={<Mail size={17} />}
+        />
+        <FormField
+          label="Số điện thoại"
+          name="phone"
+          placeholder="090 123 4567"
+          icon={<Phone size={17} />}
         />
         <FormField
           label="Mật khẩu"

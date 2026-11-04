@@ -349,7 +349,11 @@ class DepositPaymentIntegrationTest {
                 .andExpect(jsonPath("$.data.id").value(invoiceId))
                 .andExpect(jsonPath("$.data.orderId").value(orderId))
                 .andExpect(jsonPath("$.data.status").value("Paid"))
-                .andExpect(jsonPath("$.data.type").value("Deposit"));
+                .andExpect(jsonPath("$.data.type").value("Deposit"))
+                .andExpect(jsonPath("$.data.createdAt").exists())
+                .andExpect(jsonPath("$.data.unitId").value(unitId))
+                .andExpect(jsonPath("$.data.unitCode").isNotEmpty())
+                .andExpect(jsonPath("$.data.facilityName").isNotEmpty());
     }
 
     /** Hóa đơn của người khác phải trả 404 như hóa đơn không tồn tại, không phải 403. */

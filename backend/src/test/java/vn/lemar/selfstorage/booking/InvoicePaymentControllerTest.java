@@ -13,7 +13,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import vn.lemar.selfstorage.booking.application.DepositPaymentService;
 import vn.lemar.selfstorage.booking.application.InvoiceQueryService;
-import vn.lemar.selfstorage.booking.application.InvoiceView;
+import vn.lemar.selfstorage.booking.application.InvoiceListView;
 import vn.lemar.selfstorage.booking.controller.InvoicePaymentController;
 
 /**
@@ -59,8 +59,9 @@ class InvoicePaymentControllerTest {
     /** FE gọi lại đường này sau redirect, nên response phải chở trạng thái hóa đơn thật. */
     @Test
     void detailReturnsTheInvoiceOfTheCaller() {
-        InvoiceView view = new InvoiceView(7L, 3L, "INV-7", "Dat coc khoang A-01", null,
-                "Deposit", "Paid", new BigDecimal("10000.00"), Instant.parse("2026-11-05T00:00:00Z"));
+        InvoiceListView view = new InvoiceListView(7L, 3L, "INV-7", "Dat coc khoang A-01", null,
+                "Deposit", "Paid", new BigDecimal("10000.00"), Instant.parse("2026-11-01T00:00:00Z"),
+                Instant.parse("2026-11-05T00:00:00Z"), 5L, "A-01", 1L, "Lemar Quan 7");
         when(invoiceQuery.findOwn(7L)).thenReturn(view);
 
         assertThat(controller.detail(7L).getBody().data()).isSameAs(view);
@@ -76,8 +77,9 @@ class InvoicePaymentControllerTest {
         verify(invoiceQuery).findOwn(9L);
     }
 
-    private static InvoiceView unpaidView() {
-        return new InvoiceView(9L, 3L, "INV-9", "Dat coc khoang A-02", null, "Deposit", "Unpaid",
-                new BigDecimal("10000.00"), Instant.parse("2026-11-05T00:00:00Z"));
+    private static InvoiceListView unpaidView() {
+        return new InvoiceListView(9L, 3L, "INV-9", "Dat coc khoang A-02", null, "Deposit", "Unpaid",
+                new BigDecimal("10000.00"), Instant.parse("2026-11-01T00:00:00Z"),
+                Instant.parse("2026-11-05T00:00:00Z"), 6L, "A-02", 1L, "Lemar Quan 7");
     }
 }

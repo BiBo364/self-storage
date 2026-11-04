@@ -16,8 +16,9 @@ purpose: Đăng ký tài khoản khách hàng — ghi nhận yêu cầu và gử
 
 1. Chuẩn hoá email (`trim` + lowercase — `Account.normalize`); email đã có account → **409**
    (pending registration không tính là account — dùng [resend-verification](resend-verification.md)).
-2. Băm mật khẩu BCrypt và **chưa tạo `Account`**: ghi pending registration (email + hash mật khẩu)
-   vào Redis cùng mã xác minh, TTL 10 phút. Đăng ký lại khi đang pending chịu cooldown 60 giây (429).
+2. Băm mật khẩu BCrypt và **chưa tạo `Account`**: ghi pending registration (email + hash mật khẩu +
+   `name` + `phone`) vào Redis cùng mã xác minh, TTL 10 phút. Đăng ký lại khi đang pending chịu
+   cooldown 60 giây (429).
 3. Phát mã xác minh (6 số) — lưu Redis dạng BCRYPT hash, không lưu plaintext — rồi phát event
    `VerificationEmailRequested`; module notification gửi email **sau commit**: rollback thì không
    gửi, SMTP lỗi không rollback (best-effort, chỉ log).
@@ -26,7 +27,8 @@ purpose: Đăng ký tài khoản khách hàng — ghi nhận yêu cầu và gử
 ## Ghi chú nghiệp vụ
 
 - Spec: `specs/draft.md` › Flow 1 §1.2; cơ chế OTP: mã 6 số, TTL 10 phút; verify-first: account tạo sau xác minh.
-- Mật khẩu tối thiểu 8 ký tự (validate DTO → 400 `Dữ liệu không hợp lệ`).
+- `name` bắt buộc (≤255), `phone` optional (≤20), mật khẩu tối thiểu 8 ký tự (validate DTO → 400
+  `Dữ liệu không hợp lệ`).
 - **Không có account nào được tạo ở bước này** — email typo/bỏ dở không để lại account rác. Khách
   hoàn tất [verify-email](verify-email.md) để tạo account rồi mới đăng nhập được:
   [authentication.md › Đăng ký và xác minh email](../../authentication.md#đăng-ký-và-xác-minh-email).
@@ -38,7 +40,7 @@ purpose: Đăng ký tài khoản khách hàng — ghi nhận yêu cầu và gử
 ```bash
 curl -s -X POST http://localhost:8080/api/auth/register \
   -H 'Content-Type: application/json' \
-  -d '{"email":"khach-moi@example.com","password":"matkhau123"}'
+  -d '{"name":"Nguyễn Văn A","email":"khach-moi@example.com","phone":"0900000000","password":"matkhau123"}'
 # {"message":"Đăng ký thành công. Kiểm tra email để lấy mã xác minh.","data":null}
 
 # 409 — email đã đăng ký

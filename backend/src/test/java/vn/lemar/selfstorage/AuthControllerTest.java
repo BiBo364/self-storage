@@ -145,7 +145,8 @@ class AuthControllerTest {
     void registerReturnsSuccessMessage() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"customer@example.com\",\"password\":\"password123\"}"))
+                        .content("{\"name\":\"Khách Test\",\"email\":\"customer@example.com\","
+                                + "\"password\":\"password123\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Đăng ký thành công. Kiểm tra email để lấy mã xác minh."))
                 .andExpect(jsonPath("$.data").isEmpty());
@@ -158,7 +159,8 @@ class AuthControllerTest {
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"customer@example.com\",\"password\":\"password123\"}"))
+                        .content("{\"name\":\"Khách Test\",\"email\":\"customer@example.com\","
+                                + "\"password\":\"password123\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Email đã được đăng ký"));
     }
@@ -167,7 +169,8 @@ class AuthControllerTest {
     void registerRejectsShortPassword() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"customer@example.com\",\"password\":\"ngan\"}"))
+                        .content("{\"name\":\"Khách Test\",\"email\":\"customer@example.com\","
+                                + "\"password\":\"ngan\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Dữ liệu không hợp lệ"));
     }

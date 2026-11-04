@@ -93,7 +93,7 @@ Lớp 3 hiện là **pull**: dữ liệu phát hiện có sẵn (`direction='PAY
   booking chạy; nếu listener chưa chạy/lỗi, invoice vẫn `Unpaid`. `/pay` kiểm giao dịch thành công
   và trả 409, không thu lần hai; local repair hoặc đối soát thủ công chốt phần còn lại.
 - **Một invoice tối đa một `PAY/Success`.** Advisory lock theo invoice là lớp chính; partial unique
-  index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'` (V14) là chốt cuối ở DB.
+  index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'` (V15) là chốt cuối ở DB.
   Nếu một nguồn xác nhận thành công thứ hai cho cùng invoice, transaction thứ hai chuyển `Duplicate`
   — không phát `PaymentSucceeded`, không đụng invoice/order/unit. Ghi audit `PAYMENT_DUPLICATE`,
   notify FM để hoàn tiền thủ công. IPN trả `02`; manual trả `200` với status `DUPLICATE`.

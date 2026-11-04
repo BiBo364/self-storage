@@ -34,9 +34,14 @@ public class VerifiedAccountCreator {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Account create(String email, String passwordHash) {
+        return create(email, passwordHash, null, null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Account create(String email, String passwordHash, String name, String phone) {
         Role customerRole = roleRepository.findByName(RoleName.CUSTOMER.name())
                 .orElseThrow(() -> new IllegalStateException("Role CUSTOMER chưa được seed"));
-        Account account = new Account(email, passwordHash, customerRole);
+        Account account = new Account(email, passwordHash, name, phone, customerRole);
         account.markEmailVerified();
         Account saved = accountRepository.saveAndFlush(account);
         auditRecorder.record(new AuditEntry(AuditAction.ACCOUNT_REGISTERED, AuditEntityType.ACCOUNT,

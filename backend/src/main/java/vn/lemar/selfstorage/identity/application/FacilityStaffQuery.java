@@ -1,5 +1,6 @@
 package vn.lemar.selfstorage.identity.application;
 
+import java.time.Instant;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -23,12 +24,14 @@ public class FacilityStaffQuery {
     @Transactional(readOnly = true)
     public List<StaffView> listStaff(Long facilityId) {
         return jdbc.query("""
-                select a.id, a.email from accounts a
+                select a.id, a.name, a.email, a.phone, f.assigned_at from accounts a
                 join roles r on r.id = a.role_id
                 join account_facility_assignments f on f.account_id = a.id
                 where f.facility_id = ? and r.name = ? and a.status = 'ACTIVE'
                 order by a.email""",
-                (rs, rowNum) -> new StaffView(rs.getLong(1), rs.getString(2)), facilityId, STAFF_ROLE);
+                (rs, rowNum) -> new StaffView(rs.getLong(1), rs.getString(2), rs.getString(3),
+                        rs.getString(4), rs.getTimestamp(5).toInstant()),
+                facilityId, STAFF_ROLE);
     }
 
     /** Tài khoản là FS đang hoạt động và được gán vào đúng cơ sở. */
@@ -42,7 +45,7 @@ public class FacilityStaffQuery {
                 Boolean.class, accountId, facilityId, STAFF_ROLE));
     }
 
-    /** Một FS của cơ sở — tài khoản chưa có cột họ tên nên hiển thị bằng email. */
-    public record StaffView(Long id, String email) {
+    /** Một FS của cơ sở; {@code name}/{@code phone} nullable — FE fallback về email. */
+    public record StaffView(Long id, String name, String email, String phone, Instant assignedAt) {
     }
 }

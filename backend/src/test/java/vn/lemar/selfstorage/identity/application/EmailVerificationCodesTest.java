@@ -138,6 +138,19 @@ class EmailVerificationCodesTest {
     }
 
     @Test
+    void verifyReturnsPendingRegistrationWithProfile() {
+        when(redis.opsForHash()).thenReturn(hashOps);
+        when(hashOps.entries(CODE_KEY)).thenReturn(Map.of("hash", "hashed", "attempts", "0",
+                "passwordHash", "password-hash", "name", "Nguyễn Văn A", "phone", "0900000000"));
+        when(passwordEncoder.matches("123456", "hashed")).thenReturn(true);
+
+        Optional<PendingRegistration> pending = codes.verify(EMAIL, "123456");
+
+        assertThat(pending).contains(new PendingRegistration(EMAIL, "password-hash", "Nguyễn Văn A",
+                "0900000000"));
+    }
+
+    @Test
     void verifyReturnsEmptyForLegacyCodeWithoutPendingData() {
         when(redis.opsForHash()).thenReturn(hashOps);
         when(hashOps.entries(CODE_KEY)).thenReturn(Map.of("hash", "hashed", "attempts", "0"));
