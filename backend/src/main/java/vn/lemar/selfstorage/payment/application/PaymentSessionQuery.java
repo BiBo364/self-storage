@@ -1,7 +1,9 @@
 package vn.lemar.selfstorage.payment.application;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
+import vn.lemar.selfstorage.payment.application.dto.PaymentStateView;
 import vn.lemar.selfstorage.payment.application.dto.SuccessfulPayment;
 
 /**
@@ -33,4 +35,7 @@ public interface PaymentSessionQuery {
 
     /** Giao dịch PAY/Success của invoice — dùng cho job sửa state booking khi listener IPN lỗi. */
     Optional<SuccessfulPayment> findSuccessfulPayment(Long invoiceId);
+
+    /** Giao dịch PAY gần nhất của từng invoice — read model cho danh sách hoá đơn của FM. */
+    Map<Long, PaymentStateView> latestPayments(Collection<Long> invoiceIds);
 }

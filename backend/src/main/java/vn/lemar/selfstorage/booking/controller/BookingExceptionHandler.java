@@ -13,6 +13,7 @@ import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationE
 import vn.lemar.selfstorage.booking.application.exception.DepositNotAllowedException;
 import vn.lemar.selfstorage.booking.application.exception.EmailNotVerifiedException;
 import vn.lemar.selfstorage.booking.application.exception.FacilityNotFoundException;
+import vn.lemar.selfstorage.booking.application.exception.InvoiceFilterException;
 import vn.lemar.selfstorage.booking.application.exception.InvoiceNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.ProposalConflictException;
 import vn.lemar.selfstorage.booking.application.exception.ProposalForbiddenException;
@@ -132,6 +133,11 @@ public class BookingExceptionHandler {
 
     @ExceptionHandler(StorageUnitFilterException.class)
     public ResponseEntity<ApiError> handleStorageUnitFilter(StorageUnitFilterException ex) {
+        return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvoiceFilterException.class)
+    public ResponseEntity<ApiError> handleInvoiceFilter(InvoiceFilterException ex) {
         return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
     }
 }

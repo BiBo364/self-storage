@@ -79,6 +79,28 @@ class PaymentSessionQueryServiceTest {
     }
 
     @Test
+    void latestPaymentPerInvoiceKeepsTheNewestTransaction() {
+        PaymentTransaction newest = mock(PaymentTransaction.class);
+        when(newest.getInvoiceId()).thenReturn(1L);
+        when(newest.getStatus()).thenReturn(PaymentStatus.PENDING);
+        when(newest.getVnpTxnRef()).thenReturn("TXN-NEW");
+        when(newest.getCreatedAt()).thenReturn(Instant.parse("2026-11-03T10:00:00Z"));
+        when(newest.getPaidAt()).thenReturn(null);
+        PaymentTransaction older = mock(PaymentTransaction.class);
+        when(older.getInvoiceId()).thenReturn(1L);
+        when(older.getStatus()).thenReturn(PaymentStatus.FAILED);
+        when(older.getCreatedAt()).thenReturn(Instant.parse("2026-11-03T09:00:00Z"));
+        when(repository.findByInvoiceIdInAndDirectionOrderByCreatedAtDesc(
+                List.of(1L), PaymentDirection.PAY)).thenReturn(List.of(newest, older));
+
+        var latest = service.latestPayments(List.of(1L));
+
+        assertThat(latest).hasSize(1);
+        assertThat(latest.get(1L).status()).isEqualTo("Pending");
+        assertThat(latest.get(1L).vnpTxnRef()).isEqualTo("TXN-NEW");
+    }
+
+    @Test
     void successfulPaymentIsReportedForTheInvoice() {
         when(repository.existsByInvoiceIdAndDirectionAndStatus(
                 1L, PaymentDirection.PAY, PaymentStatus.SUCCESS)).thenReturn(true);
