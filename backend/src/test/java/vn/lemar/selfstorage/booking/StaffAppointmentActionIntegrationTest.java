@@ -190,6 +190,19 @@ class StaffAppointmentActionIntegrationTest {
     }
 
     @Test
+    void arrivingNonCheckinAfterTheSlotConflicts() {
+        jdbc.update("update appointments set type = 'RETURN', started_at = now() - interval '3 hours', "
+                + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        assertThatThrownBy(() -> service.arrive(appointmentId))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessage("Lịch đã quá khung giờ, không thể xác nhận khách đến");
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
+                .isEqualTo("Pending");
+    }
+
+    @Test
     void arrivingTwiceConflicts() {
         loginAs("fs1@lemar.vn");
         service.arrive(appointmentId);

@@ -58,7 +58,7 @@ public class StaffAppointmentActionService {
     public StaffAppointmentResponse arrive(Long appointmentId) {
         Appointment appointment = lockAssigned(appointmentId);
         requirePending(appointment);
-        if (appointment.isNoShowDue(Instant.now())) {
+        if (appointment.getEndAt() != null && appointment.getEndAt().isBefore(Instant.now())) {
             throw new AppointmentConflictException("Lịch đã quá khung giờ, không thể xác nhận khách đến");
         }
         appointment.arrive();
