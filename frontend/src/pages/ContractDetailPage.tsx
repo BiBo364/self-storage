@@ -23,9 +23,8 @@ import { invoices } from "../mocks/invoices";
 import { Button, buttonClassName } from "../components/ui/Button";
 import { DemoNotice } from "../components/ui/DemoNotice";
 import { DetailPanel } from "../components/ui/DetailPanel";
+import { SectionTitle } from "../components/ui/SectionTitle";
 import { SurfaceState } from "../components/ui/SurfaceState";
-
-const SECTION_TITLE = "m-0 text-[15px] font-bold text-ink";
 
 const SUPPORT_STATUS_LABEL: Record<SupportRequest["status"], string> = {
   Open: "Mới gửi",
@@ -33,6 +32,14 @@ const SUPPORT_STATUS_LABEL: Record<SupportRequest["status"], string> = {
   InProgress: "Đang xử lý",
   Resolved: "Đã xử lý",
   Closed: "Đã đóng",
+};
+
+const SUPPORT_STATUS_CLASS: Record<SupportRequest["status"], string> = {
+  Open: "bg-warning-soft text-warning",
+  Assigned: "bg-info-soft text-info",
+  InProgress: "bg-info-soft text-info",
+  Resolved: "bg-success-soft text-success",
+  Closed: "bg-surface-subtle text-muted",
 };
 
 function getContractId() {
@@ -49,139 +56,161 @@ export function ContractDetailPage({ navigate }: { navigate: Navigate }) {
 
   if (!contract) {
     return (
-      <main>
-        <SurfaceState
-          variant="not-found"
-          title="Không tìm thấy hợp đồng"
-          description="Đường dẫn không đúng hoặc hợp đồng không thuộc tài khoản của bạn."
-          action={{ label: "Về Kho của tôi", onClick: () => navigate("/my-storage") }}
-        />
-      </main>
+      <SurfaceState
+        variant="not-found"
+        title="Không tìm thấy hợp đồng"
+        description="Đường dẫn không đúng hoặc hợp đồng không thuộc tài khoản của bạn."
+        action={{ label: "Về Kho của tôi", onClick: () => navigate("/my-storage") }}
+      />
     );
   }
 
   const contractInvoices = invoices.filter((invoice) => invoice.unitCode === contract.unitCode);
+  const status = contract.isOverdue
+    ? { label: "Quá hạn", className: "bg-danger-soft text-danger" }
+    : contract.isExpiringSoon
+      ? { label: "Sắp hết hạn", className: "bg-warning-soft text-warning" }
+      : { label: "Đang hiệu lực", className: "bg-success-soft text-success" };
 
   function updateContract(patch: Partial<Contract>) {
     setContract((current) => (current ? { ...current, ...patch } : current));
   }
 
   return (
-    <main>
+    <div className="grid gap-6">
       <button
-        className="mb-6 inline-flex items-center gap-2 border-0 bg-transparent p-0 text-[12px] font-bold text-muted hover:text-brand"
+        className="inline-flex w-fit items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
         onClick={() => navigate("/my-storage")}
       >
         <ArrowLeft size={16} /> Về Kho của tôi
       </button>
 
-      <div className="mb-6 flex items-start justify-between gap-5 max-[760px]:flex-col">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="m-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-brand">
+          <span className="text-label text-muted">
             Khoang {contract.unitCode} · {contract.unitType}
-          </p>
-          <h1 className="mb-0 mt-1.5 text-[26px] tracking-[-0.03em] text-ink">
-            {contract.facility}
-          </h1>
-          <p className="mb-0 mt-1.5 flex items-center gap-[6px] text-[13px] text-muted">
+          </span>
+          <h1 className="mt-1 text-title text-ink">{contract.facility}</h1>
+          <p className="mt-1.5 flex items-center gap-1.5 text-small text-muted">
             <MapPin size={15} /> {contract.district} · {contract.size}
           </p>
         </div>
-        {contract.pdfUrl && (
-          <a href={contract.pdfUrl} className={buttonClassName("secondary")}>
-            <Download size={16} /> Tải hợp đồng
-          </a>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2 py-1 text-label font-semibold ${status.className}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+            {status.label}
+          </span>
+          {contract.pdfUrl && (
+            <a href={contract.pdfUrl} className={buttonClassName("secondary")}>
+              <Download size={16} /> Tải hợp đồng
+            </a>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-2 max-[980px]:grid-cols-2 max-[760px]:grid-cols-1">
+        <Summary label="Khoang" value={`${contract.unitCode} · ${contract.size}`} />
+        <Summary label="Giá thuê / tháng" value={`${formatPrice(contract.monthlyPrice)} đ`} />
+        <Summary label="Tiền cọc" value={`${formatPrice(contract.depositAmount)} đ`} />
+        <Summary label="Hiệu lực" value={`${contract.startDate} → ${contract.endDate}`} />
       </div>
 
       {contract.isOverdue && (
-        <div className="mb-6">
-          <DemoNotice tone="error">
-            Hợp đồng đã quá hạn. Không thể gia hạn qua web — vui lòng liên hệ trực tiếp quản lý cơ
-            sở (FM).
-          </DemoNotice>
-        </div>
+        <DemoNotice tone="error">
+          Hợp đồng đã quá hạn. Không thể gia hạn qua web — vui lòng liên hệ trực tiếp quản lý cơ sở
+          (FM).
+        </DemoNotice>
       )}
       {!contract.isOverdue && contract.isExpiringSoon && (
-        <div className="mb-6">
-          <DemoNotice tone="pending">
-            Hợp đồng sắp hết hạn ({contract.endDate}). Gửi yêu cầu gia hạn sớm để không bị gián
-            đoạn.
-          </DemoNotice>
-        </div>
+        <DemoNotice tone="pending">
+          Hợp đồng sắp hết hạn ({contract.endDate}). Gửi yêu cầu gia hạn sớm để không bị gián đoạn.
+        </DemoNotice>
       )}
 
-      <div className="grid grid-cols-[1.4fr_1fr] gap-6 max-[980px]:grid-cols-1">
-        <div className="grid gap-6">
-          <section className="border border-border bg-surface p-6">
-            <h2 className={SECTION_TITLE}>Thông tin hợp đồng</h2>
+      <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-6 max-[980px]:grid-cols-1">
+        <div className="grid gap-3">
+          <section className="bg-surface p-5">
+            <SectionTitle>Thông tin hợp đồng</SectionTitle>
             <dl className="mt-4 grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
               <Field label="Ngày ký" value={contract.signedAt} />
               <Field label="Hiệu lực" value={`${contract.startDate} — ${contract.endDate}`} />
-              <Field label="Tiền cọc" value={`${formatPrice(contract.depositAmount)}đ`} />
-              <Field label="Giá thuê / tháng" value={`${formatPrice(contract.monthlyPrice)}đ`} />
+              <Field label="Tiền cọc" value={`${formatPrice(contract.depositAmount)} đ`} />
+              <Field label="Giá thuê / tháng" value={`${formatPrice(contract.monthlyPrice)} đ`} />
             </dl>
           </section>
 
-          <section className="border border-border bg-surface p-6">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className={SECTION_TITLE}>Hoá đơn</h2>
-              <button
-                className="border-0 bg-transparent p-0 text-[12px] font-bold text-brand hover:underline"
-                onClick={() => navigate("/invoices")}
-              >
-                Xem tất cả
-              </button>
-            </div>
+          <section className="bg-surface p-5">
+            <SectionTitle
+              action={
+                <button
+                  className="border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
+                  onClick={() => navigate("/invoices")}
+                >
+                  Xem tất cả
+                </button>
+              }
+            >
+              Hoá đơn
+            </SectionTitle>
             {contractInvoices.length === 0 ? (
-              <p className="m-0 mt-3 text-[13px] text-muted">Chưa có hoá đơn nào.</p>
+              <p className="mt-3 text-small text-muted">Chưa có hoá đơn nào.</p>
             ) : (
-              <div className="mt-3 grid gap-2.5">
+              <div className="mt-3 grid gap-2">
                 {contractInvoices.map((invoice) => (
                   <div
                     key={invoice.id}
-                    className="flex items-center justify-between gap-4 border border-border bg-surface-subtle px-4 py-3 text-[12px]"
+                    className="flex items-center justify-between gap-4 bg-surface-subtle px-3.5 py-3"
                   >
-                    <span className="text-ink">{invoice.title}</span>
-                    <strong>{formatPrice(invoice.amount)}đ</strong>
+                    <span className="text-small text-ink">{invoice.title}</span>
+                    <strong className="text-small font-semibold text-ink">
+                      {formatPrice(invoice.amount)} đ
+                    </strong>
                   </div>
                 ))}
               </div>
             )}
           </section>
 
-          <section className="border border-border bg-surface p-6">
-            <h2 className={SECTION_TITLE}>Lịch sử bàn giao</h2>
-            <div className="mt-3 grid gap-3">
+          <section className="bg-surface p-5">
+            <SectionTitle>Lịch sử bàn giao</SectionTitle>
+            <div className="mt-3 grid gap-2">
               {contract.handoverHistory.map((event) => (
-                <div key={event.id} className="border-l-2 border-brand pl-3.5">
-                  <p className="m-0 text-[12px] font-bold text-ink">
-                    {event.label} · {event.date}
-                  </p>
-                  <p className="mb-0 mt-1 text-[12px] text-muted">{event.note}</p>
+                <div key={event.id} className="flex gap-3 bg-surface-subtle p-3.5">
+                  <span className="mt-1.5 h-2 w-2 shrink-0 bg-brand" aria-hidden="true" />
+                  <div>
+                    <p className="text-small font-semibold text-ink">
+                      {event.label} · {event.date}
+                    </p>
+                    <p className="mt-1 text-label text-muted">{event.note}</p>
+                  </div>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="border border-border bg-surface p-6">
-            <h2 className={SECTION_TITLE}>Yêu cầu hỗ trợ</h2>
+          <section className="bg-surface p-5">
+            <SectionTitle>Yêu cầu hỗ trợ</SectionTitle>
             {contract.supportRequests.length === 0 ? (
-              <p className="m-0 mt-3 text-[13px] text-muted">Chưa có yêu cầu hỗ trợ nào.</p>
+              <p className="mt-3 text-small text-muted">Chưa có yêu cầu hỗ trợ nào.</p>
             ) : (
-              <div className="mt-3 grid gap-2.5">
+              <div className="mt-3 grid gap-2">
                 {contract.supportRequests.map((request) => (
                   <div
                     key={request.id}
-                    className="flex items-center justify-between gap-4 border border-border bg-surface-subtle px-4 py-3 text-[12px]"
+                    className="flex items-center justify-between gap-4 bg-surface-subtle px-3.5 py-3"
                   >
                     <div>
-                      <p className="m-0 font-bold text-ink">
+                      <p className="text-small font-semibold text-ink">
                         {SUPPORT_ISSUE_LABEL[request.issueType]}
                       </p>
-                      <p className="mb-0 mt-0.5 text-muted">{request.createdAt}</p>
+                      <p className="mt-0.5 text-label text-muted">{request.createdAt}</p>
                     </div>
-                    <span className="rounded-full bg-brand-soft px-2.5 py-1 text-[11px] font-bold text-brand">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-1 text-label font-semibold ${SUPPORT_STATUS_CLASS[request.status]}`}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
                       {SUPPORT_STATUS_LABEL[request.status]}
                     </span>
                   </div>
@@ -191,44 +220,53 @@ export function ContractDetailPage({ navigate }: { navigate: Navigate }) {
           </section>
         </div>
 
-        <aside className="grid content-start gap-4">
-          <h2 className={SECTION_TITLE}>Hành động</h2>
+        <aside className="grid gap-3">
+          <section className="bg-surface p-5">
+            <SectionTitle>Hành động</SectionTitle>
+            <div className="mt-4 grid gap-2">
+              {contract.openExtendRequest ? (
+                <ExtendStatusCard
+                  request={contract.openExtendRequest}
+                  onCancel={() => updateContract({ openExtendRequest: null })}
+                  onPay={() => navigate("/invoices")}
+                />
+              ) : (
+                !contract.openReturnRequest &&
+                contract.availableActions.includes("extend") && (
+                  <Button className="w-full" onClick={() => setActivePanel("extend")}>
+                    Yêu cầu gia hạn
+                  </Button>
+                )
+              )}
 
-          {contract.openExtendRequest ? (
-            <ExtendStatusCard
-              request={contract.openExtendRequest}
-              onCancel={() => updateContract({ openExtendRequest: null })}
-              onPay={() => navigate("/invoices")}
-            />
-          ) : (
-            !contract.openReturnRequest &&
-            contract.availableActions.includes("extend") && (
-              <Button onClick={() => setActivePanel("extend")}>Yêu cầu gia hạn</Button>
-            )
-          )}
+              {contract.openReturnRequest ? (
+                <ReturnStatusCard
+                  request={contract.openReturnRequest}
+                  onCancel={() => updateContract({ openReturnRequest: null })}
+                />
+              ) : (
+                !contract.openExtendRequest &&
+                contract.availableActions.includes("return") && (
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => setActivePanel("return")}
+                  >
+                    Yêu cầu trả kho
+                  </Button>
+                )
+              )}
 
-          {contract.openReturnRequest ? (
-            <ReturnStatusCard
-              request={contract.openReturnRequest}
-              onCancel={() => updateContract({ openReturnRequest: null })}
-            />
-          ) : (
-            !contract.openExtendRequest &&
-            contract.availableActions.includes("return") && (
-              <Button variant="secondary" onClick={() => setActivePanel("return")}>
-                Yêu cầu trả kho
-              </Button>
-            )
-          )}
-
-          {contract.availableActions.includes("report-issue") && (
-            <button
-              className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-sm border-0 bg-transparent px-[18px] text-[14px] font-[750] text-muted transition-colors hover:text-brand"
-              onClick={() => setActivePanel("support")}
-            >
-              <FileWarning size={16} /> Báo sự cố
-            </button>
-          )}
+              {contract.availableActions.includes("report-issue") && (
+                <button
+                  className="inline-flex min-h-[38px] w-full items-center justify-center gap-2 border-0 bg-transparent text-small font-semibold text-muted hover:text-accent"
+                  onClick={() => setActivePanel("support")}
+                >
+                  <FileWarning size={16} /> Báo sự cố
+                </button>
+              )}
+            </div>
+          </section>
         </aside>
       </div>
 
@@ -260,15 +298,24 @@ export function ContractDetailPage({ navigate }: { navigate: Navigate }) {
           }}
         />
       )}
-    </main>
+    </div>
+  );
+}
+
+function Summary({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-surface p-4">
+      <span className="text-label text-muted">{label}</span>
+      <strong className="mt-1 block text-[18px] font-semibold text-ink">{value}</strong>
+    </div>
   );
 }
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-[3px]">
-      <span className="font-mono text-[10px] font-medium uppercase text-muted">{label}</span>
-      <strong className="text-[13px] text-ink">{value}</strong>
+    <div className="grid gap-0.5">
+      <span className="text-label text-muted">{label}</span>
+      <strong className="text-small font-semibold text-ink">{value}</strong>
     </div>
   );
 }
@@ -284,9 +331,9 @@ function ExtendStatusCard({
 }) {
   if (request.status === "PendingApproval") {
     return (
-      <div className="border border-border bg-surface p-4">
+      <div className="bg-surface-subtle p-4">
         <DemoNotice tone="pending">Đang chờ FM duyệt gia hạn.</DemoNotice>
-        <Button variant="secondary" className="mt-3.5 w-full" onClick={onCancel}>
+        <Button variant="secondary" className="mt-3 w-full" onClick={onCancel}>
           <X size={16} /> Huỷ yêu cầu
         </Button>
       </div>
@@ -294,16 +341,16 @@ function ExtendStatusCard({
   }
   if (request.status === "ApprovedPendingPayment") {
     return (
-      <div className="border border-border bg-surface p-4">
-        <p className="m-0 text-[12px] font-bold text-ink">Yêu cầu đã được duyệt</p>
-        <p className="mb-0 mt-1.5 text-[13px] text-muted">
+      <div className="bg-surface-subtle p-4">
+        <p className="text-small font-semibold text-ink">Yêu cầu đã được duyệt</p>
+        <p className="mt-1 text-small text-muted">
           Thêm {request.extraMonths} tháng · {formatPrice(request.amount ?? 0)}đ · hạn thanh toán{" "}
           {request.dueDate}
         </p>
-        <p className="mb-0 mt-2 text-[11px] text-muted">
+        <p className="mt-2 text-label text-muted">
           Không thể huỷ qua web — liên hệ FM trực tiếp nếu cần huỷ.
         </p>
-        <Button className="mt-3.5 w-full" onClick={onPay}>
+        <Button className="mt-3 w-full" onClick={onPay}>
           Thanh toán gia hạn <ArrowRight size={16} />
         </Button>
       </div>
@@ -315,20 +362,20 @@ function ExtendStatusCard({
 function ReturnStatusCard({ request, onCancel }: { request: ReturnRequest; onCancel: () => void }) {
   if (request.status === "Assigned") {
     return (
-      <div className="border border-border bg-surface p-4">
+      <div className="bg-surface-subtle p-4">
         <DemoNotice tone="success">
           Đã phân công nhân viên, ngày hẹn dự kiến {request.preferredDate}.
         </DemoNotice>
-        <p className="mb-0 mt-2 text-[11px] text-muted">
+        <p className="mt-2 text-label text-muted">
           Không thể huỷ qua web — liên hệ FM/FS trực tiếp nếu cần đổi.
         </p>
       </div>
     );
   }
   return (
-    <div className="border border-border bg-surface p-4">
+    <div className="bg-surface-subtle p-4">
       <DemoNotice tone="pending">Đang chờ FM phân công nhân viên xử lý.</DemoNotice>
-      <Button variant="secondary" className="mt-3.5 w-full" onClick={onCancel}>
+      <Button variant="secondary" className="mt-3 w-full" onClick={onCancel}>
         <X size={16} /> Huỷ yêu cầu
       </Button>
     </div>
@@ -348,11 +395,11 @@ function ExtendPanel({
 
   return (
     <DetailPanel title="Yêu cầu gia hạn hợp đồng" onClose={onClose}>
-      <p className="m-0 text-[13px] text-muted">
+      <p className="text-small text-muted">
         Chọn số tháng muốn gia hạn thêm cho khoang {contract.unitCode}. Đội ngũ vận hành sẽ duyệt
         trước khi bạn thanh toán.
       </p>
-      <label className="mt-5 grid gap-1.5 text-[12px] font-bold text-ink">
+      <label className="mt-5 grid gap-1.5 text-label text-muted">
         Số tháng gia hạn
         <input
           type="number"
@@ -360,10 +407,10 @@ function ExtendPanel({
           max={12}
           value={months}
           onChange={(event) => setMonths(Number(event.target.value) || 1)}
-          className="w-24 rounded-sm border border-border bg-surface-subtle px-3 py-2.5 text-[13px] text-ink"
+          className="w-24 rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
         />
       </label>
-      <p className="mb-0 mt-3 text-[12px] text-muted">
+      <p className="mt-3 text-label text-muted">
         Ước tính: {formatPrice(months * contract.monthlyPrice)}đ (chốt chính thức sau khi FM duyệt).
       </p>
       <Button
@@ -388,20 +435,20 @@ function ReturnPanel({
 
   return (
     <DetailPanel title="Yêu cầu trả kho" onClose={onClose}>
-      <label className="grid gap-1.5 text-[12px] font-bold text-ink">
+      <label className="grid gap-1.5 text-label text-muted">
         Ngày mong muốn trả kho
         <input
           type="date"
           min={new Date().toISOString().slice(0, 10)}
           value={date}
           onChange={(event) => setDate(event.target.value)}
-          className="w-fit rounded-sm border border-border bg-surface-subtle px-3 py-2.5 text-[13px] text-ink"
+          className="w-fit rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
         />
       </label>
-      <label className="mt-5 grid gap-1.5 text-[12px] font-bold text-ink">
+      <label className="mt-5 grid gap-1.5 text-label text-muted">
         Lý do (không bắt buộc)
         <textarea
-          className="min-h-[70px] rounded-sm border border-border bg-surface-subtle p-2.5 text-[13px] font-normal text-ink"
+          className="min-h-[70px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
         />
@@ -437,10 +484,10 @@ function SupportPanel({
           khác chờ xử lý.
         </DemoNotice>
       </div>
-      <label className="grid gap-1.5 text-[12px] font-bold text-ink">
+      <label className="grid gap-1.5 text-label text-muted">
         Loại sự cố
         <select
-          className="rounded-sm border border-border bg-surface-subtle px-3 py-2.5 text-[13px] text-ink"
+          className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
           value={issueType}
           onChange={(event) => setIssueType(event.target.value as SupportIssueType)}
         >
@@ -451,10 +498,10 @@ function SupportPanel({
           ))}
         </select>
       </label>
-      <label className="mt-5 grid gap-1.5 text-[12px] font-bold text-ink">
+      <label className="mt-5 grid gap-1.5 text-label text-muted">
         Mô tả chi tiết
         <textarea
-          className="min-h-[90px] rounded-sm border border-border bg-surface-subtle p-2.5 text-[13px] font-normal text-ink"
+          className="min-h-[90px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           placeholder="Mô tả sự cố để đội ngũ hỗ trợ xử lý nhanh hơn…"

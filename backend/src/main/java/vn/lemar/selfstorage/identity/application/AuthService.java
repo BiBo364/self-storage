@@ -71,6 +71,7 @@ public class AuthService {
         Account account = accountRepository.findWithRoleByEmail(Account.normalize(email))
                 .orElseThrow(InvalidCredentialsException::new);
 
-        return new MeResponse(account.getEmail(), account.getRole().getName());
+        return new MeResponse(account.getEmail(), account.getRole().getName(), account.getName(),
+                account.getPhone());
     }
 }

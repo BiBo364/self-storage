@@ -11,12 +11,12 @@ type FieldProps = {
   defaultValue?: string;
 };
 
-export const FIELD_GROUP = "mb-[17px]";
-export const FIELD_LABEL = "mb-[7px] block text-[13px] font-bold text-ink";
+export const FIELD_GROUP = "mb-4";
+export const FIELD_LABEL = "mb-1.5 block text-label text-muted";
 export const INPUT_WRAP =
-  "relative flex min-h-[46px] items-center gap-2.5 rounded-sm border border-border bg-surface-subtle px-[13px] text-muted focus-within:border-brand focus-within:shadow-[0_0_0_3px_var(--brand-soft)] [&>svg:last-child]:pointer-events-none [&>svg:last-child]:ml-auto";
+  "relative flex min-h-[42px] items-center gap-2.5 rounded-[2px] border border-rule-strong bg-surface px-3 text-muted focus-within:border-brand focus-within:shadow-[0_0_0_3px_var(--brand-soft)] [&>svg:last-child]:pointer-events-none [&>svg:last-child]:ml-auto";
 export const INPUT_ELEMENT =
-  "min-h-[43px] w-full min-w-0 appearance-none border-0 bg-transparent text-[14px] text-ink outline-0 placeholder:text-[#7d8882]";
+  "min-h-[40px] w-full min-w-0 appearance-none border-0 bg-transparent text-small text-ink outline-0 placeholder:text-muted";
 
 export function FormField({
   label,
@@ -50,7 +50,7 @@ export function FormField({
           autoComplete={name === "email" ? "email" : undefined}
           className={INPUT_ELEMENT}
         />
-        {suffix && <span className="shrink-0 text-[11px] text-muted">{suffix}</span>}
+        {suffix && <span className="shrink-0 text-label text-muted">{suffix}</span>}
       </div>
     </div>
   );
@@ -61,11 +61,17 @@ export function SelectField({
   name,
   options,
   required,
+  value,
+  onChange,
+  placeholder = "Chọn một lựa chọn",
 }: {
   label: string;
   name: string;
   options: { value: string; label: string }[];
   required?: boolean;
+  value?: string;
+  onChange?: (value: string) => void;
+  placeholder?: string;
 }) {
   return (
     <div className={FIELD_GROUP}>
@@ -82,9 +88,11 @@ export function SelectField({
           id={name}
           name={name}
           required={required}
+          value={value}
+          onChange={(event) => onChange?.(event.target.value)}
           className={`${INPUT_ELEMENT} invalid:text-muted`}
         >
-          <option value="">Chọn một lựa chọn</option>
+          <option value="">{placeholder}</option>
           {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}

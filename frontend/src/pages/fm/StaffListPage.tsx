@@ -1,140 +1,150 @@
-import { CalendarDays, LifeBuoy, Mail, Phone, Undo2, UserRound } from "lucide-react";
-import { useState } from "react";
-import {
-  fmAppointments,
-  fsStaff,
-  returnRequests,
-  supportRequests,
-  type FsStaff,
-} from "../../mocks/fm";
-import { SurfaceState } from "../../components/ui/SurfaceState";
+import { Mail, Phone, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ApiError } from "../../app/api";
+import { fetchCurrentFmFacility, type FmFacility } from "../../app/fmFacility";
+import { fetchFacilityStaff, type FmStaff } from "../../app/fmStaff";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { SurfaceState } from "../../components/ui/SurfaceState";
 
-type WorkItem = {
-  id: string;
-  label: string;
-  icon: typeof CalendarDays;
-};
+function formatDate(iso: string) {
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
 
-function workItemsForStaff(staffId: string): WorkItem[] {
-  const appointments = fmAppointments
-    .filter((appt) => appt.staffId === staffId && appt.status === "Pending")
-    .map((appt) => ({
-      id: appt.id,
-      label: `Lịch hẹn ${appt.type === "CHECKIN" ? "check-in" : "trả kho"} — ${appt.customerName} (${appt.unitCode}, ${appt.date})`,
-      icon: CalendarDays,
-    }));
-  const returns = returnRequests
-    .filter((request) => request.staffId === staffId && request.status === "Assigned")
-    .map((request) => ({
-      id: request.id,
-      label: `Trả kho — ${request.customerName} (${request.unitCode})`,
-      icon: Undo2,
-    }));
-  const support = supportRequests
-    .filter((request) => request.staffId === staffId && request.status === "Assigned")
-    .map((request) => ({
-      id: request.id,
-      label: `Hỗ trợ sự cố — khoang ${request.unitCode}`,
-      icon: LifeBuoy,
-    }));
-  return [...appointments, ...returns, ...support];
+function staffName(staff: FmStaff) {
+  return staff.name ?? staff.email;
 }
 
 export function StaffListPage() {
-  const [openId, setOpenId] = useState<string | null>(null);
-  const openStaff = fsStaff.find((staff) => staff.id === openId) ?? null;
+  const [facility, setFacility] = useState<FmFacility | null>(null);
+  const [staff, setStaff] = useState<FmStaff[]>([]);
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<{ status: number; message: string } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        const current = await fetchCurrentFmFacility();
+        const staffList = await fetchFacilityStaff(current.id);
+        if (!active) return;
+        setFacility(current);
+        setStaff(staffList);
+      } catch (caught) {
+        if (!active) return;
+        setError(
+          caught instanceof ApiError
+            ? { status: caught.status, message: caught.message }
+            : { status: 0, message: "Không thể kết nối tới máy chủ." },
+        );
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  const openStaff = staff.find((member) => member.id === openId) ?? null;
+
+  function retry() {
+    setIsLoading(true);
+    setError(null);
+    setReloadKey((key) => key + 1);
+  }
+
+  if (isLoading) {
+    return <SurfaceState variant="loading" title="Đang tải nhân viên…" />;
+  }
+
+  if (error) {
+    if (error.status === 403 || error.status === 404) {
+      return (
+        <SurfaceState
+          variant="forbidden"
+          title="Bạn không có quyền xem nhân viên cơ sở"
+          description={error.message}
+        />
+      );
+    }
+    return (
+      <SurfaceState
+        variant="error"
+        title="Không tải được danh sách nhân viên"
+        description={error.message}
+        action={{ label: "Thử lại", onClick: retry }}
+      />
+    );
+  }
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Danh sách nhân viên FS</h1>
-        <p className="mt-2 text-[13px] text-muted">
-          Nhân viên hiện trường được gán vào cơ sở của bạn — chỉ xem, việc gán/xoá thuộc quyền
-          Admin.
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Danh sách nhân viên FS</h1>
+        <p className="mt-1.5 text-small text-muted">
+          Nhân viên hiện trường được gán vào cơ sở {facility?.name ?? ""} — chỉ xem, việc gán/xoá
+          thuộc quyền Admin.
         </p>
       </div>
 
-      {fsStaff.length === 0 ? (
+      {staff.length === 0 ? (
         <SurfaceState
           variant="empty"
           title="Chưa có FS nào được gán vào cơ sở này"
           description="Nếu cần thêm nhân sự, gửi yêu cầu qua Business Operation Manager."
         />
       ) : (
-        <div className="grid gap-3">
-          {fsStaff.map((staff) => {
-            const workload = workItemsForStaff(staff.id).length;
-            return (
-              <button
-                key={staff.id}
-                className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand max-[760px]:flex-col"
-                onClick={() => setOpenId(staff.id)}
-              >
-                <div>
-                  <p className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink">
-                    <UserRound size={15} /> {staff.name}
-                  </p>
-                  <p className="mb-0 mt-1.5 flex items-center gap-2 text-[13px] text-muted">
-                    <Mail size={13} /> {staff.email}
-                  </p>
-                  <p className="mb-0 mt-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
-                    Gán vào cơ sở từ {staff.assignedAt}
-                  </p>
-                </div>
-                <span
-                  className={`whitespace-nowrap rounded-full px-[9px] py-[6px] text-[11px] font-extrabold ${
-                    workload > 0 ? "bg-brand-soft text-brand" : "bg-surface-subtle text-muted"
-                  }`}
-                >
-                  {workload > 0 ? `${workload} việc đang xử lý` : "Không có việc"}
+        <div className="grid gap-2">
+          {staff.map((member) => (
+            <button
+              key={member.id}
+              className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
+              onClick={() => setOpenId(member.id)}
+            >
+              <div>
+                <strong className="flex items-center gap-2 text-small font-semibold text-ink">
+                  <UserRound size={15} /> {staffName(member)}
+                </strong>
+                <span className="mt-1 flex items-center gap-1.5 text-label text-muted">
+                  <Mail size={13} /> {member.email}
                 </span>
-              </button>
-            );
-          })}
+                {member.phone && (
+                  <span className="mt-1 flex items-center gap-1.5 text-label text-muted">
+                    <Phone size={13} /> {member.phone}
+                  </span>
+                )}
+                <span className="mt-1 block text-label text-muted">
+                  Gán vào cơ sở từ {formatDate(member.assignedAt)}
+                </span>
+              </div>
+            </button>
+          ))}
         </div>
       )}
 
       {openStaff && <StaffDetailPanel staff={openStaff} onClose={() => setOpenId(null)} />}
-    </main>
+    </div>
   );
 }
 
-function StaffDetailPanel({ staff, onClose }: { staff: FsStaff; onClose: () => void }) {
-  const items = workItemsForStaff(staff.id);
-
+function StaffDetailPanel({ staff, onClose }: { staff: FmStaff; onClose: () => void }) {
   return (
-    <DetailPanel title={staff.name} eyebrow="Nhân viên FS" onClose={onClose}>
-      <div className="grid gap-2.5 text-[13px] text-muted">
+    <DetailPanel title={staffName(staff)} eyebrow="Nhân viên FS" onClose={onClose}>
+      <div className="grid gap-2 text-small text-muted">
         <span className="flex items-center gap-2">
           <Mail size={14} /> {staff.email}
         </span>
         <span className="flex items-center gap-2">
-          <Phone size={14} /> {staff.phone}
+          <Phone size={14} /> {staff.phone ?? "—"}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.06em]">
-          Gán vào cơ sở từ {staff.assignedAt}
-        </span>
+        <span>Gán vào cơ sở từ {formatDate(staff.assignedAt)}</span>
       </div>
-
-      <h3 className="mb-3 mt-6 text-[13px] font-bold text-ink">
-        Công việc đang được gán ({items.length})
-      </h3>
-      {items.length === 0 ? (
-        <p className="mb-0 text-[13px] text-muted">Hiện chưa có công việc nào được gán.</p>
-      ) : (
-        <div className="grid gap-2">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center gap-2.5 border border-border bg-surface-subtle p-3 text-[12.5px] text-ink"
-            >
-              <item.icon size={14} className="shrink-0 text-brand" />
-              {item.label}
-            </div>
-          ))}
-        </div>
-      )}
     </DetailPanel>
   );
 }

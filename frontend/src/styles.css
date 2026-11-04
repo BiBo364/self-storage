@@ -7,61 +7,98 @@
  * happens here in one place.
  */
 :root {
-  color-scheme: dark;
-  --background: #0b1719;
-  --surface: #102326;
-  --surface-subtle: #173532;
-  --ink: #e6eec9;
-  --muted: #c2d099;
-  --border: rgba(230, 238, 201, 0.16);
-  --brand: #c2d099;
-  --brand-strong: #7da78c;
-  --brand-soft: rgba(194, 208, 153, 0.14);
-  --accent: #35858e;
-  --info: #8fc1c7;
-  --success: #a8cf9a;
-  --warning: #e6eec9;
-  --danger: #ff9b73;
-  --dark: #071013;
-  --cream: #19302e;
-  --unit-accent-sand: #29413b;
-  --unit-accent-teal: #214047;
-  --unit-accent-ink: #1b3033;
-  --radius-card: 8px;
-  --shadow-soft: 0 18px 45px rgba(0, 0, 0, 0.25);
-  --header-surface: rgba(16, 35, 38, 0.96);
-  --header-surface-scrolled: rgba(16, 35, 38, 0.84);
-  --header-shadow-scrolled: 0 16px 36px rgba(7, 16, 19, 0.3);
-  --footer-surface: #0e2225;
-  --footer-muted: rgba(230, 238, 201, 0.678);
-}
-[data-theme="light"] {
   color-scheme: light;
-  --background: #f7f9ef;
+  --background: #e9eae6;
   --surface: #ffffff;
-  --surface-subtle: #e6eec9;
-  --ink: #102326;
-  --muted: #2f7078;
-  --border: rgba(16, 35, 38, 0.16);
-  --brand: #35858e;
-  --brand-strong: #2a6970;
-  --brand-soft: rgba(53, 133, 142, 0.14);
-  --accent: #2f7078;
-  --info: #2f7078;
-  --success: #4f795b;
-  --warning: #6b7a3c;
-  --danger: #b9573d;
-  --dark: #071013;
-  --cream: #e6eec9;
-  --unit-accent-sand: #dce6ba;
-  --unit-accent-teal: #dceff0;
-  --unit-accent-ink: #cfdfd8;
-  --shadow-soft: 0 18px 45px rgba(16, 35, 38, 0.14);
-  --header-surface: rgba(255, 255, 255, 0.92);
-  --header-surface-scrolled: rgba(255, 255, 255, 0.8);
-  --header-shadow-scrolled: 0 16px 36px rgba(16, 35, 38, 0.14);
-  --footer-surface: var(--surface-subtle);
-  --footer-muted: var(--muted);
+  --surface-subtle: #f3f4f1;
+  --ink: #101413;
+  --ink-2: #333b38;
+  --muted: #5a625f;
+  --border: #c9ccc6;
+  --rule-strong: #aeb3ac;
+  --brand: #f2c300;
+  --brand-strong: #d9ae00;
+  --brand-soft: rgba(242, 195, 0, 0.18);
+  --signal-ink: #101413;
+  --accent: #1f5a66;
+  --info: #1f5a66;
+  --success: #2f6b4f;
+  --warning: #7a5a00;
+  --danger: #b3261e;
+  --success-soft: #e4ece5;
+  --success-line: #c2d2c5;
+  --warning-soft: #f7e9b0;
+  --warning-line: #e3cf85;
+  --danger-soft: #f7e3e0;
+  --danger-line: #e0b9b4;
+  --info-soft: #e3edee;
+  --info-line: #bfd3d5;
+  --dark: #101413;
+  --cream: #e9eae6;
+  --unit-accent-sand: #dfe1dc;
+  --unit-accent-teal: #d9e3e4;
+  --unit-accent-ink: #e5e7e4;
+  --radius-card: 0px;
+  --shadow-soft: 0 24px 60px rgba(16, 20, 19, 0.18);
+  --container-border: #101413;
+  --control-border: #101413;
+  --control-border-hover: #101413;
+  --control-bg-hover: #101413;
+  --control-hover-ink: #e9eae6;
+  --on-dark-border: rgba(233, 234, 230, 0.28);
+  --on-dark-border-hover: rgba(233, 234, 230, 0.55);
+  --on-dark-bg-hover: rgba(233, 234, 230, 0.1);
+  --on-dark-ink: #e9eae6;
+  --header-surface: rgba(255, 255, 255, 0.96);
+  --header-surface-scrolled: rgba(255, 255, 255, 0.92);
+  --header-shadow-scrolled: 0 16px 36px rgba(16, 20, 19, 0.12);
+  --footer-surface: #dfe1dc;
+  --footer-muted: #5a625f;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0e1211;
+  --surface: #1a201e;
+  --surface-subtle: #1f2623;
+  --ink: #eef0ec;
+  --ink-2: #c6ccc7;
+  --muted: #9aa19c;
+  --border: #2b3330;
+  --rule-strong: #3f4945;
+  --brand: #ffd400;
+  --brand-strong: #e6bf00;
+  --brand-soft: rgba(255, 212, 0, 0.14);
+  --signal-ink: #101413;
+  --accent: #8fc4cc;
+  --info: #8fc4cc;
+  --success: #8cc6a2;
+  --warning: #e3c05c;
+  --danger: #f08c7c;
+  --success-soft: #16261d;
+  --success-line: #2d4636;
+  --warning-soft: #2a2410;
+  --warning-line: #4a3d1a;
+  --danger-soft: #2c1a17;
+  --danger-line: #4a2c27;
+  --info-soft: #142325;
+  --info-line: #2a4043;
+  --dark: #070a07;
+  --cream: #0e1211;
+  --unit-accent-sand: #1d231d;
+  --unit-accent-teal: #1b2a2b;
+  --unit-accent-ink: #202622;
+  --radius-card: 0px;
+  --shadow-soft: 0 24px 60px rgba(0, 0, 0, 0.35);
+  --container-border: rgba(238, 240, 236, 0.26);
+  --control-border: rgba(238, 240, 236, 0.28);
+  --control-border-hover: rgba(238, 240, 236, 0.5);
+  --control-bg-hover: rgba(238, 240, 236, 0.08);
+  --control-hover-ink: #eef0ec;
+  --header-surface: rgba(26, 32, 30, 0.96);
+  --header-surface-scrolled: rgba(26, 32, 30, 0.88);
+  --header-shadow-scrolled: 0 16px 36px rgba(0, 0, 0, 0.3);
+  --footer-surface: #151a18;
+  --footer-muted: #9aa19c;
 }
 * {
   box-sizing: border-box;
@@ -69,18 +106,24 @@
 html {
   scroll-behavior: smooth;
 }
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Saira Semi Condensed", "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+}
 body {
   margin: 0;
   background: var(--background);
   color: var(--ink);
   font-family:
-    "Be Vietnam Pro",
+    "Source Sans 3",
     ui-sans-serif,
     system-ui,
     -apple-system,
     "Segoe UI",
     sans-serif;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.55;
   text-rendering: optimizeLegibility;
   transition:
@@ -98,17 +141,22 @@ a {
 }
 button {
   cursor: pointer;
+  border: 0;
+  background: transparent;
 }
 a {
   color: inherit;
   text-decoration: none;
 }
 button:focus-visible,
-a:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--brand-soft);
+}
 input:focus-visible,
 select:focus-visible {
-  outline: 3px solid var(--brand-soft);
-  outline-offset: 3px;
+  outline: none;
 }
 .app-shell {
   min-height: 100vh;
@@ -134,10 +182,15 @@ select:focus-visible {
 .skip-link:focus {
   transform: translateY(0);
 }
-/* Keep native select menus inside the dark teal system where the browser allows it. */
+/* Native select menus follow the active theme where the browser allows it. */
 select,
 option,
 optgroup {
+  color-scheme: light;
+}
+[data-theme="dark"] select,
+[data-theme="dark"] option,
+[data-theme="dark"] optgroup {
   color-scheme: dark;
 }
 select option,
@@ -146,21 +199,11 @@ select optgroup {
   background: var(--surface);
 }
 select option:checked {
-  color: var(--background);
+  color: var(--signal-ink);
   background: var(--brand-strong);
 }
-[data-theme="light"] select,
-[data-theme="light"] option,
-[data-theme="light"] optgroup {
-  color-scheme: light;
-}
-[data-theme="light"] select option,
-[data-theme="light"] select optgroup {
-  color: var(--ink);
-  background: var(--surface);
-}
 ::selection {
-  color: var(--background);
+  color: var(--signal-ink);
   background: var(--brand);
 }
 ::-webkit-scrollbar {

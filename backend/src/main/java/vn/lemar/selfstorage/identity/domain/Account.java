@@ -36,6 +36,12 @@ public class Account {
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;
 
+    @Column(length = 255)
+    private String name;
+
+    @Column(length = 20)
+    private String phone;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
@@ -49,8 +55,14 @@ public class Account {
     private Instant createdAt = Instant.now();
 
     public Account(String email, String passwordHash, Role role) {
+        this(email, passwordHash, null, null, role);
+    }
+
+    public Account(String email, String passwordHash, String name, String phone, Role role) {
         this.email = normalize(email);
         this.passwordHash = passwordHash;
+        this.name = name;
+        this.phone = phone;
         this.role = role;
     }
 

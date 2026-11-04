@@ -9,20 +9,14 @@ import {
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { FilterSelect } from "../../components/ui/FilterSelect";
+import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 const TYPE_LABEL: Record<FmAppointment["type"], string> = {
   CHECKIN: "Check-in",
   RETURN: "Trả kho",
 };
-
-const TYPE_BADGE: Record<FmAppointment["type"], string> = {
-  CHECKIN: "bg-success/14 text-success",
-  RETURN: "bg-info/14 text-info",
-};
-
-const FILTER_SELECT =
-  "min-w-[170px] rounded-sm border border-border bg-surface px-[11px] py-[10px] pr-[30px] text-[12px] font-semibold text-ink";
 
 function staffName(staffId: string | null) {
   return fsStaff.find((staff) => staff.id === staffId)?.name ?? null;
@@ -67,77 +61,69 @@ export function AppointmentSchedulePage() {
   }
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Lịch hẹn &amp; phân công FS</h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Lịch hẹn &amp; phân công FS</h1>
+        <p className="mt-1.5 text-small text-muted">
           Lịch check-in và trả kho tại cơ sở của bạn, theo ngày.
         </p>
       </div>
 
-      <div className="mb-6">
-        <DemoNotice tone="pending">
-          Lịch <strong>trả kho</strong> được hệ thống tự phân công từ hàng chờ yêu cầu trả kho — ở
-          đây chỉ xem, không phân công lại để tránh trùng lặp.
-        </DemoNotice>
-      </div>
+      <DemoNotice tone="pending">
+        Lịch <strong>trả kho</strong> được hệ thống tự phân công từ hàng chờ yêu cầu trả kho — ở đây
+        chỉ xem, không phân công lại để tránh trùng lặp.
+      </DemoNotice>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <select
-          className={FILTER_SELECT}
+      <div className="max-w-[320px]">
+        <FilterSelect
+          label="Lọc lịch hẹn"
           value={unassignedOnly ? "unassigned" : "all"}
-          onChange={(event) => setUnassignedOnly(event.target.value === "unassigned")}
+          onChange={(value) => setUnassignedOnly(value === "unassigned")}
         >
           <option value="all">Tất cả lịch hẹn</option>
           <option value="unassigned">Chỉ chưa phân công</option>
-        </select>
+        </FilterSelect>
       </div>
 
       {groups.length === 0 ? (
         <SurfaceState variant="empty" title="Không có lịch hẹn nào phù hợp bộ lọc" />
       ) : (
-        <div className="grid gap-8">
+        <div className="grid gap-6">
           {groups.map(([date, dayItems]) => (
             <section key={date}>
-              <p className="m-0 mb-3 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-brand">
-                {date}
-              </p>
-              <div className="grid gap-3">
+              <p className="mb-2 text-label text-muted">{date}</p>
+              <div className="grid gap-2">
                 {dayItems.map((appointment) => {
                   const assignedName = staffName(appointment.staffId);
                   const isReadOnly = appointment.type === "RETURN";
                   return (
                     <button
                       key={appointment.id}
-                      className="flex items-start justify-between gap-5 border border-border bg-surface p-5 text-left transition-colors hover:border-brand disabled:cursor-default disabled:hover:border-border max-[760px]:flex-col"
+                      className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle disabled:cursor-default disabled:hover:bg-surface"
                       onClick={() => !isReadOnly && openDetails(appointment)}
                       disabled={isReadOnly}
                     >
                       <div>
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${TYPE_BADGE[appointment.type]}`}
-                          >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusTag tone={appointment.type === "CHECKIN" ? "success" : "info"}>
                             {TYPE_LABEL[appointment.type]}
-                          </span>
-                          <p className="m-0 text-[15px] font-bold text-ink">
+                          </StatusTag>
+                          <strong className="text-small font-semibold text-ink">
                             {appointment.customerName}
-                          </p>
+                          </strong>
                         </div>
-                        <p className="mb-0 mt-1.5 text-[13px] text-muted">
+                        <span className="mt-1.5 block text-label text-muted">
                           Khoang {appointment.unitCode} · {appointment.timeSlot}
-                        </p>
+                        </span>
                       </div>
-                      <span className="flex items-center gap-1.5 whitespace-nowrap text-[12px] font-bold text-muted">
-                        {isReadOnly && <Lock size={13} />}
+                      <span className="flex items-center gap-1.5 whitespace-nowrap">
+                        {isReadOnly && <Lock size={13} className="text-muted" />}
                         {assignedName ? (
-                          <>
-                            <User size={14} /> {assignedName}
-                          </>
+                          <StatusTag tone="success">
+                            <User size={12} /> {assignedName}
+                          </StatusTag>
                         ) : (
-                          <span className="rounded-full bg-warning/14 px-2 py-0.5 text-[11px] font-extrabold text-warning">
-                            Chưa phân công
-                          </span>
+                          <StatusTag tone="warning">Chưa phân công</StatusTag>
                         )}
                       </span>
                     </button>
@@ -155,7 +141,7 @@ export function AppointmentSchedulePage() {
           eyebrow={`${TYPE_LABEL[openAppointment.type]} · ${openAppointment.date}`}
           onClose={() => setOpenId(null)}
         >
-          <div className="grid gap-2.5 text-[13px] text-muted">
+          <div className="grid gap-2 text-small text-muted">
             <span>Khoang {openAppointment.unitCode}</span>
             <span>{openAppointment.timeSlot}</span>
           </div>
@@ -168,10 +154,10 @@ export function AppointmentSchedulePage() {
             </div>
           ) : (
             <>
-              <label className="mt-6 grid gap-1.5 text-[12px] font-bold text-ink">
+              <label className="mt-6 grid gap-1.5 text-label text-muted">
                 Chọn nhân viên FS
                 <select
-                  className="rounded-sm border border-border bg-surface-subtle px-3 py-2.5 text-[13px] text-ink"
+                  className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
                   value={selectedStaffId}
                   onChange={(event) => setSelectedStaffId(event.target.value)}
                 >
@@ -197,6 +183,6 @@ export function AppointmentSchedulePage() {
           )}
         </DetailPanel>
       )}
-    </main>
+    </div>
   );
 }

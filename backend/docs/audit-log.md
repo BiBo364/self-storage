@@ -65,6 +65,8 @@ auditRecorder.record(new AuditEntry(AuditAction.RENTAL_ORDER_CANCELED, AuditEnti
 | `booking` | `RENTAL_ORDER_CANCELED` | `RentalOrder`, `ProposalFeedback`, `StorageUnit` | `booking/application/RentalOrderCancellation.cancel` — một bản ghi mỗi entity, cùng lý do huỷ |
 | `booking` | `DEPOSIT_REFUND_REQUIRED` | `RentalOrder` | `booking/application/ProposalService.issueDeposit` — đổi khoang sau khi cọc dư; actor = customer, FM nhận notification hoàn tiền thủ công — hoàn tự động thuộc Flow 4, chưa có trong code |
 | `booking` | `UNIT_CHANGE_RELEASED` | `StorageUnit` | `booking/application/ProposalService.releaseReplacedUnit` — nhả khoang cũ khi khách đồng ý khoang mới sau khi đã cọc; actor = customer |
+| `booking` | `FS_ASSIGNED` | `Appointment`, `RentalOrder` | `booking/application/AppointmentService.assignStaff` — hai bản ghi: `staffId` (Appointment) + `Scheduled → InProgress` (RentalOrder); actor = FM |
+| `booking` | `APPOINTMENT_CANCELED` | `Appointment` | `booking/application/RentalOrderCancellation.cancel` — lịch `Pending` bị huỷ theo cancellation cascade; actor = System |
 
 ## Xem thêm
 

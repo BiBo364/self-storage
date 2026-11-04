@@ -37,14 +37,12 @@ export function AppointmentBookingPage({ navigate }: { navigate: Navigate }) {
 
   if (!invoice || !isInvoicePaid(invoice.id)) {
     return (
-      <main>
-        <SurfaceState
-          variant="forbidden"
-          title="Chưa thể đặt lịch check-in"
-          description="Bạn cần thanh toán hoá đơn đặt cọc trước khi chọn lịch hẹn check-in."
-          action={{ label: "Đến trang hoá đơn", onClick: () => navigate("/invoices") }}
-        />
-      </main>
+      <SurfaceState
+        variant="forbidden"
+        title="Chưa thể đặt lịch check-in"
+        description="Bạn cần thanh toán hoá đơn đặt cọc trước khi chọn lịch hẹn check-in."
+        action={{ label: "Đến trang hoá đơn", onClick: () => navigate("/invoices") }}
+      />
     );
   }
 
@@ -57,25 +55,23 @@ export function AppointmentBookingPage({ navigate }: { navigate: Navigate }) {
   }
 
   return (
-    <main>
-      <div className="mb-8">
-        <h1 className="m-0 text-[28px] tracking-[-0.03em] text-ink">Chọn lịch hẹn check-in</h1>
-        <p className="mt-2 text-[13px] text-muted">
+    <div className="grid gap-6">
+      <div>
+        <h1 className="m-0 text-title text-ink">Chọn lịch hẹn check-in</h1>
+        <p className="mt-1.5 text-small text-muted">
           Đặt lịch đến cơ sở để kiểm tra khoang, ký hợp đồng và nhận bàn giao cho khoang{" "}
           {invoice.unitCode}.
         </p>
       </div>
 
-      <div className="grid grid-cols-[1fr_320px] gap-8 max-[980px]:grid-cols-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-6 max-[980px]:grid-cols-1">
         <div>
           {appointment && !rescheduling ? (
-            <div className="border border-border bg-surface p-6">
-              <p className="m-0 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-brand">
-                Lịch hẹn của bạn
-              </p>
-              <h3 className="mb-0 mt-1.5 text-[18px] tracking-[-0.02em]">
+            <div className="bg-surface p-5">
+              <span className="text-label text-muted">Lịch hẹn của bạn</span>
+              <h2 className="mt-1 text-section text-ink">
                 {appointment.date} · {appointment.slot}
-              </h3>
+              </h2>
               <div className="mt-4">
                 {assigned ? (
                   <DemoNotice tone="success">
@@ -85,9 +81,10 @@ export function AppointmentBookingPage({ navigate }: { navigate: Navigate }) {
                   <DemoNotice tone="pending">Đang chờ FM phân công nhân viên phụ trách.</DemoNotice>
                 )}
               </div>
-              <div className="mt-5 flex items-center gap-3">
+              <div className="mt-5 flex flex-wrap items-center gap-2.5">
                 <Button
                   variant="secondary"
+                  size="sm"
                   disabled={rescheduleCount >= MAX_RESCHEDULES}
                   onClick={() => {
                     setRescheduleCount((count) => count + 1);
@@ -98,51 +95,52 @@ export function AppointmentBookingPage({ navigate }: { navigate: Navigate }) {
                 >
                   Dời lịch ({MAX_RESCHEDULES - rescheduleCount} lượt còn lại)
                 </Button>
-                <Button variant="secondary" onClick={() => navigate("/my-storage")}>
+                <Button variant="secondary" size="sm" onClick={() => navigate("/my-storage")}>
                   Về Kho của tôi
                 </Button>
               </div>
               {rescheduleCount >= MAX_RESCHEDULES && (
-                <p className="mb-0 mt-3 text-[12px] text-danger">
+                <p className="mt-3 text-label text-danger">
                   Bạn đã dời lịch tối đa {MAX_RESCHEDULES} lần. Vui lòng liên hệ hỗ trợ nếu cần đổi
                   thêm.
                 </p>
               )}
             </div>
           ) : (
-            <div className="border border-border bg-surface p-6">
+            <div className="bg-surface p-5">
               {rescheduling && (
-                <div className="mb-5">
+                <div className="mb-4">
                   <DemoNotice tone="info">
                     Dời lịch cần báo trước ít nhất 24 giờ so với khung giờ đã chọn.
                   </DemoNotice>
                 </div>
               )}
-              <label className="grid gap-1.5 text-[12px] font-bold text-ink">
-                <span className="flex items-center gap-[6px]">
-                  <Calendar size={15} /> Chọn ngày hẹn
+              <label className="grid gap-1.5">
+                <span className="flex items-center gap-1.5 text-label text-muted">
+                  <Calendar size={14} /> Chọn ngày hẹn
                 </span>
                 <input
                   type="date"
-                  className="w-fit rounded-sm border border-border bg-surface-subtle px-3 py-2.5 text-[13px] text-ink"
+                  className="w-fit rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
                   min={todayIso()}
                   max={addDaysIso(14)}
                   value={date}
                   onChange={(event) => setDate(event.target.value)}
                 />
               </label>
+
               <div className="mt-5">
-                <span className="flex items-center gap-[6px] text-[12px] font-bold text-ink">
-                  <Clock3 size={15} /> Chọn khung giờ
+                <span className="flex items-center gap-1.5 text-label text-muted">
+                  <Clock3 size={14} /> Chọn khung giờ
                 </span>
-                <div className="mt-2.5 flex flex-wrap gap-2.5">
+                <div className="mt-2.5 flex flex-wrap gap-2">
                   {TIME_SLOTS.map((item) => (
                     <button
                       key={item}
-                      className={`rounded-sm border px-4 py-2.5 text-[13px] font-bold transition-colors ${
+                      className={`min-h-[42px] border-2 px-4 text-small font-semibold transition-colors ${
                         slot === item
-                          ? "border-brand bg-brand-soft text-ink"
-                          : "border-border bg-transparent text-muted hover:text-ink"
+                          ? "border-brand bg-brand text-signal-ink"
+                          : "border-rule-strong bg-surface text-muted hover:border-ink hover:text-ink"
                       }`}
                       onClick={() => setSlot(item)}
                     >
@@ -151,6 +149,7 @@ export function AppointmentBookingPage({ navigate }: { navigate: Navigate }) {
                   ))}
                 </div>
               </div>
+
               <Button className="mt-6" disabled={!date || !slot} onClick={confirm}>
                 <Check size={16} /> Xác nhận lịch hẹn
               </Button>
@@ -158,32 +157,30 @@ export function AppointmentBookingPage({ navigate }: { navigate: Navigate }) {
           )}
         </div>
 
-        <aside className="grid gap-5">
-          <div className="border border-border bg-surface p-5">
-            <p className="m-0 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-brand">
-              Địa điểm
-            </p>
-            <h3 className="mb-0 mt-1.5 text-[15px] tracking-[-0.02em]">{facility?.name}</h3>
-            <p className="mb-0 mt-2 text-[12px] leading-[1.6] text-muted">{facility?.address}</p>
-            <p className="mb-0 mt-1 text-[12px] leading-[1.6] text-muted">{facility?.hours}</p>
+        <aside className="grid gap-3">
+          <div className="bg-surface p-5">
+            <span className="text-label text-muted">Địa điểm</span>
+            <h3 className="mt-1 text-section text-ink">{facility?.name}</h3>
+            <p className="mt-2 text-small leading-relaxed text-muted">{facility?.address}</p>
+            <p className="mt-1 text-small leading-relaxed text-muted">{facility?.hours}</p>
           </div>
-          <div className="border border-border bg-surface p-5">
-            <p className="m-0 flex items-center gap-[6px] font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-brand">
+          <div className="bg-surface p-5">
+            <span className="flex items-center gap-1.5 text-label text-muted">
               <IdCard size={14} /> Cần chuẩn bị
-            </p>
-            <ul className="m-0 mt-2.5 grid gap-2 pl-0 text-[12px] text-muted">
+            </span>
+            <ul className="mt-2.5 grid gap-2 pl-0 text-small text-muted">
               <li className="flex items-start gap-2">
-                <Check size={14} className="mt-0.5 shrink-0 text-brand" /> CCCD hoặc hộ chiếu bản
+                <Check size={14} className="mt-0.5 shrink-0 text-success" /> CCCD hoặc hộ chiếu bản
                 gốc
               </li>
               <li className="flex items-start gap-2">
-                <UserRound size={14} className="mt-0.5 shrink-0 text-brand" /> Có mặt đúng người
+                <UserRound size={14} className="mt-0.5 shrink-0 text-success" /> Có mặt đúng người
                 đứng tên hợp đồng
               </li>
             </ul>
           </div>
         </aside>
       </div>
-    </main>
+    </div>
   );
 }

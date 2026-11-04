@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { Button } from "./Button";
 import { useId } from "react";
 import { useModalA11y } from "./useModalA11y";
 
@@ -15,37 +16,29 @@ export function ComingSoonDialog({ onClose }: { onClose: () => void }) {
       <div
         ref={containerRef}
         tabIndex={-1}
-        className="relative w-[min(420px,100%)] rounded-md border border-accent bg-surface p-8 shadow-[0_0_22px_rgba(53,133,142,0.45),var(--shadow-soft)] focus:outline-none"
+        className="relative w-[min(420px,100%)] border border-[var(--container-border)] bg-surface p-6 shadow-[var(--shadow-soft)] focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
         <button
-          className="absolute right-[14px] top-[14px] grid h-[34px] w-[34px] place-items-center rounded-sm border border-border bg-transparent text-muted hover:border-accent hover:text-ink"
+          className="absolute right-4 top-4 grid h-9 w-9 place-items-center border-0 bg-transparent text-muted hover:text-ink"
           onClick={onClose}
           aria-label="Đóng"
         >
           <X size={18} />
         </button>
-        <p className="font-mono text-mono uppercase tracking-[0.08em] text-brand">
-          Đang hoàn thiện
-        </p>
-        <h2
-          id={titleId}
-          className="mb-3 mt-2 max-w-[300px] text-[26px] leading-[1.08] tracking-[-0.04em]"
-        >
+        <p className="text-label text-muted">Đang hoàn thiện</p>
+        <h2 id={titleId} className="mb-3 mt-2 max-w-[300px] text-section text-ink">
           Chức năng đang được hoàn thiện
         </h2>
-        <p className="mb-6 text-[13px] text-muted">
+        <p className="mb-6 text-small text-muted">
           Tính năng này sẽ sớm có mặt trong không gian của bạn.
         </p>
-        <button
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-sm border-0 bg-brand px-[18px] text-label text-background transition-colors hover:bg-brand-strong"
-          onClick={onClose}
-        >
+        <Button className="w-full" onClick={onClose}>
           Đã hiểu
-        </button>
+        </Button>
       </div>
     </div>
   );
