@@ -36,8 +36,13 @@ class OrderNotifier {
     }
 
     void notifyCustomer(RentalOrder order, NotificationType type, Map<String, ?> values) {
-        notificationService.notify(order.getCustomerId(), accountQueryService.requireEmailById(order.getCustomerId()),
-                NotificationRecipient.CUSTOMER, type, values, order.getId());
+        notifyCustomer(order.getCustomerId(), order.getId(), type, values);
+    }
+
+    /** Báo khách của lịch hẹn; {@code orderId} null thì chỉ ghi notification, không nối order. */
+    void notifyCustomer(Long customerId, Long orderId, NotificationType type, Map<String, ?> values) {
+        notificationService.notify(customerId, accountQueryService.requireEmailById(customerId),
+                NotificationRecipient.CUSTOMER, type, values, orderId);
     }
 
     /** FM = {@code facilities.fm_account_id} của cơ sở của đơn; cơ sở chưa gán FM thì chỉ log cảnh báo. */

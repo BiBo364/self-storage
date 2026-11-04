@@ -11,11 +11,11 @@ public final class AppointmentNoShowPolicy {
     public static boolean isDue(String type, String status, Instant endAt, Instant now) {
         return AppointmentType.CHECKIN.name().equals(type)
                 && AppointmentStatus.Pending.name().equals(status)
-                && endAt != null && endAt.isBefore(now);
+                && endAt.isBefore(now);
     }
 
     public static boolean isDue(AppointmentType type, AppointmentStatus status, Instant endAt, Instant now) {
         return type == AppointmentType.CHECKIN && status == AppointmentStatus.Pending
-                && endAt != null && endAt.isBefore(now);
+                && endAt.isBefore(now);
     }
 }

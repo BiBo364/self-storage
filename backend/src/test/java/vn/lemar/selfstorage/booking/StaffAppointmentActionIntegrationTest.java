@@ -155,9 +155,9 @@ class StaffAppointmentActionIntegrationTest {
     @Test
     void unassignedAppointmentIsForbidden() {
         long orphanId = jdbc.queryForObject("""
-                insert into appointments (customer_id, facility_id, type, date, status)
-                values (?, ?, 'CHECKIN', ?, 'Pending') returning id""",
-                Long.class, customerId, q7, day);
+                insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status)
+                values (?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
+                Long.class, customerId, q7, day, day + "T08:00:00+07:00", day + "T10:00:00+07:00");
         loginAs("fs1@lemar.vn");
 
         assertThatThrownBy(() -> service.arrive(orphanId)).isInstanceOf(AppointmentForbiddenException.class);

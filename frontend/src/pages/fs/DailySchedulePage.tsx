@@ -47,10 +47,7 @@ function formatDateVN(value: string) {
 }
 
 function formatTimeRange(appointment: StaffAppointment) {
-  if (!appointment.startedAt) return formatDateVN(appointment.date);
-  const start = TIME_FORMAT.format(new Date(appointment.startedAt));
-  if (!appointment.endAt) return start;
-  return `${start}–${TIME_FORMAT.format(new Date(appointment.endAt))}`;
+  return `${TIME_FORMAT.format(new Date(appointment.startedAt))}–${TIME_FORMAT.format(new Date(appointment.endAt))}`;
 }
 
 function typeLabel(type: string) {
@@ -59,12 +56,6 @@ function typeLabel(type: string) {
 
 function statusOf(status: string) {
   return STATUS[status] ?? { label: status, tone: "neutral" as const };
-}
-
-const CANCEL_REASON_LABELS: Record<string, string> = { NoShow: "Khách không đến" };
-
-function cancelReasonLabel(reason: string) {
-  return CANCEL_REASON_LABELS[reason] ?? reason;
 }
 
 export function DailySchedulePage() {
@@ -265,7 +256,7 @@ export function DailySchedulePage() {
                     </p>
                     {appointment.status === "Canceled" && appointment.cancelReason && (
                       <p className="mb-0 mt-1 text-small text-muted">
-                        Lý do huỷ: {cancelReasonLabel(appointment.cancelReason)}
+                        Lý do huỷ: {appointment.cancelReason}
                       </p>
                     )}
                   </div>

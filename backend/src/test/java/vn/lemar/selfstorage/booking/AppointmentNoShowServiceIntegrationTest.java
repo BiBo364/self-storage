@@ -103,7 +103,7 @@ class AppointmentNoShowServiceIntegrationTest {
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, dueId))
                 .isEqualTo("Canceled");
         assertThat(jdbc.queryForObject("select cancel_reason from appointments where id = ?", String.class, dueId))
-                .isEqualTo("NoShow");
+                .isEqualTo("Khách không đến");
         Map<String, Object> audit = jdbc.queryForMap("select action, actor_account_id, "
                 + "old_value ->> 'status' old_status, new_value ->> 'status' new_status, reason "
                 + "from audit_logs where action = 'APPOINTMENT_CANCELED_NO_SHOW' and entity_id = ?",
@@ -111,7 +111,7 @@ class AppointmentNoShowServiceIntegrationTest {
         assertThat(audit.get("actor_account_id")).isNull();
         assertThat(audit.get("old_status")).isEqualTo("Pending");
         assertThat(audit.get("new_status")).isEqualTo("Canceled");
-        assertThat(audit.get("reason")).isEqualTo("NoShow");
+        assertThat(audit.get("reason")).isEqualTo("Khách không đến");
 
         Map<String, Object> notification = jdbc.queryForMap(
                 "select type, title, body from notifications where account_id = ?", customerId);
@@ -119,6 +119,24 @@ class AppointmentNoShowServiceIntegrationTest {
         assertThat((String) notification.get("body")).contains("http://localhost:5173/appointments/new");
         assertThat(jdbc.queryForObject("select order_id from order_notifications where notification_id = "
                 + "(select id from notifications where account_id = ?)", Long.class, customerId)).isEqualTo(orderId);
+    }
+
+    @Test
+    void cancelsDueAppointmentWithoutOrderAndStillNotifiesCustomer() {
+        long noOrderId = jdbc.queryForObject("""
+                insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
+                values (?, ?, ?, 'CHECKIN', ?, now() - interval '3 hours', now() - interval '1 hour',
+                        'Pending') returning id""",
+                Long.class, customerId, q7, accountId("fs1@lemar.vn"), LocalDate.now());
+
+        assertThat(service.cancelIfDue(noOrderId)).isTrue();
+        entityManager.flush();
+
+        assertThat(jdbc.queryForObject("select count(*) from notifications where account_id = ? and type = "
+                + "'APPOINTMENT_CANCELED_NO_SHOW'", Long.class, customerId)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("select count(*) from order_notifications o "
+                + "join notifications n on n.id = o.notification_id where n.account_id = ?", Long.class,
+                customerId)).isZero();
     }
 
     @Test

@@ -7,8 +7,8 @@ export type StaffAppointment = {
   type: string;
   status: string;
   date: string;
-  startedAt: string | null;
-  endAt: string | null;
+  startedAt: string;
+  endAt: string;
   arrivedAt: string | null;
   orderId: number | null;
   unitCode: string | null;

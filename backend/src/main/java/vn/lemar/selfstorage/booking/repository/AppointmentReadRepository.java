@@ -49,7 +49,7 @@ public class AppointmentReadRepository {
     public List<AppointmentRow> findByFacilityAndDate(Long facilityId, LocalDate date) {
         return jdbc.query(SELECT
                         + " where a.facility_id = ? and a.date = ? and a.type = 'CHECKIN'"
-                        + " and a.status = 'Pending' order by a.started_at nulls last, a.id",
+                        + " and a.status = 'Pending' order by a.started_at, a.id",
                 AppointmentReadRepository::map, facilityId, date);
     }
 
@@ -61,7 +61,7 @@ public class AppointmentReadRepository {
     /** Lịch làm việc của một FS trong ngày — mọi type/status đã gán cho FS. */
     public List<AppointmentRow> findByStaffAndDate(Long staffId, LocalDate date) {
         return jdbc.query(SELECT + " where a.staff_id = ? and a.date = ?"
-                        + " order by a.started_at nulls last, a.id",
+                        + " order by a.started_at, a.id",
                 AppointmentReadRepository::map, staffId, date);
     }
 

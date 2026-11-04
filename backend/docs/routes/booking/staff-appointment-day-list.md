@@ -19,7 +19,7 @@ Lịch hẹn đã gán cho FS đang đăng nhập trong một ngày, kèm khách
 - Mỗi dòng: `id`, `type`, `status`, `date`, `startedAt`, `endAt`, `arrivedAt` (null khi chưa đến),
   `orderId`, `unitCode`, `facility {id, name}`, `customer {name, email, phone}`, `noShowDue` (check-in
   `Pending` đã quá `end_at` — cron sẽ huỷ; FE ẩn action), `cancelReason` (lý do huỷ; `null` khi chưa huỷ;
-  `NoShow` là cron no-show, FE hiển thị "Khách không đến").
+  cron no-show ghi "Khách không đến"; FE hiển thị raw).
 - Action: [arrive](staff-appointment-arrive.md) (`Pending → Done`) và [cancel](staff-appointment-cancel.md) (FS chủ động, chưa quá `end_at`).
 - Sai định dạng `date` hiện trả 500 do lỗi chung của API khi query sai kiểu, không riêng route này.
 

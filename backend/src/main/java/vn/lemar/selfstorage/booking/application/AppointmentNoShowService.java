@@ -18,7 +18,6 @@ import vn.lemar.selfstorage.booking.domain.AppointmentStatus;
 import vn.lemar.selfstorage.booking.repository.AppointmentReadRepository;
 import vn.lemar.selfstorage.booking.repository.AppointmentReadRepository.AppointmentRow;
 import vn.lemar.selfstorage.booking.repository.AppointmentRepository;
-import vn.lemar.selfstorage.booking.repository.RentalOrderRepository;
 import vn.lemar.selfstorage.notification.application.NotificationType;
 
 /**
@@ -29,7 +28,7 @@ import vn.lemar.selfstorage.notification.application.NotificationType;
 @Service
 public class AppointmentNoShowService {
 
-    static final String REASON = "NoShow";
+    static final String REASON = "Khách không đến";
 
     private static final ZoneId FACILITY_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -37,19 +36,16 @@ public class AppointmentNoShowService {
 
     private final AppointmentRepository appointmentRepository;
     private final AppointmentReadRepository readRepository;
-    private final RentalOrderRepository orderRepository;
     private final OrderNotifier orderNotifier;
     private final AuditRecorder auditRecorder;
     private final String frontendUrl;
 
     AppointmentNoShowService(AppointmentRepository appointmentRepository,
-                             AppointmentReadRepository readRepository,
-                             RentalOrderRepository orderRepository, OrderNotifier orderNotifier,
+                             AppointmentReadRepository readRepository, OrderNotifier orderNotifier,
                              AuditRecorder auditRecorder,
                              @Value("${app.frontend-url}") String frontendUrl) {
         this.appointmentRepository = appointmentRepository;
         this.readRepository = readRepository;
-        this.orderRepository = orderRepository;
         this.orderNotifier = orderNotifier;
         this.auditRecorder = auditRecorder;
         this.frontendUrl = frontendUrl;
@@ -78,21 +74,16 @@ public class AppointmentNoShowService {
 
         appointmentRepository.flush();
         AppointmentRow row = readRepository.findById(appointmentId).orElse(null);
-        if (row != null && row.orderId() != null) {
-            orderRepository.findById(row.orderId()).ifPresent(order -> orderNotifier.notifyCustomer(order,
+        if (row != null) {
+            orderNotifier.notifyCustomer(appointment.getCustomerId(), row.orderId(),
                     NotificationType.APPOINTMENT_CANCELED_NO_SHOW,
                     Map.of("appointmentTime", appointmentTime(row),
-                            "rescheduleLink", frontendUrl + "/appointments/new")));
+                            "rescheduleLink", frontendUrl + "/appointments/new"));
         }
         return true;
     }
 
     private static String appointmentTime(AppointmentRow row) {
-        String day = DATE.format(row.date());
-        if (row.startedAt() == null) {
-            return day;
-        }
-        String start = TIME.format(row.startedAt());
-        return row.endAt() == null ? start + " " + day : start + "–" + TIME.format(row.endAt()) + " " + day;
+        return TIME.format(row.startedAt()) + "–" + TIME.format(row.endAt()) + " " + DATE.format(row.date());
     }
 }

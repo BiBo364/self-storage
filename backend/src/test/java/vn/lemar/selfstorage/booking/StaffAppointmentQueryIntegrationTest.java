@@ -84,9 +84,9 @@ class StaffAppointmentQueryIntegrationTest {
                 appointmentId, orderId);
 
         otherAppointmentId = jdbc.queryForObject("""
-                insert into appointments (customer_id, facility_id, staff_id, type, date, status)
-                values (?, ?, ?, 'CHECKIN', ?, 'Pending') returning id""",
-                Long.class, customerId, q7, fs2Id, day);
+                insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
+                values (?, ?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
+                Long.class, customerId, q7, fs2Id, day, day + "T08:00:00+07:00", day + "T10:00:00+07:00");
     }
 
     @AfterEach
@@ -140,7 +140,7 @@ class StaffAppointmentQueryIntegrationTest {
 
     @Test
     void returnsCancelReasonForCanceledAppointment() {
-        jdbc.update("update appointments set status = 'Canceled', cancel_reason = 'NoShow' where id = ?",
+        jdbc.update("update appointments set status = 'Canceled', cancel_reason = 'Khách không đến' where id = ?",
                 appointmentId);
         loginAs("fs1@lemar.vn");
 
@@ -148,7 +148,7 @@ class StaffAppointmentQueryIntegrationTest {
 
         assertThat(result).singleElement().satisfies(row -> {
             assertThat(row.status()).isEqualTo("Canceled");
-            assertThat(row.cancelReason()).isEqualTo("NoShow");
+            assertThat(row.cancelReason()).isEqualTo("Khách không đến");
         });
     }
 
@@ -156,9 +156,9 @@ class StaffAppointmentQueryIntegrationTest {
     void missingDateUsesTodayInFacilityZone() {
         LocalDate today = LocalDate.now(FACILITY_ZONE);
         long todayAppointmentId = jdbc.queryForObject("""
-                insert into appointments (customer_id, facility_id, staff_id, type, date, status)
-                values (?, ?, ?, 'CHECKIN', ?, 'Pending') returning id""",
-                Long.class, customerId, q7, fsId, today);
+                insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
+                values (?, ?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
+                Long.class, customerId, q7, fsId, today, today + "T08:00:00+07:00", today + "T10:00:00+07:00");
         loginAs("fs1@lemar.vn");
 
         List<StaffAppointmentResponse> result = service.listForCurrentStaff(null);

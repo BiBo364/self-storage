@@ -46,10 +46,10 @@ public class Appointment {
     @Column(nullable = false)
     private LocalDate date;
 
-    @Column(name = "started_at")
+    @Column(name = "started_at", nullable = false)
     private Instant startedAt;
 
-    @Column(name = "end_at")
+    @Column(name = "end_at", nullable = false)
     private Instant endAt;
 
     @Enumerated(EnumType.STRING)
