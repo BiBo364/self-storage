@@ -277,12 +277,7 @@ export function DailySchedulePage() {
                 </div>
 
                 {appointment.status === "Pending" && (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                    <span className="text-label text-muted">
-                      {isExpired(appointment)
-                        ? "Đã quá giờ — chờ cron no-show."
-                        : "Khách chưa đến."}
-                    </span>
+                  <div className="mt-4 flex flex-wrap items-center justify-end gap-3 pt-4">
                     <div className="flex flex-wrap gap-2">
                       <Button onClick={() => openAction(appointment, "arrive")}>
                         Khách đã đến
