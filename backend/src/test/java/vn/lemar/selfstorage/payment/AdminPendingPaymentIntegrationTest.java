@@ -77,6 +77,9 @@ class AdminPendingPaymentIntegrationTest {
 
     @Test
     void adminSeesOpenPendingCase() throws Exception {
+        Long caseId = jdbc.queryForObject("select id from payment_reconciliation_cases limit 1", Long.class);
+        cases.markNotified(caseId);
+
         mockMvc.perform(get("/api/admin/payments/pending")
                         .param("olderThanMinutes", "15")
                         .header(HttpHeaders.AUTHORIZATION, bearerOf("admin@lemar.vn")))
@@ -86,7 +89,17 @@ class AdminPendingPaymentIntegrationTest {
                 .andExpect(jsonPath("$.data.items[0].vnpTxnRef").value("TXN-ADMIN-PENDING"))
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.items[0].pendingAgeMinutes")
-                        .value(org.hamcrest.Matchers.greaterThanOrEqualTo(29)));
+                        .value(org.hamcrest.Matchers.greaterThanOrEqualTo(29)))
+                .andExpect(jsonPath("$.data.items[0].notifiedAt").isNotEmpty());
+    }
+
+    @Test
+    void invalidPagingIsRejected() throws Exception {
+        mockMvc.perform(get("/api/admin/payments/pending")
+                        .param("page", "0")
+                        .param("size", "0")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("admin@lemar.vn")))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
