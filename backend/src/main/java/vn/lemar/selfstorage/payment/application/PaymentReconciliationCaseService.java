@@ -62,7 +62,8 @@ public class PaymentReconciliationCaseService {
                         row.vnpTxnRef(), row.amount(), row.transactionCreatedAt(), row.detectedAt(),
                         row.notifiedAt(), ageMinutes(row.transactionCreatedAt(), now), row.status(),
                         row.resolution(), row.gatewayTransactionNo(), row.paidAt(), row.note(),
-                        row.evidenceUrl(), row.resolvedAt(), row.resolvedByEmail()))
+                        row.evidenceUrl(), row.resolvedAt(), row.resolvedByEmail(),
+                        row.refundStatus(), row.refundReason()))
                 .toList();
         int totalPages = total == 0 ? 0 : (int) ((total + size - 1) / size);
         return new PendingPaymentCasePageView(items, page, size, total, totalPages);

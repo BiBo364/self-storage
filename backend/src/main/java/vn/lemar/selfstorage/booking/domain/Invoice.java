@@ -53,6 +53,19 @@ public class Invoice {
     @Column(nullable = false, length = 20)
     private InvoiceStatus status;
 
+    @Convert(converter = InvoiceRefundStatusConverter.class)
+    @Column(name = "refund_status", nullable = false, length = 20)
+    private InvoiceRefundStatus refundStatus = InvoiceRefundStatus.NONE;
+
+    @Column(name = "refund_reason", length = 50)
+    private String refundReason;
+
+    @Column(name = "refund_requested_at")
+    private Instant refundRequestedAt;
+
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
@@ -92,6 +105,13 @@ public class Invoice {
     /** Cổng thanh toán đã xác nhận thu tiền (Flow 1.4). */
     public void markPaid() {
         this.status = InvoiceStatus.PAID;
+    }
+
+    /** Tiền đã vào nhưng không thể giữ khoang; không đổi Invoice.status. */
+    public void markRefundRequired(String reason) {
+        this.refundStatus = InvoiceRefundStatus.REQUIRED;
+        this.refundReason = reason;
+        this.refundRequestedAt = Instant.now();
     }
 
     public void cancel() {

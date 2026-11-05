@@ -44,10 +44,13 @@ public class PaymentReconciliationCaseRepository {
     public List<CaseRow> findOpenPage(Instant cutoff, long offset, int limit) {
         String sql = "select c.id, c.transaction_id, c.invoice_id, c.detected_at, c.notified_at, "
                 + "c.status, c.resolution, c.gateway_transaction_no, c.paid_at, c.note, c.evidence_url, "
-                + "c.resolved_at, c.resolved_by_email, pt.vnp_txn_ref, pt.amount, pt.created_at "
+                + "c.resolved_at, c.resolved_by_email, pt.vnp_txn_ref, pt.amount, pt.created_at, "
+                + "i.refund_status, i.refund_reason "
                 + "from payment_reconciliation_cases c "
                 + "join payment_transactions pt on pt.id = c.transaction_id "
-                + "where c.status = 'Open' and pt.status = 'Pending' and pt.created_at <= ? "
+                + "join invoices i on i.id = c.invoice_id "
+                + "where ((c.status = 'Open' and pt.status = 'Pending' and pt.created_at <= ?) "
+                + "or (c.status = 'Resolved' and i.refund_status = 'Required')) "
                 + "order by c.detected_at, c.id limit ? offset ?";
         return jdbc.query(sql, (rs, rowNum) -> new CaseRow(
                         rs.getLong("id"), rs.getLong("transaction_id"), rs.getLong("invoice_id"),
@@ -60,7 +63,8 @@ public class PaymentReconciliationCaseRepository {
                         rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toInstant(),
                         rs.getString("note"), rs.getString("evidence_url"),
                         rs.getTimestamp("resolved_at") == null ? null : rs.getTimestamp("resolved_at").toInstant(),
-                        rs.getString("resolved_by_email")),
+                        rs.getString("resolved_by_email"), rs.getString("refund_status"),
+                        rs.getString("refund_reason")),
                 java.sql.Timestamp.from(cutoff), limit, offset);
     }
 
@@ -69,7 +73,9 @@ public class PaymentReconciliationCaseRepository {
                 select count(*)
                 from payment_reconciliation_cases c
                 join payment_transactions pt on pt.id = c.transaction_id
-                where c.status = 'Open' and pt.status = 'Pending' and pt.created_at <= ?
+                join invoices i on i.id = c.invoice_id
+                where ((c.status = 'Open' and pt.status = 'Pending' and pt.created_at <= ?)
+                    or (c.status = 'Resolved' and i.refund_status = 'Required'))
                 """, Long.class, java.sql.Timestamp.from(cutoff));
         return count == null ? 0 : count;
     }
@@ -99,6 +105,7 @@ public class PaymentReconciliationCaseRepository {
                           BigDecimal amount, Instant transactionCreatedAt, Instant detectedAt,
                           Instant notifiedAt, String status, String resolution,
                           String gatewayTransactionNo, Instant paidAt, String note,
-                          String evidenceUrl, Instant resolvedAt, String resolvedByEmail) {
+                          String evidenceUrl, Instant resolvedAt, String resolvedByEmail,
+                          String refundStatus, String refundReason) {
     }
 }

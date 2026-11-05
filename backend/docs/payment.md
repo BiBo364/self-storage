@@ -58,9 +58,10 @@ Không lớp nào tự hoàn tiền.
   - **LƯU Ý:** đừng nhầm với cửa sổ phiên VNPay (`vnp_ExpireDate` = lúc tạo URL + `PAYMENT_WINDOW`,
     hiện 15') — cửa sổ chỉ là giới hạn kỹ thuật (hết cửa sổ là cổng không cho trả tiếp); khách bấm
     trả sát `due_date` vẫn có đủ 15'.
-- **Xác nhận muộn (lưới an toàn).** Hi hữu — khách đã trả trong cửa sổ hợp lệ nhưng hệ thống chỉ biết
-  sau khi invoice/đơn đã hủy (chỉ khi job/server lỗi dài): vẫn ghi `Success` + đủ dấu vết, log ERROR
-  để vận hành xử lý thủ công (hoàn tiền hoặc xếp chỗ khác). Không tự mở lại đơn.
+- **Xác nhận muộn / unit đã mất.** Tiền đã vào thì invoice vẫn `Paid`. Nếu khoang không còn giữ
+  được, không reserve unit, order giữ trạng thái cũ, invoice có `refund_status=Required` +
+  `refund_reason=UNIT_UNAVAILABLE`; ghi audit `INVOICE_REFUND_REQUIRED`, notify FM/customer và xử lý
+  hoàn tiền thủ công.
 - **Sửa state khi listener IPN lỗi.** `PaymentTransaction(PAY/Success)` là bản ghi bền.
   `DepositStateRepairJob` quét invoice `Unpaid` (`Deposit`/`DepositSupplement`) có giao dịch
   `PAY/Success`, rồi gọi lại `DepositPaymentListener` (idempotent). Không cần querydr, không thêm
@@ -135,7 +136,8 @@ Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`
 - **Endpoint:** `POST /api/admin/payments/{txnRef}/reconcile`; quyền `ADMIN`; contract chi tiết ở
   [routes/payment/manual-reconcile.md](routes/payment/manual-reconcile.md).
 - **Case Pending:** `PendingPaymentWatchdogJob` tạo case `Open`; ADMIN xem
-  `GET /api/admin/payments/pending`; reconcile đóng case và lưu note/evidence.
+  `GET /api/admin/payments/pending`; reconcile đóng case và lưu note/evidence. Case invoice có
+  `refund_status=Required` vẫn hiện để Admin hoàn tiền.
   Evidence là URL file Admin upload qua `POST /api/media/uploads`, optional.
 - **Chỉ giao dịch `Pending`.** Row bị khoá `PESSIMISTIC_WRITE`; invoice được khoá thêm bằng
   advisory lock để hai manual request cùng invoice serialize. Giao dịch đã `Success`/`Failed`/

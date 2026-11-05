@@ -49,7 +49,7 @@ class PaymentReconciliationCaseServiceTest {
     void listsOpenCasesWithPaginationMetadata() {
         var row = new PaymentReconciliationCaseRepository.CaseRow(10L, 1L, 7L, "TXN1",
                 BigDecimal.TEN, Instant.now().minusSeconds(1200), Instant.now().minusSeconds(1200),
-                null, "Open", null, null, null, null, null, null, null);
+                null, "Open", null, null, null, null, null, null, null, null, null);
         when(repository.countOpen(any())).thenReturn(1L);
         when(repository.findOpenPage(any(), anyLong(), anyInt())).thenReturn(List.of(row));
 
