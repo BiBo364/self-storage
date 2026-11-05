@@ -10,6 +10,7 @@ import { PublicHeader } from "./components/layout/PublicHeader";
 import { CustomerShell } from "./components/layout/CustomerShell";
 import { FmShell } from "./components/layout/FmShell";
 import { FsShell } from "./components/layout/FsShell";
+import { AdminShell } from "./components/layout/AdminShell";
 import { MyStoragePage } from "./pages/MyStoragePage";
 import { ContractDetailPage } from "./pages/ContractDetailPage";
 import { ProposalsPage } from "./pages/ProposalsPage";
@@ -30,6 +31,7 @@ import { FacilityInvoicesPage } from "./pages/fm/FacilityInvoicesPage";
 import { CustomerContractOverviewPage } from "./pages/fm/CustomerContractOverviewPage";
 import { DailySchedulePage } from "./pages/fs/DailySchedulePage";
 import { HandoverChecklistPage } from "./pages/fs/HandoverChecklistPage";
+import { PaymentReconciliationPage } from "./pages/admin/PaymentReconciliationPage";
 import type { Theme } from "./components/ui/ThemeToggle";
 import { ROLE_HOME, viewFromLocation } from "./app/routes";
 import { View } from "./app/types";
@@ -137,19 +139,22 @@ function App() {
     view === "fm-invoices" ||
     view === "fm-contracts";
   const isFsView = view === "fs-schedule" || view === "fs-handover";
+  const isAdminView = view === "admin-payments";
   const isNotificationView = view === "notifications";
   // The route guard only picks the screen to render; the real gate is the API
   // (403 on /api/** for the wrong role). /notifications is shared by every
   // role per fe-pages/shared/03; today CUSTOMER, FM and FS have a shell.
-  const allowedRoles: UserRole[] | null = isFsView
-    ? ["FS"]
-    : isFmView
-      ? ["FM"]
-      : isCustomerView
-        ? ["CUSTOMER"]
-        : isNotificationView
-          ? ["CUSTOMER", "FM", "FS"]
-          : null;
+  const allowedRoles: UserRole[] | null = isAdminView
+    ? ["ADMIN"]
+    : isFsView
+      ? ["FS"]
+      : isFmView
+        ? ["FM"]
+        : isCustomerView
+          ? ["CUSTOMER"]
+          : isNotificationView
+            ? ["CUSTOMER", "FM", "FS"]
+            : null;
   const needsLoginRedirect = !isAuthLoading && allowedRoles !== null && !session;
   const isWrongRole =
     !isAuthLoading &&
@@ -228,6 +233,10 @@ function App() {
           {view === "fs-handover" && <HandoverChecklistPage navigate={navigate} />}
           {isNotificationView && <NotificationsPage navigate={navigate} />}
         </FsShell>
+      ) : isAdminView ? (
+        <AdminShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
+          {view === "admin-payments" && <PaymentReconciliationPage />}
+        </AdminShell>
       ) : (
         <>
           <PublicHeader

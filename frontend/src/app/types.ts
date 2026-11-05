@@ -23,6 +23,7 @@ export type View =
   | "fm-invoices"
   | "fm-contracts"
   | "fm-orders"
+  | "admin-payments"
   | "fs-schedule"
   | "fs-handover";
 export type Navigate = (path: string) => void;
