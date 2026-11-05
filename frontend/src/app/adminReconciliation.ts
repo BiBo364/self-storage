@@ -29,6 +29,27 @@ export type PendingPaymentPage = {
   totalPages: number;
 };
 
+export type RefundCase = {
+  invoiceId: number;
+  invoiceCode: string;
+  orderId: number | null;
+  amount: number;
+  refundStatus: "Required" | "Processing" | "Refunded";
+  refundReason: string | null;
+  refundRequestedAt: string | null;
+  vnpTxnRef: string | null;
+  gatewayTransactionNo: string | null;
+  paidAt: string | null;
+};
+
+export type RefundCasePage = {
+  items: RefundCase[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
 export type ReconcileOutcome = "SUCCESS" | "FAILED";
 
 export type ReconcilePayload = {
@@ -50,6 +71,16 @@ export function loadPendingCases(page: number, size = 20): Promise<PendingPaymen
     size: String(size),
   });
   return apiRequest<PendingPaymentPage>(`/api/admin/payments/pending?${params.toString()}`, {
+    accessToken: token(),
+  });
+}
+
+export function loadRefundCases(page: number, size = 20): Promise<RefundCasePage> {
+  const params = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+  });
+  return apiRequest<RefundCasePage>(`/api/admin/payments/refunds?${params.toString()}`, {
     accessToken: token(),
   });
 }

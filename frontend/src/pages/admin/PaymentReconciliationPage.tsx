@@ -15,6 +15,7 @@ import { DetailPanel } from "../../components/ui/DetailPanel";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 import { formatPrice } from "../../mocks/catalog";
+import { RefundRequiredPanel } from "./RefundRequiredPanel";
 
 function formatDateTime(value: string | null) {
   if (!value) return "—";
@@ -150,11 +151,21 @@ export function PaymentReconciliationPage() {
       <div>
         <h1 className="m-0 text-title text-ink">Đối soát thanh toán</h1>
         <p className="mt-1.5 text-small text-muted">
-          Case Pending quá 15 phút. Tra portal VNPay, đính kèm bằng chứng và chốt kết quả.
+          Khoản chờ hoàn tiền và case Pending quá 15 phút. Tra portal VNPay, đính kèm bằng chứng và
+          chốt kết quả.
         </p>
       </div>
 
       {notice && <DemoNotice tone={notice.tone}>{notice.message}</DemoNotice>}
+
+      <RefundRequiredPanel />
+
+      <div>
+        <h2 className="m-0 text-section text-ink">Case Pending cần đối soát</h2>
+        <p className="mt-1.5 text-small text-muted">
+          Giao dịch Pending quá 15 phút chưa được cổng xác nhận.
+        </p>
+      </div>
 
       {loading ? (
         <SurfaceState variant="loading" title="Đang tải case Pending" />
