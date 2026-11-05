@@ -9,6 +9,5 @@ public record PendingPaymentCaseView(Long caseId, Long transactionId, Long invoi
                                      Instant detectedAt, Instant notifiedAt, long pendingAgeMinutes,
                                      String status, String resolution, String gatewayTransactionNo,
                                      Instant paidAt, String note, String evidenceUrl,
-                                     Instant resolvedAt, String resolvedByEmail,
-                                     String refundStatus, String refundReason) {
+                                     Instant resolvedAt, String resolvedByEmail) {
 }

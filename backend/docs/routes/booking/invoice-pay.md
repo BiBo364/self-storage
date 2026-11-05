@@ -85,7 +85,7 @@ tới 10 lần trong 50 phút, đủ lâu để khách khác cọc trước. N�
 - `Invoice.refund_status` chuyển `Required`, `refund_reason=UNIT_UNAVAILABLE`.
 - Khoang giữ nguyên; `RentalOrder` không chuyển `Deposited`.
 - Ghi audit `INVOICE_REFUND_REQUIRED`; notify FM và khách.
-- Case đối soát vẫn hiển thị để Admin xử lý hoàn tiền; hoàn tiền thuộc Flow 4.
+- Khoản hoàn tiền hiển thị trong `GET /api/admin/payments/refunds` để Admin xử lý; hoàn tiền thuộc Flow 4.
 
 Hóa đơn không còn `Unpaid` lúc IPN về: `Paid` là IPN lặp, chỉ log INFO; `Canceled`/`Expired` là
 tiền vào một hóa đơn không còn hiệu lực — log ERROR để có người đối soát.

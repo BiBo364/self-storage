@@ -15,12 +15,12 @@ Trả các case `Open` cho giao dịch `PAY/Pending` quá ngưỡng. Route read-
 
 - `olderThanMinutes` mặc định 15; sai → `400`.
 - `page` bắt đầu từ 0; `size` mặc định 20, tối đa 100; sai → `400`.
-- Trả case `Open` gắn transaction còn `Pending`, hoặc case `Resolved` nhưng invoice có `refund_status=Required`; case Success bình thường rời list.
+- Chỉ trả case `Open` gắn transaction còn `Pending`; transaction đã Success/Failed/Duplicate tự rời list.
 - Mỗi dòng: `caseId`, `transactionId`, `invoiceId`, `vnpTxnRef`, `amount`, `transactionCreatedAt`,
   `detectedAt`, `notifiedAt`, `pendingAgeMinutes`, `status`, `resolution`, `gatewayTransactionNo`,
-  `paidAt`, `note`, `evidenceUrl`, `resolvedAt`, `resolvedByEmail`, `refundStatus`, `refundReason`.
+  `paidAt`, `note`, `evidenceUrl`, `resolvedAt`, `resolvedByEmail`.
 - Case Open thường chưa có `resolution`/`evidenceUrl`; Admin nhập khi reconcile.
-- Case có `refundStatus=Required` vẫn hiện dù đã Resolved — Admin cần xử lý hoàn tiền.
+- Khoản cần hoàn tiền không nằm trong list này; xem `GET /api/admin/payments/refunds`.
 
 ## Evidence
 
@@ -47,4 +47,5 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 ## Liên quan
 
 - Reconcile: [manual-reconcile.md](manual-reconcile.md)
+- Khoản chờ hoàn tiền: [admin-refund-required.md](admin-refund-required.md)
 - Xem thêm: [routes.md](../../routes.md) · [index.md](../../index.md)

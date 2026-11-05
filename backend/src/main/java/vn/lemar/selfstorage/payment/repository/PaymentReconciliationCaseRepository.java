@@ -44,13 +44,10 @@ public class PaymentReconciliationCaseRepository {
     public List<CaseRow> findOpenPage(Instant cutoff, long offset, int limit) {
         String sql = "select c.id, c.transaction_id, c.invoice_id, c.detected_at, c.notified_at, "
                 + "c.status, c.resolution, c.gateway_transaction_no, c.paid_at, c.note, c.evidence_url, "
-                + "c.resolved_at, c.resolved_by_email, pt.vnp_txn_ref, pt.amount, pt.created_at, "
-                + "i.refund_status, i.refund_reason "
+                + "c.resolved_at, c.resolved_by_email, pt.vnp_txn_ref, pt.amount, pt.created_at "
                 + "from payment_reconciliation_cases c "
                 + "join payment_transactions pt on pt.id = c.transaction_id "
-                + "join invoices i on i.id = c.invoice_id "
-                + "where ((c.status = 'Open' and pt.status = 'Pending' and pt.created_at <= ?) "
-                + "or (c.status = 'Resolved' and i.refund_status = 'Required')) "
+                + "where c.status = 'Open' and pt.status = 'Pending' and pt.created_at <= ? "
                 + "order by c.detected_at, c.id limit ? offset ?";
         return jdbc.query(sql, (rs, rowNum) -> new CaseRow(
                         rs.getLong("id"), rs.getLong("transaction_id"), rs.getLong("invoice_id"),
@@ -63,8 +60,7 @@ public class PaymentReconciliationCaseRepository {
                         rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toInstant(),
                         rs.getString("note"), rs.getString("evidence_url"),
                         rs.getTimestamp("resolved_at") == null ? null : rs.getTimestamp("resolved_at").toInstant(),
-                        rs.getString("resolved_by_email"), rs.getString("refund_status"),
-                        rs.getString("refund_reason")),
+                        rs.getString("resolved_by_email")),
                 java.sql.Timestamp.from(cutoff), limit, offset);
     }
 
@@ -73,10 +69,48 @@ public class PaymentReconciliationCaseRepository {
                 select count(*)
                 from payment_reconciliation_cases c
                 join payment_transactions pt on pt.id = c.transaction_id
-                join invoices i on i.id = c.invoice_id
-                where ((c.status = 'Open' and pt.status = 'Pending' and pt.created_at <= ?)
-                    or (c.status = 'Resolved' and i.refund_status = 'Required'))
+                where c.status = 'Open' and pt.status = 'Pending' and pt.created_at <= ?
                 """, Long.class, java.sql.Timestamp.from(cutoff));
+        return count == null ? 0 : count;
+    }
+
+    /**
+     * Các invoice đang có nghĩa vụ hoàn tiền. Đọc từ invoice, không từ case: một khoản cần hoàn vẫn
+     * phải hiện dù chưa từng có case đối soát.
+     */
+    public List<RefundRow> findRefundRequiredPage(long offset, int limit) {
+        String sql = """
+                select i.id as invoice_id, i.code, i.order_id, i.amount, i.refund_status,
+                       i.refund_reason, i.refund_requested_at,
+                       pt.vnp_txn_ref, pt.gateway_transaction_no, pt.paid_at
+                from invoices i
+                left join lateral (
+                    select pt.vnp_txn_ref, pt.gateway_transaction_no, pt.paid_at
+                    from payment_transactions pt
+                    where pt.invoice_id = i.id
+                      and pt.direction = 'PAY'
+                      and pt.status = 'Success'
+                    order by pt.paid_at desc nulls last, pt.id desc
+                    limit 1
+                ) pt on true
+                where i.refund_status = 'Required'
+                order by i.refund_requested_at nulls last, i.id
+                limit ? offset ?
+                """;
+        return jdbc.query(sql, (rs, rowNum) -> new RefundRow(
+                        rs.getLong("invoice_id"), rs.getString("code"),
+                        rs.getObject("order_id", Long.class), rs.getBigDecimal("amount"),
+                        rs.getString("refund_status"), rs.getString("refund_reason"),
+                        rs.getTimestamp("refund_requested_at") == null
+                                ? null : rs.getTimestamp("refund_requested_at").toInstant(),
+                        rs.getString("vnp_txn_ref"), rs.getString("gateway_transaction_no"),
+                        rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toInstant()),
+                limit, offset);
+    }
+
+    public long countRefundRequired() {
+        Long count = jdbc.queryForObject(
+                "select count(*) from invoices where refund_status = 'Required'", Long.class);
         return count == null ? 0 : count;
     }
 
@@ -105,7 +139,11 @@ public class PaymentReconciliationCaseRepository {
                           BigDecimal amount, Instant transactionCreatedAt, Instant detectedAt,
                           Instant notifiedAt, String status, String resolution,
                           String gatewayTransactionNo, Instant paidAt, String note,
-                          String evidenceUrl, Instant resolvedAt, String resolvedByEmail,
-                          String refundStatus, String refundReason) {
+                          String evidenceUrl, Instant resolvedAt, String resolvedByEmail) {
+    }
+
+    public record RefundRow(Long invoiceId, String invoiceCode, Long orderId, BigDecimal amount,
+                            String refundStatus, String refundReason, Instant refundRequestedAt,
+                            String vnpTxnRef, String gatewayTransactionNo, Instant paidAt) {
     }
 }
