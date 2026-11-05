@@ -223,9 +223,9 @@ class AppointmentServiceIntegrationTest {
     @Test
     void appointmentWithoutRentalOrderConflicts() {
         long orphanId = jdbc.queryForObject("""
-                insert into appointments (customer_id, facility_id, type, date, status)
-                values (?, ?, 'CHECKIN', ?, 'Pending') returning id""",
-                Long.class, accountId("customer1@lemar.vn"), q7, day);
+                insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status)
+                values (?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
+                Long.class, accountId("customer1@lemar.vn"), q7, day, day + "T08:00:00+07:00", day + "T10:00:00+07:00");
         loginAs("fm1@lemar.vn");
 
         assertThatThrownBy(() -> service.assignStaff(orphanId, fsId, fmId))
@@ -268,9 +268,9 @@ class AppointmentServiceIntegrationTest {
     @Test
     void dayListOnlyContainsCheckinAppointments() {
         jdbc.update("""
-                insert into appointments (customer_id, facility_id, type, date, status)
-                values (?, ?, 'HANDOVER', ?, 'Pending')""",
-                accountId("customer1@lemar.vn"), q7, day);
+                insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status)
+                values (?, ?, 'HANDOVER', ?, ?::timestamptz, ?::timestamptz, 'Pending')""",
+                accountId("customer1@lemar.vn"), q7, day, day + "T08:00:00+07:00", day + "T10:00:00+07:00");
         loginAs("fm1@lemar.vn");
 
         assertThat(queryService.listForFacility(q7, day)).extracting(FmAppointmentResponse::id)
@@ -281,11 +281,13 @@ class AppointmentServiceIntegrationTest {
     void dayListSkipsCanceledAndDoneAppointments() {
         long customerId = accountId("customer1@lemar.vn");
         jdbc.update("""
-                insert into appointments (customer_id, facility_id, type, date, status)
-                values (?, ?, 'CHECKIN', ?, 'Canceled')""", customerId, q7, day);
+                insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status)
+                values (?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Canceled')""", customerId, q7, day,
+                day + "T08:00:00+07:00", day + "T10:00:00+07:00");
         jdbc.update("""
-                insert into appointments (customer_id, facility_id, type, date, status)
-                values (?, ?, 'CHECKIN', ?, 'Done')""", customerId, q7, day);
+                insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status)
+                values (?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Done')""", customerId, q7, day,
+                day + "T08:00:00+07:00", day + "T10:00:00+07:00");
         loginAs("fm1@lemar.vn");
 
         assertThat(queryService.listForFacility(q7, day)).extracting(FmAppointmentResponse::id)

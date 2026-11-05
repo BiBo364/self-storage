@@ -84,9 +84,9 @@ class StaffAppointmentQueryIntegrationTest {
                 appointmentId, orderId);
 
         otherAppointmentId = jdbc.queryForObject("""
-                insert into appointments (customer_id, facility_id, staff_id, type, date, status)
-                values (?, ?, ?, 'CHECKIN', ?, 'Pending') returning id""",
-                Long.class, customerId, q7, fs2Id, day);
+                insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
+                values (?, ?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
+                Long.class, customerId, q7, fs2Id, day, day + "T08:00:00+07:00", day + "T10:00:00+07:00");
     }
 
     @AfterEach
@@ -106,6 +106,8 @@ class StaffAppointmentQueryIntegrationTest {
             assertThat(row.status()).isEqualTo("Pending");
             assertThat(row.date()).isEqualTo(day);
             assertThat(row.arrivedAt()).isNull();
+            assertThat(row.noShowDue()).isFalse();
+            assertThat(row.cancelReason()).isNull();
             assertThat(row.orderId()).isEqualTo(orderId);
             assertThat(row.unitCode()).isEqualTo("A-01");
             assertThat(row.facility().id()).isEqualTo(q7);
@@ -118,12 +120,46 @@ class StaffAppointmentQueryIntegrationTest {
     }
 
     @Test
+    void marksOverduePendingAppointmentAsNoShowDue() {
+        LocalDate today = LocalDate.now(FACILITY_ZONE);
+        long dueId = jdbc.queryForObject("""
+                insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
+                values (?, ?, ?, 'CHECKIN', ?, now() - interval '3 hours', now() - interval '1 hour',
+                        'Pending') returning id""",
+                Long.class, customerId, q7, fsId, today);
+        loginAs("fs1@lemar.vn");
+
+        List<StaffAppointmentResponse> result = service.listForCurrentStaff(today);
+
+        assertThat(result).singleElement().satisfies(row -> {
+            assertThat(row.id()).isEqualTo(dueId);
+            assertThat(row.noShowDue()).isTrue();
+            assertThat(row.cancelReason()).isNull();
+        });
+    }
+
+    @Test
+    void returnsCancelReasonForCanceledAppointment() {
+        jdbc.update("update appointments set status = 'Canceled', "
+                + "cancel_reason = 'Quá giờ và khách không đến' where id = ?",
+                appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        List<StaffAppointmentResponse> result = service.listForCurrentStaff(day);
+
+        assertThat(result).singleElement().satisfies(row -> {
+            assertThat(row.status()).isEqualTo("Canceled");
+            assertThat(row.cancelReason()).isEqualTo("Quá giờ và khách không đến");
+        });
+    }
+
+    @Test
     void missingDateUsesTodayInFacilityZone() {
         LocalDate today = LocalDate.now(FACILITY_ZONE);
         long todayAppointmentId = jdbc.queryForObject("""
-                insert into appointments (customer_id, facility_id, staff_id, type, date, status)
-                values (?, ?, ?, 'CHECKIN', ?, 'Pending') returning id""",
-                Long.class, customerId, q7, fsId, today);
+                insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
+                values (?, ?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
+                Long.class, customerId, q7, fsId, today, today + "T08:00:00+07:00", today + "T10:00:00+07:00");
         loginAs("fs1@lemar.vn");
 
         List<StaffAppointmentResponse> result = service.listForCurrentStaff(null);

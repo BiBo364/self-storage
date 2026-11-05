@@ -23,7 +23,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.lemar.selfstorage.booking.application.AppointmentArrived;
 import vn.lemar.selfstorage.booking.application.StaffAppointmentActionService;
-import vn.lemar.selfstorage.booking.application.dto.StaffAppointmentResponse;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentForbiddenException;
 
@@ -98,10 +97,11 @@ class StaffAppointmentActionIntegrationTest {
     void arriveMarksDoneAuditsAndPublishesEvent() {
         loginAs("fs1@lemar.vn");
 
-        StaffAppointmentResponse result = service.arrive(appointmentId);
+        StaffAppointmentActionService.ActionResult result = service.arrive(appointmentId);
 
-        assertThat(result.status()).isEqualTo("Done");
-        assertThat(result.arrivedAt()).isNotNull();
+        assertThat(result.appointment().status()).isEqualTo("Done");
+        assertThat(result.appointment().arrivedAt()).isNotNull();
+        assertThat(result.appointment().cancelReason()).isNull();
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Done");
         assertThat(jdbc.queryForObject("select arrived_at from appointments where id = ?", Object.class,
@@ -121,9 +121,10 @@ class StaffAppointmentActionIntegrationTest {
     void cancelMarksCanceledWithReasonAndAudit() {
         loginAs("fs1@lemar.vn");
 
-        StaffAppointmentResponse result = service.cancel(appointmentId, "Khách yêu cầu huỷ");
+        StaffAppointmentActionService.ActionResult result = service.cancel(appointmentId, "Khách yêu cầu huỷ");
 
-        assertThat(result.status()).isEqualTo("Canceled");
+        assertThat(result.appointment().status()).isEqualTo("Canceled");
+        assertThat(result.appointment().cancelReason()).isEqualTo("Khách yêu cầu huỷ");
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Canceled");
         assertThat(jdbc.queryForObject("select cancel_reason from appointments where id = ?", String.class,
@@ -153,25 +154,95 @@ class StaffAppointmentActionIntegrationTest {
     @Test
     void unassignedAppointmentIsForbidden() {
         long orphanId = jdbc.queryForObject("""
-                insert into appointments (customer_id, facility_id, type, date, status)
-                values (?, ?, 'CHECKIN', ?, 'Pending') returning id""",
-                Long.class, customerId, q7, day);
+                insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status)
+                values (?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
+                Long.class, customerId, q7, day, day + "T08:00:00+07:00", day + "T10:00:00+07:00");
         loginAs("fs1@lemar.vn");
 
         assertThatThrownBy(() -> service.arrive(orphanId)).isInstanceOf(AppointmentForbiddenException.class);
     }
 
     @Test
-    void expiredCancelConflictsAndLeavesPending() {
+    void expiredCancelCancelsNoShowImmediately() {
         jdbc.update("update appointments set started_at = now() - interval '3 hours', "
                 + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
         loginAs("fs1@lemar.vn");
 
-        assertThatThrownBy(() -> service.cancel(appointmentId, "Khách không đến"))
-                .isInstanceOf(AppointmentConflictException.class)
-                .hasMessage("Lịch đã quá giờ, chờ cron no-show");
+        StaffAppointmentActionService.ActionResult result = service.cancel(appointmentId, "Quá giờ và khách không đến");
+
+        assertThat(result.conflict()).isTrue();
+        assertThat(result.noShow()).isTrue();
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
+                .isEqualTo("Canceled");
+        assertThat(jdbc.queryForObject("select cancel_reason from appointments where id = ?", String.class,
+                appointmentId)).isEqualTo("Quá giờ và khách không đến");
+        Map<String, Object> audit = jdbc.queryForMap("select action, actor_account_id from audit_logs "
+                + "where entity_id = ? and action = 'APPOINTMENT_CANCELED_NO_SHOW'", String.valueOf(appointmentId));
+        assertThat(audit.get("actor_account_id")).isNull();
+        assertThat(jdbc.queryForObject("select count(*) from notifications where account_id = ? and type = "
+                + "'APPOINTMENT_CANCELED_NO_SHOW'", Long.class, customerId)).isEqualTo(1L);
+    }
+
+    @Test
+    void arrivingAfterTheSlotCancelsNoShowImmediately() {
+        jdbc.update("update appointments set started_at = now() - interval '3 hours', "
+                + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        StaffAppointmentActionService.ActionResult result = service.arrive(appointmentId);
+
+        assertThat(result.conflict()).isTrue();
+        assertThat(result.noShow()).isTrue();
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
+                .isEqualTo("Canceled");
+    }
+
+    @Test
+    void arrivingNonCheckinAfterTheSlotConflictsWithoutNoShow() {
+        jdbc.update("update appointments set type = 'RETURN', started_at = now() - interval '3 hours', "
+                + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        StaffAppointmentActionService.ActionResult result = service.arrive(appointmentId);
+
+        assertThat(result.conflict()).isTrue();
+        assertThat(result.noShow()).isFalse();
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Pending");
+    }
+
+    @Test
+    void cancellingNonCheckinAfterTheSlotConflictsWithoutNoShow() {
+        jdbc.update("update appointments set type = 'RETURN', started_at = now() - interval '3 hours', "
+                + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        StaffAppointmentActionService.ActionResult result = service.cancel(appointmentId, "Quá giờ và khách không đến");
+
+        assertThat(result.conflict()).isTrue();
+        assertThat(result.noShow()).isFalse();
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
+                .isEqualTo("Pending");
+    }
+
+    @Test
+    void expiredCancelWithoutOrderStillNotifiesCustomer() {
+        long noOrderId = jdbc.queryForObject("""
+                insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
+                values (?, ?, ?, 'CHECKIN', ?, now() - interval '3 hours', now() - interval '1 hour',
+                        'Pending') returning id""",
+                Long.class, customerId, q7, fsId, day);
+        loginAs("fs1@lemar.vn");
+
+        StaffAppointmentActionService.ActionResult result = service.cancel(noOrderId, "Quá giờ và khách không đến");
+
+        assertThat(result.conflict()).isTrue();
+        assertThat(result.noShow()).isTrue();
+        assertThat(jdbc.queryForObject("select count(*) from notifications where account_id = ? and type = "
+                + "'APPOINTMENT_CANCELED_NO_SHOW'", Long.class, customerId)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("select count(*) from order_notifications o "
+                + "join notifications n on n.id = o.notification_id where n.account_id = ?", Long.class,
+                customerId)).isZero();
     }
 
     @Test

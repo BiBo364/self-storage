@@ -46,10 +46,10 @@ public class Appointment {
     @Column(nullable = false)
     private LocalDate date;
 
-    @Column(name = "started_at")
+    @Column(name = "started_at", nullable = false)
     private Instant startedAt;
 
-    @Column(name = "end_at")
+    @Column(name = "end_at", nullable = false)
     private Instant endAt;
 
     @Enumerated(EnumType.STRING)
@@ -83,6 +83,11 @@ public class Appointment {
         }
         this.staffId = staffAccountId;
         this.updatedAt = Instant.now();
+    }
+
+    /** Lịch check-in Pending đã quá end_at — guard dùng chung cron no-show và action FS. */
+    public boolean isNoShowDue(Instant now) {
+        return AppointmentNoShowPolicy.isDue(type, status, endAt, now);
     }
 
     /** Flow 2.1: FS xác nhận khách đã đến; lịch chỉ đổi từ {@code Pending}. */

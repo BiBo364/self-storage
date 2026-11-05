@@ -31,7 +31,6 @@ import vn.lemar.selfstorage.SecurityConfig;
 import vn.lemar.selfstorage.booking.application.StaffAppointmentActionService;
 import vn.lemar.selfstorage.booking.application.StaffAppointmentQueryService;
 import vn.lemar.selfstorage.booking.application.dto.StaffAppointmentResponse;
-import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentForbiddenException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.identity.application.AccountJwtAuthenticationConverter;
@@ -116,7 +115,8 @@ class StaffAppointmentControllerTest {
     @Test
     void fsArrivesAppointment() throws Exception {
         authenticate(FS, "FS");
-        when(actionService.arrive(1L)).thenReturn(appointment("Done"));
+        when(actionService.arrive(1L))
+                .thenReturn(new StaffAppointmentActionService.ActionResult(appointment("Done"), false, false));
 
         mockMvc.perform(as(post("/api/staff/appointments/1/arrive"), FS))
                 .andExpect(status().isOk())
@@ -128,7 +128,8 @@ class StaffAppointmentControllerTest {
     @Test
     void fsCancelsAppointment() throws Exception {
         authenticate(FS, "FS");
-        when(actionService.cancel(1L, "Khách yêu cầu huỷ")).thenReturn(appointment("Canceled"));
+        when(actionService.cancel(1L, "Khách yêu cầu huỷ"))
+                .thenReturn(new StaffAppointmentActionService.ActionResult(appointment("Canceled"), false, false));
 
         mockMvc.perform(as(post("/api/staff/appointments/1/cancel")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Khách yêu cầu huỷ\"}"), FS))
@@ -153,9 +154,9 @@ class StaffAppointmentControllerTest {
         when(actionService.arrive(8L))
                 .thenThrow(new AppointmentForbiddenException("Bạn không phải FS phụ trách lịch này"));
         when(actionService.arrive(7L))
-                .thenThrow(new AppointmentConflictException("Lịch hẹn không còn ở trạng thái chờ"));
+                .thenReturn(new StaffAppointmentActionService.ActionResult(appointment("Pending"), true, false));
         when(actionService.cancel(6L, "x"))
-                .thenThrow(new AppointmentConflictException("Lịch đã quá giờ, chờ cron no-show"));
+                .thenReturn(new StaffAppointmentActionService.ActionResult(appointment("Pending"), true, false));
 
         mockMvc.perform(as(post("/api/staff/appointments/9/arrive"), FS)).andExpect(status().isNotFound());
         mockMvc.perform(as(post("/api/staff/appointments/8/arrive"), FS)).andExpect(status().isForbidden());
@@ -183,7 +184,8 @@ class StaffAppointmentControllerTest {
         return new StaffAppointmentResponse(1L, "CHECKIN", status, DAY,
                 Instant.parse("2026-11-04T01:00:00Z"), Instant.parse("2026-11-04T03:00:00Z"), arrivedAt,
                 5L, "A-01", new StaffAppointmentResponse.Facility(1L, "Self Storage Quận 7"),
-                new StaffAppointmentResponse.Customer("Khách Demo", "customer1@lemar.vn", "0900000000"));
+                new StaffAppointmentResponse.Customer("Khách Demo", "customer1@lemar.vn", "0900000000"),
+                false, "Canceled".equals(status) ? "Khách yêu cầu huỷ" : null);
     }
 
     private MockHttpServletRequestBuilder as(MockHttpServletRequestBuilder request, String email) {

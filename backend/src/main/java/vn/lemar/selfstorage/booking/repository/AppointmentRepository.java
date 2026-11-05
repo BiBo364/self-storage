@@ -1,6 +1,7 @@
 package vn.lemar.selfstorage.booking.repository;
 
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -36,4 +37,11 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             where ra.order_id = :orderId and a.status = 'Pending'
             order by a.id""", nativeQuery = true)
     List<Long> findPendingIdsByOrderId(@Param("orderId") Long orderId);
+
+    /** Id các lịch check-in Pending đã quá end_at — cron no-show. */
+    @Query("select a.id from Appointment a "
+            + "where a.type = vn.lemar.selfstorage.booking.domain.AppointmentType.CHECKIN "
+            + "and a.status = vn.lemar.selfstorage.booking.domain.AppointmentStatus.Pending "
+            + "and a.endAt < :now order by a.id")
+    List<Long> findNoShowDueIds(@Param("now") Instant now);
 }

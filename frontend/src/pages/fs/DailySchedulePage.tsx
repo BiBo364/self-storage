@@ -47,10 +47,7 @@ function formatDateVN(value: string) {
 }
 
 function formatTimeRange(appointment: StaffAppointment) {
-  if (!appointment.startedAt) return formatDateVN(appointment.date);
-  const start = TIME_FORMAT.format(new Date(appointment.startedAt));
-  if (!appointment.endAt) return start;
-  return `${start}–${TIME_FORMAT.format(new Date(appointment.endAt))}`;
+  return `${TIME_FORMAT.format(new Date(appointment.startedAt))}–${TIME_FORMAT.format(new Date(appointment.endAt))}`;
 }
 
 function typeLabel(type: string) {
@@ -71,7 +68,6 @@ export function DailySchedulePage() {
   const [reason, setReason] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [now, setNow] = useState(0);
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
@@ -85,7 +81,6 @@ export function DailySchedulePage() {
         const list = await fetchStaffAppointments(date);
         if (!active) return;
         setAppointments(list);
-        setNow(Date.now());
       } catch (caught) {
         if (!active) return;
         setError(
@@ -102,8 +97,6 @@ export function DailySchedulePage() {
       active = false;
     };
   }, [date, reloadKey]);
-
-  // now is set when the day loads; the schedule re-evaluates expiration on refresh.
 
   const pending = appointments.filter((appointment) => appointment.status === "Pending").length;
   const done = appointments.filter((appointment) => appointment.status === "Done").length;
@@ -157,10 +150,6 @@ export function DailySchedulePage() {
     } finally {
       setBusy(false);
     }
-  }
-
-  function isExpired(appointment: StaffAppointment) {
-    return appointment.endAt !== null && new Date(appointment.endAt).getTime() < now;
   }
 
   return (
@@ -265,6 +254,11 @@ export function DailySchedulePage() {
                       </span>
                       {appointment.customer.phone && <span>{appointment.customer.phone}</span>}
                     </p>
+                    {appointment.status === "Canceled" && appointment.cancelReason && (
+                      <p className="mb-0 mt-1 text-small text-muted">
+                        Lý do huỷ: {appointment.cancelReason}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right max-[760px]:text-left">
                     {appointment.orderId !== null && (
@@ -276,17 +270,13 @@ export function DailySchedulePage() {
                   </div>
                 </div>
 
-                {appointment.status === "Pending" && (
+                {appointment.status === "Pending" && !appointment.noShowDue && (
                   <div className="mt-4 flex flex-wrap items-center justify-end gap-3 pt-4">
                     <div className="flex flex-wrap gap-2">
                       <Button onClick={() => openAction(appointment, "arrive")}>
                         Khách đã đến
                       </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={isExpired(appointment)}
-                        onClick={() => openAction(appointment, "cancel")}
-                      >
+                      <Button variant="secondary" onClick={() => openAction(appointment, "cancel")}>
                         Hủy
                       </Button>
                     </div>
