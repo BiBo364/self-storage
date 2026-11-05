@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.booking.application.StaffAppointmentActionService;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
 import vn.lemar.selfstorage.booking.application.StaffAppointmentQueryService;
 import vn.lemar.selfstorage.booking.application.dto.StaffAppointmentResponse;
 
@@ -72,13 +73,17 @@ public class StaffAppointmentController {
     })
     @PostMapping("/appointments/{appointmentId}/arrive")
     public ResponseEntity<ApiEnvelope<StaffAppointmentResponse>> arrive(@PathVariable Long appointmentId) {
-        return ResponseEntity.ok(ApiEnvelope.ok(ARRIVE_MESSAGE, actionService.arrive(appointmentId)));
+        StaffAppointmentActionService.ActionResult result = actionService.arrive(appointmentId);
+        if (result.conflict()) {
+            throw new AppointmentConflictException("Lịch đã quá khung giờ, không thể xác nhận khách đến");
+        }
+        return ResponseEntity.ok(ApiEnvelope.ok(ARRIVE_MESSAGE, result.appointment()));
     }
 
     @Operation(summary = "FS chủ động huỷ lịch đang chờ",
             description = "Lịch `Pending` của chính FS và chưa quá `end_at`: `status = Canceled`, "
                     + "`cancel_reason = reason`, audit `APPOINTMENT_CANCELED` (actor FS). Không đụng "
-                    + "`RentalOrder`; quá `end_at` → 409, để cron no-show.")
+                    + "`RentalOrder`; quá `end_at` → huỷ no-show ngay rồi trả 409.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Đã huỷ lịch hẹn"),
             @ApiResponse(responseCode = "400", description = "Thiếu lý do huỷ"),
@@ -90,8 +95,11 @@ public class StaffAppointmentController {
     @PostMapping("/appointments/{appointmentId}/cancel")
     public ResponseEntity<ApiEnvelope<StaffAppointmentResponse>> cancel(
             @PathVariable Long appointmentId, @Valid @RequestBody CancelAppointmentRequest request) {
-        return ResponseEntity.ok(ApiEnvelope.ok(CANCEL_MESSAGE,
-                actionService.cancel(appointmentId, request.reason())));
+        StaffAppointmentActionService.ActionResult result = actionService.cancel(appointmentId, request.reason());
+        if (result.conflict()) {
+            throw new AppointmentConflictException("Lịch đã quá giờ");
+        }
+        return ResponseEntity.ok(ApiEnvelope.ok(CANCEL_MESSAGE, result.appointment()));
     }
 
     @Schema(description = "Lý do FS huỷ lịch")

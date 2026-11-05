@@ -13,8 +13,9 @@ FS xác nhận khách đã đến; không body.
 
 ## Luồng / hành vi
 
-1. Khoá lịch; lịch phải `Pending`, do chính FS phụ trách và **chưa quá `end_at`** → 403/409 nếu sai
-   (khách đến muộn phải trong khung giờ; quá giờ là no-show).
+1. Khoá lịch; lịch phải `Pending`, do chính FS phụ trách và **chưa quá `end_at`** → 403/409 nếu sai.
+   Quá `end_at` → hệ thống huỷ no-show **ngay** (audit `APPOINTMENT_CANCELED_NO_SHOW`, notification khách)
+   rồi trả 409; không đợi cron.
 2. `status = Done`, `arrived_at = now`; audit `APPOINTMENT_ARRIVED` (actor FS); phát event
    `AppointmentArrived`.
 3. Handover (PR Flow 2) nghe event để set `HandoverRecord.due_at`; route này không biết `due_days`.

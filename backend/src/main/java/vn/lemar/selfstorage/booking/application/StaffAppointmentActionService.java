@@ -27,8 +27,8 @@ import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
  * <ul>
  *   <li>{@code arrive}: {@code Pending -> Done}, ghi {@code arrived_at}, audit, phát {@code AppointmentArrived}
  *       để handover tự set {@code HandoverRecord.due_at}.</li>
- *   <li>{@code cancel} chủ động: {@code Pending -> Canceled} + lý do, chưa quá {@code end_at} (quá giờ để cron
- *       no-show); không đụng {@code RentalOrder}.</li>
+ *   <li>{@code cancel} chủ động: {@code Pending -> Canceled} + lý do, chưa quá {@code end_at}; quá giờ thì
+ *       huỷ no-show ngay rồi trả 409; không đụng {@code RentalOrder}.</li>
  * </ul>
  */
 @Service
@@ -40,26 +40,29 @@ public class StaffAppointmentActionService {
     private final CurrentAccountProvider currentAccount;
     private final AuditRecorder auditRecorder;
     private final ApplicationEventPublisher events;
+    private final AppointmentNoShowService noShowService;
 
     StaffAppointmentActionService(AppointmentRepository appointmentRepository,
                                   AppointmentReadRepository readRepository, Access access,
                                   CurrentAccountProvider currentAccount, AuditRecorder auditRecorder,
-                                  ApplicationEventPublisher events) {
+                                  ApplicationEventPublisher events, AppointmentNoShowService noShowService) {
         this.appointmentRepository = appointmentRepository;
         this.readRepository = readRepository;
         this.access = access;
         this.currentAccount = currentAccount;
         this.auditRecorder = auditRecorder;
         this.events = events;
+        this.noShowService = noShowService;
     }
 
     /** FS xác nhận khách đã đến; lịch chỉ đổi từ {@code Pending}. */
     @Transactional
-    public StaffAppointmentResponse arrive(Long appointmentId) {
+    public ActionResult arrive(Long appointmentId) {
         Appointment appointment = lockAssigned(appointmentId);
         requirePending(appointment);
         if (appointment.getEndAt().isBefore(Instant.now())) {
-            throw new AppointmentConflictException("Lịch đã quá khung giờ, không thể xác nhận khách đến");
+            boolean noShow = noShowService.cancelIfDue(appointmentId);
+            return new ActionResult(response(appointmentId), true, noShow);
         }
         appointment.arrive();
         Long actorId = currentAccount.getCurrentAccountId();
@@ -70,16 +73,17 @@ public class StaffAppointmentActionService {
                 String.valueOf(appointmentId), Map.of("status", AppointmentStatus.Pending.name()), newValue,
                 null, actorId));
         events.publishEvent(new AppointmentArrived(appointmentId));
-        return response(appointmentId);
+        return new ActionResult(response(appointmentId), false, false);
     }
 
     /** FS chủ động huỷ lịch đang chờ với lý do; quá {@code end_at} để cron no-show. */
     @Transactional
-    public StaffAppointmentResponse cancel(Long appointmentId, String reason) {
+    public ActionResult cancel(Long appointmentId, String reason) {
         Appointment appointment = lockAssigned(appointmentId);
         requirePending(appointment);
         if (appointment.getEndAt().isBefore(Instant.now())) {
-            throw new AppointmentConflictException("Lịch đã quá giờ");
+            boolean noShow = noShowService.cancelIfDue(appointmentId);
+            return new ActionResult(response(appointmentId), true, noShow);
         }
         appointment.cancel(reason);
         Long actorId = currentAccount.getCurrentAccountId();
@@ -89,7 +93,11 @@ public class StaffAppointmentActionService {
         auditRecorder.record(new AuditEntry(AuditAction.APPOINTMENT_CANCELED, AuditEntityType.APPOINTMENT,
                 String.valueOf(appointmentId), Map.of("status", AppointmentStatus.Pending.name()), newValue,
                 reason, actorId));
-        return response(appointmentId);
+        return new ActionResult(response(appointmentId), false, false);
+    }
+
+    /** Kết quả action; {@code conflict} = action bị chặn, {@code noShow} = hệ thống vừa huỷ no-show. */
+    public record ActionResult(StaffAppointmentResponse appointment, boolean conflict, boolean noShow) {
     }
 
     private Appointment lockAssigned(Long appointmentId) {

@@ -16,7 +16,8 @@ Body `{ "reason": "Khách yêu cầu huỷ" }`.
 1. Khoá lịch; lịch `Pending`, đúng FS, **chưa quá `end_at`** → 409 nếu sai/đã quá giờ.
 2. `status = Canceled`, `cancel_reason = reason`; audit `APPOINTMENT_CANCELED` (actor FS, `reason`).
 3. Không đụng `RentalOrder`/`HandoverRecord`; không gửi notification khách trong route này.
-4. Quá `end_at` → 409 "Lịch đã quá giờ"; cron `APPOINTMENT_CANCELED_NO_SHOW` xử lý sau.
+4. Quá `end_at` → 409 "Lịch đã quá giờ"; hệ thống huỷ no-show **ngay** (audit `APPOINTMENT_CANCELED_NO_SHOW`,
+   notification khách), không đợi cron.
 
 ## Ví dụ
 
