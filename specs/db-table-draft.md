@@ -299,10 +299,10 @@ Các bước:
 - facility_id (N - 1: Facility)
 - staff_id (N - 1: Account, nullable khi chưa được phân công)
 - type (CHECKIN, HANDOVER, RETURN)
-- cancel_reason
+- cancel_reason (no-show ghi "Khách không đến")
 - date
-- started_at
-- end_at
+- started_at (NOT NULL từ V15)
+- end_at (NOT NULL từ V15)
 - arrived_at
 - status:
   - Pending: trạng thái mặc định, trước khi khách đến

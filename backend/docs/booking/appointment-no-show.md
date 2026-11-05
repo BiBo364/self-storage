@@ -6,6 +6,7 @@ purpose: Cron no-show cho lịch check-in quá giờ chưa đến — guard, aud
 
 - `AppointmentNoShowJob` chạy mỗi **5 phút** (lần đầu sau 60 giây); quét `Appointment` type `CHECKIN`,
   `status = Pending`, `end_at < now`. Job chạy trên một instance; không dùng lock phân tán.
+- `started_at`/`end_at` NOT NULL từ V15; notification dùng trực tiếp hai mốc này.
 - Guard dùng chung `Appointment.isNoShowDue(now)`: cron, read (`noShowDue`), action FS dùng lại; không
   rải điều kiện riêng.
 - Mỗi lịch: `status = Canceled`, `cancel_reason = "Khách không đến"`; audit `APPOINTMENT_CANCELED_NO_SHOW`
