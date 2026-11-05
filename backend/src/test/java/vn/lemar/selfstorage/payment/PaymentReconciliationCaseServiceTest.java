@@ -62,6 +62,22 @@ class PaymentReconciliationCaseServiceTest {
     }
 
     @Test
+    void listsRefundRequiredInvoicesWithPaginationMetadata() {
+        var row = new PaymentReconciliationCaseRepository.RefundRow(7L, "INV-REFUND", 1L,
+                BigDecimal.TEN, "Required", "UNIT_UNAVAILABLE", Instant.now(), "TXN1", "GW1", Instant.now());
+        when(repository.countRefundRequired()).thenReturn(1L);
+        when(repository.findRefundRequiredPage(anyLong(), anyInt())).thenReturn(List.of(row));
+
+        var page = service.listRefundRequired(0, 20);
+
+        assertThat(page.totalElements()).isEqualTo(1);
+        assertThat(page.totalPages()).isEqualTo(1);
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.items().get(0).invoiceCode()).isEqualTo("INV-REFUND");
+        assertThat(page.items().get(0).refundReason()).isEqualTo("UNIT_UNAVAILABLE");
+    }
+
+    @Test
     void rejectsInvalidPageSizeAndThreshold() {
         assertThatThrownBy(() -> service.listOpen(-1, 0, 20))
                 .isInstanceOf(PendingPaymentFilterException.class);
@@ -70,5 +86,14 @@ class PaymentReconciliationCaseServiceTest {
         assertThatThrownBy(() -> service.listOpen(15, 0, 0))
                 .isInstanceOf(PendingPaymentFilterException.class);
         verify(repository, never()).findOpenPage(any(), anyLong(), anyInt());
+    }
+
+    @Test
+    void rejectsInvalidRefundPaging() {
+        assertThatThrownBy(() -> service.listRefundRequired(-1, 20))
+                .isInstanceOf(PendingPaymentFilterException.class);
+        assertThatThrownBy(() -> service.listRefundRequired(0, 0))
+                .isInstanceOf(PendingPaymentFilterException.class);
+        verify(repository, never()).findRefundRequiredPage(anyLong(), anyInt());
     }
 }

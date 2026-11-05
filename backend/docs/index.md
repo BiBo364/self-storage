@@ -91,7 +91,7 @@ hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V17__payment_reconciliation_cases.sql`.
+Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V18__invoice_refund_state.sql`.
 V1/V2 có mirror ở `backend/sql/`
 — sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -125,6 +125,8 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
   khách vẫn kiểm ở service, không seed thành role permission.
 - V17 thêm `payment_reconciliation_cases` — case Pending quá hạn cho ADMIN, lưu evidence/note/kết quả
   reconcile; không đổi trạng thái transaction.
+- V18 thêm `invoices.refund_status/refund_reason/refund_requested_at/refunded_at` — invoice vẫn
+  `Paid` khi tiền đã vào nhưng khoang không còn giữ được; refund là trục riêng.
 
 Các migration khác trên main: V5 seed `order.expiry_days` (luồng convert), V6 bỏ `Expired` khỏi CHECK
 `rental_orders.status` (quá hạn cũng là `Canceled` + `cancel_reason`), V7 thêm 4 action convert vào

@@ -60,7 +60,7 @@ Endpoint này **không bao giờ** ghi nhận đã thu tiền. `DepositPaymentLi
 
 | Loại | Ghi gì |
 |---|---|
-| `Deposit` | `Invoice=Paid` · `RentalOrder=Deposited` · `StorageUnit=Reserved` · notify khách `DEPOSIT_PAYMENT_SUCCEEDED` · audit `RENTAL_ORDER_DEPOSITED` + `STORAGE_UNIT_RESERVED` |
+| `Deposit` | `Invoice=Paid` · `RentalOrder=Deposited` · `StorageUnit=Reserved` · notify khách `DEPOSIT_PAYMENT_SUCCEEDED` · audit `RENTAL_ORDER_DEPOSITED` + `STORAGE_UNIT_RESERVED`. Nếu unit đã mất: `Invoice=Paid` + `refund_status=Required`, order/unit không đổi, audit `INVOICE_REFUND_REQUIRED` |
 | `DepositSupplement` | `Invoice=Paid` · `StorageUnit=Reserved` (khoang mới) · notify khách `DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED` · audit `STORAGE_UNIT_RESERVED` |
 
 Cọc bổ sung **không** chuyển trạng thái đơn lần hai và **không** gửi lại "Đặt cọc thành công":
@@ -79,9 +79,13 @@ Hạn đơn **không đổi**: `expires_at` set một lần khi tạo đơn (`sp
 RentalOrder), và hạn giữ kho là phần còn lại của chính hạn đó.
 
 Khoang chỉ chuyển `Reserved` khi vẫn còn `Available` tại thời điểm xác nhận — cổng có thể gọi lại
-tới 10 lần trong 50 phút, đủ lâu để khách khác cọc trước. Khoang đã đổi chủ thì đơn giữ nguyên
-trạng thái, hóa đơn giữ nguyên `Unpaid`, log ERROR và tiền phải hoàn thủ công (hoàn tiền thuộc
-Flow 4).
+tới 10 lần trong 50 phút, đủ lâu để khách khác cọc trước. Nếu khoang đã đổi chủ:
+
+- `Invoice` vẫn chuyển `Paid` — tiền đã vào.
+- `Invoice.refund_status` chuyển `Required`, `refund_reason=UNIT_UNAVAILABLE`.
+- Khoang giữ nguyên; `RentalOrder` không chuyển `Deposited`.
+- Ghi audit `INVOICE_REFUND_REQUIRED`; notify FM và khách.
+- Khoản hoàn tiền hiển thị trong `GET /api/admin/payments/refunds` để Admin xử lý; hoàn tiền thuộc Flow 4.
 
 Hóa đơn không còn `Unpaid` lúc IPN về: `Paid` là IPN lặp, chỉ log INFO; `Canceled`/`Expired` là
 tiền vào một hóa đơn không còn hiệu lực — log ERROR để có người đối soát.

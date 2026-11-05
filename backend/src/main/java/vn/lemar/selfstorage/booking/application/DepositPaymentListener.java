@@ -57,10 +57,11 @@ public class DepositPaymentListener {
     private final NotificationService notifications;
     private final AccountQueryService accounts;
     private final AuditRecorder audit;
+    private final OrderNotifier orderNotifier;
 
     public DepositPaymentListener(InvoiceRepository invoices, RentalOrderRepository orders,
             StorageUnitQuery unitQuery, StorageUnitService units, NotificationService notifications,
-            AccountQueryService accounts, AuditRecorder audit) {
+            AccountQueryService accounts, AuditRecorder audit, OrderNotifier orderNotifier) {
         this.invoices = invoices;
         this.orders = orders;
         this.unitQuery = unitQuery;
@@ -68,6 +69,7 @@ public class DepositPaymentListener {
         this.notifications = notifications;
         this.accounts = accounts;
         this.audit = audit;
+        this.orderNotifier = orderNotifier;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -93,13 +95,24 @@ public class DepositPaymentListener {
             return;
         }
 
+        // Tiền đã vào thì invoice phải Paid, kể cả khi khoang không còn giữ được.
+        invoice.markPaid();
+
         // Khoang có thể đã đổi chủ trong lúc phiên còn mở: cổng retry tới 10 lần × 5 phút.
         if (!units.reserveIfAvailable(order.getUnitId())) {
+            invoice.markRefundRequired("UNIT_UNAVAILABLE");
+            audit.record(new AuditEntry(AuditAction.INVOICE_REFUND_REQUIRED, AuditEntityType.INVOICE,
+                    String.valueOf(invoice.getId()), Map.of("status", "Unpaid"),
+                    Map.of("status", "Paid", "refundStatus", "Required", "reason", "UNIT_UNAVAILABLE"),
+                    null, null));
             reportUnitNoLongerAvailable(invoice, order, event);
+            orderNotifier.notifyFacilityManager(order.getId(), NotificationType.PAYMENT_REFUND_REQUIRED,
+                    Map.of("orderCode", String.valueOf(order.getId()), "amount", event.amount().toPlainString()));
+            orderNotifier.notifyCustomer(order, NotificationType.PAYMENT_REFUND_PENDING,
+                    Map.of("orderCode", String.valueOf(order.getId())));
             return;
         }
 
-        invoice.markPaid();
         audit.record(new AuditEntry(AuditAction.STORAGE_UNIT_RESERVED, AuditEntityType.STORAGE_UNIT,
                 String.valueOf(order.getUnitId()), Map.of("status", "Available"),
                 Map.of("status", "Reserved"), null, null));

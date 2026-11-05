@@ -111,7 +111,8 @@ class PaymentIpnConcurrencyTest {
                 .containsExactlyInAnyOrder("00", "02");
         assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
         assertThat(countStatus(invoiceId, "Duplicate")).isEqualTo(1);
-        assertThat(invoiceStatus(invoiceId)).isEqualTo("Unpaid");
+        assertThat(invoiceStatus(invoiceId)).isEqualTo("Paid");
+        assertThat(refundStatus(invoiceId)).isEqualTo("Required");
         assertThat(orderStatus(invoiceId)).isEqualTo("Pending");
     }
 
@@ -149,7 +150,8 @@ class PaymentIpnConcurrencyTest {
 
         assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
         assertThat(countStatus(invoiceId, "Duplicate")).isEqualTo(1);
-        assertThat(invoiceStatus(invoiceId)).isEqualTo("Unpaid");
+        assertThat(invoiceStatus(invoiceId)).isEqualTo("Paid");
+        assertThat(refundStatus(invoiceId)).isEqualTo("Required");
         assertThat(orderStatus(invoiceId)).isEqualTo("Pending");
     }
 
@@ -250,6 +252,11 @@ class PaymentIpnConcurrencyTest {
                 "SELECT o.status FROM rental_orders o JOIN invoices i ON i.order_id = o.id"
                         + " WHERE i.id = ?",
                 String.class, invoiceId);
+    }
+
+    private String refundStatus(long invoiceId) {
+        return jdbc.queryForObject(
+                "SELECT refund_status FROM invoices WHERE id = ?", String.class, invoiceId);
     }
 
     private int countStatus(long invoiceId, String status) {

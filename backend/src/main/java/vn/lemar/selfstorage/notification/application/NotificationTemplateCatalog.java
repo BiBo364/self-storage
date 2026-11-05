@@ -119,6 +119,14 @@ public class NotificationTemplateCatalog {
                 "Có giao dịch Pending cần đối soát",
                 "Giao dịch {{vnpTxnRef}} của hoá đơn {{invoiceId}} số tiền {{amount}} đã Pending "
                         + "{{pendingAgeMinutes}} phút. Vui lòng tra portal VNPay và đối soát.");
+        put(NotificationType.PAYMENT_REFUND_REQUIRED, NotificationRecipient.FM,
+                "Có khoản cọc cần hoàn thủ công",
+                "Đơn {{orderCode}} đã thu {{amount}} nhưng khoang không còn giữ được. "
+                        + "Cần hoàn tiền thủ công.");
+        put(NotificationType.PAYMENT_REFUND_PENDING, NotificationRecipient.CUSTOMER,
+                "Khoản cọc sẽ được hoàn",
+                "Đơn {{orderCode}} đã thanh toán nhưng khoang không còn giữ được. "
+                        + "Bộ phận vận hành sẽ liên hệ hoàn tiền.");
         put(NotificationType.UNIT_CHANGE_PAYMENT_REQUIRED, NotificationRecipient.CUSTOMER,
                 "Thanh toán để giữ khoang mới",
                 "Đơn {{orderCode}}: cần thanh toán thêm {{amount}} để giữ khoang mới. "
