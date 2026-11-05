@@ -13,10 +13,17 @@ import java.time.Instant;
  * @param paidAt             thời điểm trả theo portal; bắt buộc khi {@code outcome=SUCCESS}
  * @param gatewayTransactionNo mã giao dịch VNPay ({@code vnp_TransactionNo}); bắt buộc khi
  *                             {@code outcome=SUCCESS}, không được trùng giao dịch khác
+ * @param evidenceUrl          URL ảnh/PDF Admin upload qua media route; optional
  */
 public record ManualReconciliationRequest(
         @NotNull ManualReconciliationOutcome outcome,
         @NotBlank @Size(max = 500) String note,
         Instant paidAt,
-        @Size(max = 100) String gatewayTransactionNo) {
+        @Size(max = 100) String gatewayTransactionNo,
+        @Size(max = 1000) String evidenceUrl) {
+
+    public ManualReconciliationRequest(ManualReconciliationOutcome outcome, String note,
+                                       Instant paidAt, String gatewayTransactionNo) {
+        this(outcome, note, paidAt, gatewayTransactionNo, null);
+    }
 }

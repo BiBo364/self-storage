@@ -10,6 +10,7 @@ import vn.lemar.selfstorage.ApiError;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationNotFoundException;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationValidationException;
+import vn.lemar.selfstorage.payment.application.exception.PendingPaymentFilterException;
 
 /** Lỗi riêng của endpoint đối soát thủ công, trước handler 500 chung. */
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -28,6 +29,11 @@ public class PaymentAdminExceptionHandler {
 
     @ExceptionHandler(ManualReconciliationValidationException.class)
     public ResponseEntity<ApiError> badRequest(ManualReconciliationValidationException ex) {
+        return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(PendingPaymentFilterException.class)
+    public ResponseEntity<ApiError> badPendingFilter(PendingPaymentFilterException ex) {
         return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
     }
 }

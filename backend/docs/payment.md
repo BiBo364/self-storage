@@ -40,14 +40,16 @@ Không dùng `querydr` tự động. Ba lớp không thay thế nhau; mỗi lớ
 |---|---|---|---|
 | **1. IPN** | VNPay gọi `GET /api/payments/vnpay/ipn` | IPN giả/sai chữ ký (`97`), sai merchant/amount (`01`/`04`), IPN lặp (`02`); ghi `Success`/`Failed` | IPN không về; listener booking lỗi sau khi IPN đã commit |
 | **2. Local repair** | `DepositStateRepairJob` mỗi 5 phút | `PaymentTransaction(PAY/Success)` + invoice `Unpaid` (`Deposit`/`DepositSupplement`) do listener lỗi; replay listener idempotent | IPN mất hẳn (transaction còn `Pending`); không tự gọi cổng/tạo giao dịch |
-| **3. Đối soát thủ công** | Ops tra portal VNPay rồi gọi endpoint ADMIN | `Pending` do IPN mất; chốt `Success`/`Failed`; Success thứ hai thành `Duplicate`, không ghi Success lần hai, notify FM | Không tự phát hiện `Pending`; không tự retry; không tự hoàn tiền |
+| **3. Đối soát thủ công** | `PendingPaymentWatchdogJob` tạo case; ADMIN tra portal rồi reconcile | `Pending` do IPN mất; chốt `Success`/`Failed`; Success thứ hai thành `Duplicate`, không ghi Success lần hai, notify FM | Không tự retry; không tự hoàn tiền; job chỉ alert, không tự chốt |
 
 **Nhớ nhanh:** IPN về → lớp 1. Success đã ghi nhưng invoice còn `Unpaid` → lớp 2. IPN không về,
 transaction còn `Pending` → lớp 3.
 
-Lớp 3 hiện là **pull**: dữ liệu phát hiện có sẵn (`direction='PAY'`, `status='Pending'`,
-`created_at < now() - 15 phút`), nhưng chưa có job/notification nhắc ops; ops phải tự lọc theo
-[manual-reconcile.md](routes/payment/manual-reconcile.md). Không lớp nào tự hoàn tiền.
+Lớp 3 dùng **watchdog + case**: `PendingPaymentWatchdogJob` mỗi 5 phút tạo case cho
+`PAY/Pending` quá 15 phút, gửi notification cho ADMIN; ADMIN xem danh sách case rồi gọi
+`POST /api/admin/payments/{txnRef}/reconcile`. Job không đổi trạng thái và không gọi cổng.
+Case/evidence chi tiết ở [routes/payment/admin-pending-payments.md](routes/payment/admin-pending-payments.md).
+Không lớp nào tự hoàn tiền.
 
 ## Hành vi
 
@@ -119,8 +121,8 @@ Lớp 3 hiện là **pull**: dữ liệu phát hiện có sẵn (`direction='PAY
 - **Chưa có hoàn tiền tự động** (Flow 4). Tiền vào invoice đã `Canceled`/`Expired`, hoặc khoang đã mất,
   chỉ log ERROR; hoàn tiền thủ công.
 - **Chỉ VNPay.** Chưa provider-neutral; `PaymentTransaction` chưa có cột provider; chưa có ZaloPay/payOS.
-- **Giả định một instance.** `DepositStateRepairJob` chạy mỗi 5 phút; chưa cấu hình ShedLock vì
-  deployment hiện tại chỉ một instance. Nếu scale ngang phải bổ sung khóa job.
+- **Giả định một instance.** `DepositStateRepairJob` và `PendingPaymentWatchdogJob` chạy mỗi 5 phút;
+  chưa cấu hình ShedLock vì deployment hiện tại chỉ một instance. Nếu scale ngang phải bổ sung khóa job.
 
 ## Cấu hình
 
@@ -132,6 +134,9 @@ Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`
 
 - **Endpoint:** `POST /api/admin/payments/{txnRef}/reconcile`; quyền `ADMIN`; contract chi tiết ở
   [routes/payment/manual-reconcile.md](routes/payment/manual-reconcile.md).
+- **Case Pending:** `PendingPaymentWatchdogJob` tạo case `Open`; ADMIN xem
+  `GET /api/admin/payments/pending`; reconcile đóng case và lưu note/evidence.
+  Evidence là URL file Admin upload qua `POST /api/media/uploads`, optional.
 - **Chỉ giao dịch `Pending`.** Row bị khoá `PESSIMISTIC_WRITE`; invoice được khoá thêm bằng
   advisory lock để hai manual request cùng invoice serialize. Giao dịch đã `Success`/`Failed`/
   `Duplicate`, hoặc `gatewayTransactionNo` trùng giao dịch khác trả `409`, không ghi thêm.
@@ -148,8 +153,9 @@ Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`
 - **Quy trình ops:** lọc `PaymentTransaction(Pending)` quá 15'; tra portal VNPay theo `vnp_TxnRef`;
   nếu đã trả → gọi endpoint với `outcome=SUCCESS`, `paidAt`, `gatewayTransactionNo`; nếu không →
   `outcome=FAILED` + note. Không sửa DB tay.
-- **Giới hạn:** không tự retry, không tự phát hiện giao dịch; chất lượng phụ thuộc thao tác ops.
-  Giao dịch `Pending` không có ai tra thì vẫn nằm nguyên — đây là mất mát đã chấp nhận khi bỏ querydr.
+- **Giới hạn:** không tự retry reconcile; watchdog chỉ tạo case/alert, không tự chốt.
+  Giao dịch `Pending` không có ai tra vẫn nằm nguyên — case giúp phát hiện, không thay ops.
+  Evidence chỉ là bằng chứng hỗ trợ; nguồn sự thật vẫn là transaction/audit.
 
 ## Trạng thái hiện tại
 

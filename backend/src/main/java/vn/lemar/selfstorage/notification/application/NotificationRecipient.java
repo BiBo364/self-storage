@@ -7,5 +7,6 @@ package vn.lemar.selfstorage.notification.application;
 public enum NotificationRecipient {
     CUSTOMER,
     FM,
-    FS
+    FS,
+    ADMIN
 }

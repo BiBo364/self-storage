@@ -432,6 +432,21 @@ Các bước:
 - paid_at
 - created_at
 - status (Pending/Failed/Success/Duplicate)
+# PaymentReconciliationCase
+- transaction_id (1 - 1: PaymentTransaction)
+- invoice_id
+- status (Open/Resolved)
+- detected_at
+- notified_at
+- resolved_at
+- resolved_by_email
+- resolution (Success/Failed/Duplicate)
+- gateway_transaction_no
+- paid_at
+- note
+- evidence_url
+- created_at
+- updated_at
 # AuditLog
 **Overview:** lưu lịch sử các thao tác nghiệp vụ nhạy cảm để đối chiếu khi có tranh chấp hoặc lỗi.
 
@@ -560,6 +575,7 @@ Các bước:
 | `PROPOSAL_REPROPOSED` | FM tạo proposal mới, nội dung gồm link xác nhận | Customer |
 | `DEPOSIT_PAYMENT_SUCCEEDED` | Đặt cọc thành công | Customer |
 | `PAYMENT_DUPLICATE_REFUND_REQUIRED` | Giao dịch Success thứ hai cho cùng invoice — FM cần hoàn tiền thủ công | FM |
+| `PAYMENT_PENDING_REVIEW_REQUIRED` | Giao dịch Pending quá hạn — ADMIN cần tra portal và đối soát | ADMIN |
 | `APPOINTMENT_CREATED` | Tạo lịch hẹn check-in, nội dung khác nhau theo recipient (xem NOTES) | Customer, FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron hủy lịch do khách không đến (nội dung gồm thời gian hẹn cũ và link đặt lịch mới) | Customer |
 | `FS_ASSIGNED` | FM phân công FS cho lịch hẹn, nội dung gồm thông tin lịch hẹn | FS |
