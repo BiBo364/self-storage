@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import vn.lemar.selfstorage.ApiError;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentForbiddenException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationException;
 import vn.lemar.selfstorage.booking.application.exception.DepositNotAllowedException;
@@ -124,6 +125,11 @@ public class BookingExceptionHandler {
     @ExceptionHandler(AppointmentConflictException.class)
     public ResponseEntity<ApiError> handleAppointmentConflict(AppointmentConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(AppointmentForbiddenException.class)
+    public ResponseEntity<ApiError> handleAppointmentForbidden(AppointmentForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiError.now(ex.getMessage()));
     }
 
     @ExceptionHandler(AppointmentValidationException.class)

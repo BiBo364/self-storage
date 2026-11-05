@@ -48,7 +48,10 @@ class SchemaValidationTest {
                 String.class);
 
         assertThat(paymentStatusCheck).contains("Duplicate");
-        assertThat(auditActionCheck).contains("PAYMENT_DUPLICATE");
+        assertThat(auditActionCheck)
+                .contains("PAYMENT_DUPLICATE")
+                .contains("INVOICE_REFUND_REQUIRED")
+                .contains("APPOINTMENT_ARRIVED");
     }
 
     @Test

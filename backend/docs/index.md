@@ -72,6 +72,7 @@ Nguồn: `backend/src/main/resources/application.yml`, override qua biến môi 
 | `LOGIN_RATE_LIMIT_EMAIL_MAX` | Số lần đăng nhập sai tối đa theo email / window | `5` |
 | `LOGIN_RATE_LIMIT_IP_MAX` | Số lần đăng nhập sai tối đa theo IP / window | `20` |
 | `LOGIN_RATE_LIMIT_WINDOW` | Cửa sổ đếm lần đăng nhập sai | `PT15M` |
+| `REDIS_HOST` | Redis host cho rate-limit auth / cache | `localhost` |
 | `VNPAY_TMN_CODE` | Mã website đăng ký trên VNPay | — (bắt buộc) |
 | `VNPAY_HASH_SECRET` | Chuỗi bí mật ký/kiểm checksum VNPay | — (bắt buộc) |
 | `VNPAY_PAY_URL` | Endpoint cổng thanh toán VNPay | — (bắt buộc) |
@@ -91,7 +92,7 @@ hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V18__invoice_refund_state.sql`.
+Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V20__appointment_times_not_null.sql`.
 V1/V2 có mirror ở `backend/sql/`
 — sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -127,6 +128,8 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
   reconcile; không đổi trạng thái transaction.
 - V18 thêm `invoices.refund_status/refund_reason/refund_requested_at/refunded_at` — invoice vẫn
   `Paid` khi tiền đã vào nhưng khoang không còn giữ được; refund là trục riêng.
+- V19 thêm audit action `APPOINTMENT_ARRIVED` cho FS xác nhận khách đến; giữ đầy đủ action của B4.
+- V20 đặt `appointments.started_at/end_at` NOT NULL; no-show và notification đọc trực tiếp hai mốc.
 
 Các migration khác trên main: V5 seed `order.expiry_days` (luồng convert), V6 bỏ `Expired` khỏi CHECK
 `rental_orders.status` (quá hạn cũng là `Canceled` + `cancel_reason`), V7 thêm 4 action convert vào
@@ -256,6 +259,7 @@ bấm **Authorize** và dán token (không cần prefix `Bearer `) để gọi A
 | [audit-log.md](audit-log.md) | Hợp đồng tích hợp AuditLog cho module gọi + call site hiện có |
 | [booking/conversion.md](booking/conversion.md) | Convert request → đơn + proposal, claim sau xác minh |
 | [booking/proposal-flow.md](booking/proposal-flow.md) | Đồng ý / từ chối đề xuất khoang, đề xuất lại: sơ đồ, state, invariant |
+| [booking/appointment-no-show.md](booking/appointment-no-show.md) | Cron no-show check-in, guard `noShowDue`, audit/notification |
 | [flows/cancellation-cascade.md](flows/cancellation-cascade.md) | Cascade huỷ đơn: entity, khoang, audit, notification |
 | [routes.md](routes.md) | Index toàn bộ route hiện có |
 | [routes/health.md](routes/health.md) | `GET /api/health` |

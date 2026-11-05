@@ -21,7 +21,7 @@ khoang và FS phụ trách.
 - Ngoài phạm vi cơ sở / thiếu quyền → 403; cơ sở không tồn tại → 404 (theo `Access`).
 - Mỗi dòng: `id`, `type`, `status`, `date`, `startedAt`, `endAt`, `orderId`, `orderStatus`, `unitCode`,
   `customerName`, `customerEmail`, `staffId`, `staffEmail` (`staffId`/`staffEmail` null khi chưa phân
-  công). Lịch chưa có giờ bắt đầu xếp cuối.
+  công). `started_at`/`end_at` NOT NULL từ V15 — lịch luôn có giờ.
 
 ## Ghi chú nghiệp vụ
 

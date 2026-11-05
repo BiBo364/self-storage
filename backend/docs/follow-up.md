@@ -14,6 +14,10 @@ thì mở issue theo workflow; file này không thay thế issue.
 - Quản trị hệ thống (`/api/admin/**`) chưa có endpoint nào; permission catalog mở rộng dần theo
   Flow 3–7 — xem [permission-catalog.md](permission-catalog.md).
 
+## Booking
+
+- No-show `RentalOrder`/`HandoverRecord` chưa xử lý — issue #222 (ngoài scope PR cron `Appointment`).
+
 ## Notification
 
 - Caller nghiệp vụ đầu tiên: luồng convert gửi `RENTAL_REQUEST_APPROVED` (có `orderId`) —
