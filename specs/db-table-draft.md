@@ -299,7 +299,7 @@ Các bước:
 - facility_id (N - 1: Facility)
 - staff_id (N - 1: Account, nullable khi chưa được phân công)
 - type (CHECKIN, HANDOVER, RETURN)
-- cancel_reason (no-show ghi "Khách không đến")
+- cancel_reason (no-show ghi "Quá giờ và khách không đến")
 - date
 - started_at (NOT NULL từ V15)
 - end_at (NOT NULL từ V15)
