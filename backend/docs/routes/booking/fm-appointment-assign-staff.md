@@ -26,6 +26,7 @@ Body `{ "staffId": 5 }`.
 ## Ghi chú nghiệp vụ
 
 - Spec 1.5: FM chỉ định một FS phụ trách ca tiếp đón; gán xong đơn sang `InProgress`.
+- `started_at`/`end_at` NOT NULL từ V15 — lịch phải có giờ trước khi assign; DB chặn lịch thiếu giờ.
 - Đổi FS đã gán không cho ở MVP: lịch đã có FS → 409.
 
 ## Ví dụ

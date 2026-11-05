@@ -1,5 +1,6 @@
 package vn.lemar.selfstorage.booking.application;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashSet;
@@ -44,6 +45,7 @@ public class StaffAppointmentQueryService {
                 access.can(AppointmentQueryService.PERMISSION_READ, row.facilityId());
             }
         }
-        return rows.stream().map(StaffAppointmentResponse::from).toList();
+        Instant now = Instant.now();
+        return rows.stream().map(row -> StaffAppointmentResponse.from(row, now)).toList();
     }
 }

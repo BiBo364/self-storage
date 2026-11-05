@@ -299,10 +299,10 @@ Các bước:
 - facility_id (N - 1: Facility)
 - staff_id (N - 1: Account, nullable khi chưa được phân công)
 - type (CHECKIN, HANDOVER, RETURN)
-- cancel_reason
+- cancel_reason (no-show ghi "Quá giờ và khách không đến")
 - date
-- started_at
-- end_at
+- started_at (NOT NULL từ V15)
+- end_at (NOT NULL từ V15)
 - arrived_at
 - status:
   - Pending: trạng thái mặc định, trước khi khách đến
@@ -477,7 +477,8 @@ Các bước:
 | `FS_ASSIGNED` | FM phân công FS | `Appointment`, `RentalOrder` | FM |
 | `APPOINTMENT_RESCHEDULED` | Lịch hẹn được đặt lại | `Appointment` | Customer/FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron xử lý khách không đến | `Appointment` | System |
-| `APPOINTMENT_CANCELED` | Hủy lịch chưa diễn ra khi đơn bị hủy (cancellation cascade) | `Appointment` | System |
+| `APPOINTMENT_CANCELED` | Hủy lịch Pending (cancellation cascade hoặc FS chủ động) | `Appointment` | System, FS |
+| `APPOINTMENT_ARRIVED` | FS xác nhận khách đến (Pending → Done) | `Appointment` | FS |
 | `IDENTITY_VERIFIED` | FS xác minh danh tính người đến | `HandoverRecord` | FS |
 | `UNIT_INSPECTED` | Khách xác nhận hiện trạng khoang | `HandoverRecord` | FS |
 | `HANDOVER_REJECTED` | Khách từ chối khoang tại chỗ | `HandoverRecord` | FS |

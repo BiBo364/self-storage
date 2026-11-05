@@ -18,7 +18,7 @@ import org.springframework.stereotype.Repository;
 public class AppointmentReadRepository {
 
     private static final String SELECT = """
-            select a.id, a.type, a.status, a.date, a.started_at, a.end_at, a.arrived_at,
+            select a.id, a.type, a.status, a.date, a.started_at, a.end_at, a.arrived_at, a.cancel_reason,
                    ra.order_id, o.status as order_status, u.code as unit_code, a.facility_id,
                    coalesce(c.name, r.customer_name, c.email) as customer_name,
                    c.email as customer_email,
@@ -49,7 +49,7 @@ public class AppointmentReadRepository {
     public List<AppointmentRow> findByFacilityAndDate(Long facilityId, LocalDate date) {
         return jdbc.query(SELECT
                         + " where a.facility_id = ? and a.date = ? and a.type = 'CHECKIN'"
-                        + " and a.status = 'Pending' order by a.started_at nulls last, a.id",
+                        + " and a.status = 'Pending' order by a.started_at, a.id",
                 AppointmentReadRepository::map, facilityId, date);
     }
 
@@ -61,7 +61,7 @@ public class AppointmentReadRepository {
     /** Lịch làm việc của một FS trong ngày — mọi type/status đã gán cho FS. */
     public List<AppointmentRow> findByStaffAndDate(Long staffId, LocalDate date) {
         return jdbc.query(SELECT + " where a.staff_id = ? and a.date = ?"
-                        + " order by a.started_at nulls last, a.id",
+                        + " order by a.started_at, a.id",
                 AppointmentReadRepository::map, staffId, date);
     }
 
@@ -72,7 +72,7 @@ public class AppointmentReadRepository {
                 (Long) rs.getObject("order_id"), rs.getString("order_status"), rs.getString("unit_code"),
                 rs.getLong("facility_id"), rs.getString("customer_name"), rs.getString("customer_email"),
                 rs.getString("customer_phone"), (Long) rs.getObject("staff_id"), rs.getString("staff_email"),
-                rs.getString("facility_name"), rs.getString("facility_address"));
+                rs.getString("facility_name"), rs.getString("facility_address"), rs.getString("cancel_reason"));
     }
 
     private static Instant instant(Timestamp timestamp) {
@@ -84,6 +84,6 @@ public class AppointmentReadRepository {
                                  Instant endAt, Instant arrivedAt, Long orderId, String orderStatus,
                                  String unitCode, Long facilityId, String customerName, String customerEmail,
                                  String customerPhone, Long staffId, String staffEmail, String facilityName,
-                                 String facilityAddress) {
+                                 String facilityAddress, String cancelReason) {
     }
 }

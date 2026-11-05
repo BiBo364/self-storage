@@ -16,6 +16,7 @@ public class AppointmentQueryService {
 
     static final String PERMISSION_READ = "appointment.read";
     static final String PERMISSION_ASSIGN = "appointment.assign";
+    static final String PERMISSION_CHECKIN = "appointment.checkin";
 
     private final AppointmentReadRepository readRepository;
     private final FacilityStaffQuery facilityStaffQuery;

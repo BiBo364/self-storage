@@ -1,0 +1,2 @@
+ALTER TABLE appointments ALTER COLUMN started_at SET NOT NULL;
+ALTER TABLE appointments ALTER COLUMN end_at SET NOT NULL;
