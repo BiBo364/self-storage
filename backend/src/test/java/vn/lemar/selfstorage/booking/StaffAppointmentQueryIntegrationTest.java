@@ -140,7 +140,8 @@ class StaffAppointmentQueryIntegrationTest {
 
     @Test
     void returnsCancelReasonForCanceledAppointment() {
-        jdbc.update("update appointments set status = 'Canceled', cancel_reason = 'Khách không đến' where id = ?",
+        jdbc.update("update appointments set status = 'Canceled', "
+                + "cancel_reason = 'Quá giờ và khách không đến' where id = ?",
                 appointmentId);
         loginAs("fs1@lemar.vn");
 
@@ -148,7 +149,7 @@ class StaffAppointmentQueryIntegrationTest {
 
         assertThat(result).singleElement().satisfies(row -> {
             assertThat(row.status()).isEqualTo("Canceled");
-            assertThat(row.cancelReason()).isEqualTo("Khách không đến");
+            assertThat(row.cancelReason()).isEqualTo("Quá giờ và khách không đến");
         });
     }
 

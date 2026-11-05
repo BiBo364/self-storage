@@ -20,7 +20,8 @@ public record StaffAppointmentResponse(
         @Schema(description = "Cơ sở") Facility facility,
         @Schema(description = "Khách") Customer customer,
         @Schema(description = "Đã quá end_at mà chưa đến — cron no-show sẽ xử lý") boolean noShowDue,
-        @Schema(description = "Lý do huỷ; null nếu chưa huỷ; NoShow là cron no-show") String cancelReason
+        @Schema(description = "Lý do huỷ; null nếu chưa huỷ; "
+                + "Quá giờ và khách không đến là cron no-show") String cancelReason
 ) {
 
     @Schema(name = "StaffAppointmentFacility")

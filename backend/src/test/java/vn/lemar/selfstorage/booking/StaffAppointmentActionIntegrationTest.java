@@ -168,14 +168,14 @@ class StaffAppointmentActionIntegrationTest {
                 + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
         loginAs("fs1@lemar.vn");
 
-        StaffAppointmentActionService.ActionResult result = service.cancel(appointmentId, "Khách không đến");
+        StaffAppointmentActionService.ActionResult result = service.cancel(appointmentId, "Quá giờ và khách không đến");
 
         assertThat(result.conflict()).isTrue();
         assertThat(result.noShow()).isTrue();
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Canceled");
         assertThat(jdbc.queryForObject("select cancel_reason from appointments where id = ?", String.class,
-                appointmentId)).isEqualTo("Khách không đến");
+                appointmentId)).isEqualTo("Quá giờ và khách không đến");
         Map<String, Object> audit = jdbc.queryForMap("select action, actor_account_id from audit_logs "
                 + "where entity_id = ? and action = 'APPOINTMENT_CANCELED_NO_SHOW'", String.valueOf(appointmentId));
         assertThat(audit.get("actor_account_id")).isNull();
@@ -217,7 +217,7 @@ class StaffAppointmentActionIntegrationTest {
                 + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
         loginAs("fs1@lemar.vn");
 
-        StaffAppointmentActionService.ActionResult result = service.cancel(appointmentId, "Khách không đến");
+        StaffAppointmentActionService.ActionResult result = service.cancel(appointmentId, "Quá giờ và khách không đến");
 
         assertThat(result.conflict()).isTrue();
         assertThat(result.noShow()).isFalse();
@@ -234,7 +234,7 @@ class StaffAppointmentActionIntegrationTest {
                 Long.class, customerId, q7, fsId, day);
         loginAs("fs1@lemar.vn");
 
-        StaffAppointmentActionService.ActionResult result = service.cancel(noOrderId, "Khách không đến");
+        StaffAppointmentActionService.ActionResult result = service.cancel(noOrderId, "Quá giờ và khách không đến");
 
         assertThat(result.conflict()).isTrue();
         assertThat(result.noShow()).isTrue();

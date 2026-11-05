@@ -21,14 +21,14 @@ import vn.lemar.selfstorage.booking.repository.AppointmentRepository;
 import vn.lemar.selfstorage.notification.application.NotificationType;
 
 /**
- * Cron no-show: lịch check-in Pending quá {@code end_at} → Canceled/NoShow, audit, báo khách.
+ * Cron no-show: lịch check-in Pending quá {@code end_at} → Canceled (Quá giờ và khách không đến), audit, báo khách.
  * Chỉ xử lý {@code Appointment}; HandoverRecord/RentalOrder để issue riêng. Idempotent: chỉ Pending;
  * chạy lại không ghi thêm.
  */
 @Service
 public class AppointmentNoShowService {
 
-    static final String REASON = "Khách không đến";
+    static final String REASON = "Quá giờ và khách không đến";
 
     private static final ZoneId FACILITY_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");

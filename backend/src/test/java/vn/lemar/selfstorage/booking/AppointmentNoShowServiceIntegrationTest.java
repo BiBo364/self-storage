@@ -19,7 +19,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.lemar.selfstorage.booking.application.AppointmentNoShowService;
 
 /**
- * Cron no-show trên Postgres: lịch CHECKIN Pending quá end_at → Canceled/NoShow + audit + notification
+ * Cron no-show trên Postgres: lịch CHECKIN Pending quá end_at → Canceled
+ * (Quá giờ và khách không đến) + audit + notification
  * khách; not-due/Done/Canceled/RETURN không đụng; chạy lại idempotent.
  */
 @SpringBootTest
@@ -103,7 +104,7 @@ class AppointmentNoShowServiceIntegrationTest {
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, dueId))
                 .isEqualTo("Canceled");
         assertThat(jdbc.queryForObject("select cancel_reason from appointments where id = ?", String.class, dueId))
-                .isEqualTo("Khách không đến");
+                .isEqualTo("Quá giờ và khách không đến");
         Map<String, Object> audit = jdbc.queryForMap("select action, actor_account_id, "
                 + "old_value ->> 'status' old_status, new_value ->> 'status' new_status, reason "
                 + "from audit_logs where action = 'APPOINTMENT_CANCELED_NO_SHOW' and entity_id = ?",
@@ -111,7 +112,7 @@ class AppointmentNoShowServiceIntegrationTest {
         assertThat(audit.get("actor_account_id")).isNull();
         assertThat(audit.get("old_status")).isEqualTo("Pending");
         assertThat(audit.get("new_status")).isEqualTo("Canceled");
-        assertThat(audit.get("reason")).isEqualTo("Khách không đến");
+        assertThat(audit.get("reason")).isEqualTo("Quá giờ và khách không đến");
 
         Map<String, Object> notification = jdbc.queryForMap(
                 "select type, title, body from notifications where account_id = ?", customerId);
