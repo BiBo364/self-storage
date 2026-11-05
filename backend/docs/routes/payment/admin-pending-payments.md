@@ -20,6 +20,7 @@ Trả các case `Open` cho giao dịch `PAY/Pending` quá ngưỡng. Route read-
   `detectedAt`, `notifiedAt`, `pendingAgeMinutes`, `status`, `resolution`, `gatewayTransactionNo`,
   `paidAt`, `note`, `evidenceUrl`, `resolvedAt`, `resolvedByEmail`.
 - Case Open thường chưa có `resolution`/`evidenceUrl`; Admin nhập khi reconcile.
+- Khoản cần hoàn tiền không nằm trong list này; xem `GET /api/admin/payments/refunds`.
 
 ## Evidence
 
@@ -46,4 +47,5 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 ## Liên quan
 
 - Reconcile: [manual-reconcile.md](manual-reconcile.md)
+- Khoản chờ hoàn tiền: [admin-refund-required.md](admin-refund-required.md)
 - Xem thêm: [routes.md](../../routes.md) · [index.md](../../index.md)

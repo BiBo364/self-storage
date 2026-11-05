@@ -258,6 +258,10 @@ Các bước:
 - amount - snapshot của giá hiệu lực tại thời điểm tạo hóa đơn.
 - created_at
 - due_date
+- refund_status (None/Required/Processing/Refunded) — tiền đã vào nhưng cần hoàn; tách khỏi `status`
+- refund_reason (nullable)
+- refund_requested_at (nullable)
+- refunded_at (nullable)
 
 **Constraints**
 - Một `RentalOrder` tối đa một hoá đơn `Deposit` còn hiệu lực (`Unpaid`/`Paid`).
@@ -482,6 +486,7 @@ Các bước:
 | `PROPOSAL_CANCELED` | Proposal bị huỷ do khoang hết khả dụng lúc khách đồng ý hoặc đơn bị huỷ | `ProposalFeedback` | Customer/System |
 | `INVOICE_CREATED` | Hệ thống tạo hóa đơn cọc | `Invoice` | Customer/FM |
 | `INVOICE_CANCELED` | Hóa đơn bị vô hiệu hóa | `Invoice` | Customer/FM |
+| `INVOICE_REFUND_REQUIRED` | Tiền đã vào nhưng unit không còn giữ được; invoice Paid + refund Required | `Invoice` | System |
 | `PAYMENT_SUCCEEDED` | Thanh toán được xác nhận | `PaymentTransaction` | System/IPN/Admin |
 | `PAYMENT_FAILED` | Thanh toán thất bại | `PaymentTransaction` | System/IPN/Admin |
 | `PAYMENT_DUPLICATE` | Giao dịch Success thứ hai cho cùng invoice; không ghi Success lần hai | `PaymentTransaction` | System/IPN/Admin |
@@ -576,6 +581,8 @@ Các bước:
 | `DEPOSIT_PAYMENT_SUCCEEDED` | Đặt cọc thành công | Customer |
 | `PAYMENT_DUPLICATE_REFUND_REQUIRED` | Giao dịch Success thứ hai cho cùng invoice — FM cần hoàn tiền thủ công | FM |
 | `PAYMENT_PENDING_REVIEW_REQUIRED` | Giao dịch Pending quá hạn — ADMIN cần tra portal và đối soát | ADMIN |
+| `PAYMENT_REFUND_REQUIRED` | Tiền cọc đã vào nhưng unit không còn giữ được — FM cần hoàn tiền | FM |
+| `PAYMENT_REFUND_PENDING` | Khoản cọc sẽ được hoàn do unit không còn giữ được | Customer |
 | `APPOINTMENT_CREATED` | Tạo lịch hẹn check-in, nội dung khác nhau theo recipient (xem NOTES) | Customer, FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron hủy lịch do khách không đến (nội dung gồm thời gian hẹn cũ và link đặt lịch mới) | Customer |
 | `FS_ASSIGNED` | FM phân công FS cho lịch hẹn, nội dung gồm thông tin lịch hẹn | FS |

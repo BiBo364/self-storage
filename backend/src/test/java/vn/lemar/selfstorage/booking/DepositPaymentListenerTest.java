@@ -25,6 +25,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.booking.application.DepositPaymentListener;
+import vn.lemar.selfstorage.booking.application.OrderNotifier;
 import vn.lemar.selfstorage.booking.domain.Invoice;
 import vn.lemar.selfstorage.booking.domain.InvoiceStatus;
 import vn.lemar.selfstorage.booking.domain.InvoiceType;
@@ -58,6 +59,7 @@ class DepositPaymentListenerTest {
     private final NotificationService notifications = mock(NotificationService.class);
     private final AccountQueryService accounts = mock(AccountQueryService.class);
     private final AuditRecorder audit = mock(AuditRecorder.class);
+    private final OrderNotifier orderNotifier = mock(OrderNotifier.class);
 
     private DepositPaymentListener listener;
     private Invoice invoice;
@@ -66,7 +68,7 @@ class DepositPaymentListenerTest {
     @BeforeEach
     void setUp() {
         listener = new DepositPaymentListener(invoices, orders, unitQuery, units, notifications,
-                accounts, audit);
+                accounts, audit, orderNotifier);
 
         invoice = mock(Invoice.class);
         when(invoice.getId()).thenReturn(INVOICE_ID);
@@ -141,9 +143,14 @@ class DepositPaymentListenerTest {
         listener.onPaymentSucceeded(succeeded());
 
         verify(order, never()).markDeposited();
-        verify(invoice, never()).markPaid();
-        verifyNoInteractions(audit);
+        verify(invoice).markPaid();
+        verify(invoice).markRefundRequired("UNIT_UNAVAILABLE");
+        verify(audit).record(any());
         verifyNoInteractions(notifications);
+        verify(orderNotifier).notifyFacilityManager(eq(ORDER_ID),
+                eq(NotificationType.PAYMENT_REFUND_REQUIRED), anyMap());
+        verify(orderNotifier).notifyCustomer(eq(order),
+                eq(NotificationType.PAYMENT_REFUND_PENDING), anyMap());
     }
 
     @Test

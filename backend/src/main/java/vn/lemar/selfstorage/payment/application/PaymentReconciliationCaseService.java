@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.lemar.selfstorage.payment.application.dto.PendingPaymentCasePageView;
 import vn.lemar.selfstorage.payment.application.dto.PendingPaymentCaseView;
+import vn.lemar.selfstorage.payment.application.dto.RefundCasePageView;
+import vn.lemar.selfstorage.payment.application.dto.RefundCaseView;
 import vn.lemar.selfstorage.payment.application.event.PaymentPendingReviewRequired;
 import vn.lemar.selfstorage.payment.application.exception.PendingPaymentFilterException;
 import vn.lemar.selfstorage.payment.repository.PaymentReconciliationCaseRepository;
@@ -47,12 +49,7 @@ public class PaymentReconciliationCaseService {
         if (olderThanMinutes < 0) {
             throw new PendingPaymentFilterException("Số phút không hợp lệ: " + olderThanMinutes);
         }
-        if (page < 0) {
-            throw new PendingPaymentFilterException("Số trang không hợp lệ: " + page);
-        }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new PendingPaymentFilterException("Kích thước trang phải từ 1 đến " + MAX_PAGE_SIZE);
-        }
+        validatePage(page, size);
         Instant cutoff = Instant.now().minus(Duration.ofMinutes(olderThanMinutes));
         long total = repository.countOpen(cutoff);
         Instant now = Instant.now();
@@ -64,8 +61,20 @@ public class PaymentReconciliationCaseService {
                         row.resolution(), row.gatewayTransactionNo(), row.paidAt(), row.note(),
                         row.evidenceUrl(), row.resolvedAt(), row.resolvedByEmail()))
                 .toList();
-        int totalPages = total == 0 ? 0 : (int) ((total + size - 1) / size);
-        return new PendingPaymentCasePageView(items, page, size, total, totalPages);
+        return new PendingPaymentCasePageView(items, page, size, total, totalPages(total, size));
+    }
+
+    @Transactional(readOnly = true)
+    public RefundCasePageView listRefundRequired(int page, int size) {
+        validatePage(page, size);
+        long total = repository.countRefundRequired();
+        List<RefundCaseView> items = repository.findRefundRequiredPage((long) page * size, size)
+                .stream()
+                .map(row -> new RefundCaseView(row.invoiceId(), row.invoiceCode(), row.orderId(),
+                        row.amount(), row.refundStatus(), row.refundReason(), row.refundRequestedAt(),
+                        row.vnpTxnRef(), row.gatewayTransactionNo(), row.paidAt()))
+                .toList();
+        return new RefundCasePageView(items, page, size, total, totalPages(total, size));
     }
 
     @Transactional
@@ -79,6 +88,19 @@ public class PaymentReconciliationCaseService {
                         Instant paidAt, String note, String evidenceUrl, String actorEmail) {
         repository.resolveByTransaction(transactionId, resolution, gatewayTransactionNo, paidAt,
                 note, evidenceUrl, actorEmail);
+    }
+
+    private static void validatePage(int page, int size) {
+        if (page < 0) {
+            throw new PendingPaymentFilterException("Số trang không hợp lệ: " + page);
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new PendingPaymentFilterException("Kích thước trang phải từ 1 đến " + MAX_PAGE_SIZE);
+        }
+    }
+
+    private static int totalPages(long total, int size) {
+        return total == 0 ? 0 : (int) ((total + size - 1) / size);
     }
 
     private static long ageMinutes(Instant createdAt, Instant now) {
