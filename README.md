@@ -5,7 +5,8 @@ Hệ thống cho thuê kho self-storage. Modular monolith: **Spring Boot 3.3 · 
 - Nguồn sự thật: docs trong từng module (`backend/docs/`, và `frontend/docs/` khi có).
   `specs/draft.md` chỉ để tham khảo flow — không sửa; `specs/db-table-draft.md` cập nhật theo schema.
   Đọc `AGENTS.md` trước khi code.
-- Quy trình: issue → branch → PR (`Closes #N`) → CI xanh + 1 approval → merge.
+- Quy trình: issue → branch → PR (`Closes #N`) → CI xanh + 1 approval → merge. Trước khi mở PR,
+  đọc [hướng dẫn viết PR body](docs/guides/pull-request.md).
 - Roadmap: theo dõi trong GitHub Issues.
 
 ## Chạy nhanh (dev)

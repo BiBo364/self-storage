@@ -36,7 +36,9 @@ issue (task) → branch → PR "Closes #N" → CI green + 1 approval → merge �
   pass — ask `@levihoccode` for the `waiver` label, with a stated reason, if a gate really must be
   bypassed.
 - Issues created with `gh issue create` skip the form — fill the form's fields by hand.
-- The PR body is the end-of-task report below. Its sections are not optional.
+- Before opening a PR, read [`docs/guides/pull-request.md`](docs/guides/pull-request.md) and fill
+  [`.github/pull_request_template.md`](.github/pull_request_template.md). The PR body is the
+  end-of-task review guide below, not a changelog; its required sections are not optional.
 
 ## Evidence is required
 
