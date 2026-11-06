@@ -2,6 +2,7 @@ package vn.lemar.selfstorage.handover;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 import jakarta.persistence.EntityManager;
@@ -114,18 +115,16 @@ class HandoverFoundationIntegrationTest {
     }
 
     @Test
-    void arrivedSetsDueAtFromPolicy() {
+    void arrivedSetsDueAtFromArrivedAtAndPolicy() {
+        Instant arrivedAt = Instant.parse("2026-11-06T02:00:00Z");
         Fixture fixture = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
         seedHandover(fixture, "IN_PROGRESS", null);
-        Instant before = Instant.now();
 
-        handoverService.onAppointmentArrived(fixture.appointmentId());
-        Instant after = Instant.now();
+        handoverService.onAppointmentArrived(fixture.appointmentId(), arrivedAt);
         entityManager.flush();
 
-        Instant dueAt = dueAt(fixture.appointmentId());
-        assertThat(dueAt).isBetween(before.plus(1, ChronoUnit.DAYS).minusSeconds(2),
-                after.plus(1, ChronoUnit.DAYS).plusSeconds(2));
+        assertThat(dueAt(fixture.appointmentId()))
+                .isCloseTo(arrivedAt.plus(1, ChronoUnit.DAYS), within(1, ChronoUnit.SECONDS));
     }
 
     @Test
@@ -134,7 +133,7 @@ class HandoverFoundationIntegrationTest {
         Fixture fixture = fixture(expiresAt);
         seedHandover(fixture, "IN_PROGRESS", null);
 
-        handoverService.onAppointmentArrived(fixture.appointmentId());
+        handoverService.onAppointmentArrived(fixture.appointmentId(), Instant.now());
         entityManager.flush();
 
         Instant storedExpiry = jdbc.queryForObject(
@@ -144,17 +143,15 @@ class HandoverFoundationIntegrationTest {
 
     @Test
     void arrivedWithoutOrderExpiryUsesPolicy() {
+        Instant arrivedAt = Instant.parse("2026-11-06T02:00:00Z");
         Fixture fixture = fixture(null);
         seedHandover(fixture, "IN_PROGRESS", null);
-        Instant before = Instant.now();
 
-        handoverService.onAppointmentArrived(fixture.appointmentId());
-        Instant after = Instant.now();
+        handoverService.onAppointmentArrived(fixture.appointmentId(), arrivedAt);
         entityManager.flush();
 
-        Instant dueAt = dueAt(fixture.appointmentId());
-        assertThat(dueAt).isBetween(before.plus(1, ChronoUnit.DAYS).minusSeconds(2),
-                after.plus(1, ChronoUnit.DAYS).plusSeconds(2));
+        assertThat(dueAt(fixture.appointmentId()))
+                .isCloseTo(arrivedAt.plus(1, ChronoUnit.DAYS), within(1, ChronoUnit.SECONDS));
     }
 
     @Test
@@ -163,7 +160,7 @@ class HandoverFoundationIntegrationTest {
         Instant fixed = Instant.now().plus(3, ChronoUnit.DAYS);
         seedHandover(fixture, "IN_PROGRESS", fixed);
 
-        handoverService.onAppointmentArrived(fixture.appointmentId());
+        handoverService.onAppointmentArrived(fixture.appointmentId(), Instant.now());
         entityManager.flush();
 
         assertThat(dueAt(fixture.appointmentId())).isCloseTo(fixed, within(1, ChronoUnit.SECONDS));
@@ -176,7 +173,7 @@ class HandoverFoundationIntegrationTest {
         Fixture fixture = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
         seedHandover(fixture, "CANCELED", null);
 
-        handoverService.onAppointmentArrived(fixture.appointmentId());
+        handoverService.onAppointmentArrived(fixture.appointmentId(), Instant.now());
         entityManager.flush();
 
         assertThat(dueAt(fixture.appointmentId())).isNull();
@@ -186,40 +183,50 @@ class HandoverFoundationIntegrationTest {
     void arrivedWithoutRecordIsNoOp() {
         Fixture fixture = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
 
-        assertThatCode(() -> handoverService.onAppointmentArrived(fixture.appointmentId()))
+        assertThatCode(() -> handoverService.onAppointmentArrived(fixture.appointmentId(), Instant.now()))
                 .doesNotThrowAnyException();
         assertThat(handoverRecords.findByOrderId(fixture.orderId())).isEmpty();
     }
 
     @Test
+    void dueDaysBelowMinimumIsRejected() {
+        Fixture fixture = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
+        seedHandover(fixture, "IN_PROGRESS", null);
+        jdbc.update("update policies set value = '0' where key = 'handover.due_days'");
+
+        assertThatThrownBy(() -> handoverService.onAppointmentArrived(fixture.appointmentId(), Instant.now()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("handover.due_days");
+        entityManager.flush();
+
+        assertThat(dueAt(fixture.appointmentId())).isNull();
+    }
+
+    @Test
     void policyChangeDoesNotRetroactivelyChangeDueAt() {
+        Instant firstArrivedAt = Instant.parse("2026-11-06T02:00:00Z");
         Fixture first = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
         seedHandover(first, "IN_PROGRESS", null);
-        Instant beforeFirst = Instant.now();
 
-        handoverService.onAppointmentArrived(first.appointmentId());
-        Instant afterFirst = Instant.now();
+        handoverService.onAppointmentArrived(first.appointmentId(), firstArrivedAt);
         entityManager.flush();
         Instant firstDueAt = dueAt(first.appointmentId());
-        assertThat(firstDueAt).isBetween(beforeFirst.plus(1, ChronoUnit.DAYS).minusSeconds(2),
-                afterFirst.plus(1, ChronoUnit.DAYS).plusSeconds(2));
+        assertThat(firstDueAt).isCloseTo(firstArrivedAt.plus(1, ChronoUnit.DAYS), within(1, ChronoUnit.SECONDS));
 
         jdbc.update("update policies set value = '2' where key = 'handover.due_days'");
 
-        handoverService.onAppointmentArrived(first.appointmentId());
+        handoverService.onAppointmentArrived(first.appointmentId(), firstArrivedAt);
         entityManager.flush();
         assertThat(dueAt(first.appointmentId())).isEqualTo(firstDueAt);
 
+        Instant secondArrivedAt = Instant.parse("2026-11-07T02:00:00Z");
         Fixture second = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
         seedHandover(second, "IN_PROGRESS", null);
-        Instant beforeSecond = Instant.now();
-        handoverService.onAppointmentArrived(second.appointmentId());
-        Instant afterSecond = Instant.now();
+        handoverService.onAppointmentArrived(second.appointmentId(), secondArrivedAt);
         entityManager.flush();
 
-        assertThat(dueAt(second.appointmentId())).isBetween(
-                beforeSecond.plus(2, ChronoUnit.DAYS).minusSeconds(2),
-                afterSecond.plus(2, ChronoUnit.DAYS).plusSeconds(2));
+        assertThat(dueAt(second.appointmentId()))
+                .isCloseTo(secondArrivedAt.plus(2, ChronoUnit.DAYS), within(1, ChronoUnit.SECONDS));
     }
 
     @Test
@@ -303,6 +310,21 @@ class HandoverFoundationIntegrationTest {
         assertThat(contractStatus(contractId)).isEqualTo("Signed");
         assertThat(auditCount("HANDOVER_CANCELED")).isZero();
         assertThat(auditCount("CONTRACT_CANCELED")).isZero();
+    }
+
+    @Test
+    void cancelByAppointmentIdCancelsContractForAlreadyCanceledRecord() {
+        Fixture fixture = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
+        long recordId = seedHandover(fixture, "CANCELED", null);
+        long contractId = seedContract(fixture, "Draft");
+
+        handoverService.cancelByAppointmentId(fixture.appointmentId(), "Khách không đến");
+        entityManager.flush();
+
+        assertThat(handoverResult(recordId)).isEqualTo("CANCELED");
+        assertThat(contractStatus(contractId)).isEqualTo("Canceled");
+        assertThat(auditCount("HANDOVER_CANCELED")).isZero();
+        assertThat(auditCount("CONTRACT_CANCELED")).isEqualTo(1);
     }
 
     @Test

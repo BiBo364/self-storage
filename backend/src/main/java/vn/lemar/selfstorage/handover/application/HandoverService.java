@@ -5,6 +5,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,8 @@ import vn.lemar.selfstorage.pricing.application.PricingQuery;
 public class HandoverService {
 
     static final String DUE_DAYS_POLICY = "handover.due_days";
+    /** Sàn cấu hình: 1 ngày (24 giờ), trên mức tối thiểu 2 giờ của nghiệp vụ. */
+    static final int MIN_DUE_DAYS = 1;
 
     private static final Logger LOG = LoggerFactory.getLogger(HandoverService.class);
     private static final List<RentalContractStatus> CANCELABLE_CONTRACTS =
@@ -57,12 +60,13 @@ public class HandoverService {
     }
 
     /**
-     * Flow 2.1: {@code AppointmentArrived} → set {@code due_at = min(now + handover.due_days,
+     * Flow 2.1: {@code AppointmentArrived} → set {@code due_at = min(arrived_at + handover.due_days,
      * RentalOrder.expires_at)}. Idempotent: record không tồn tại (Flow 1 chưa tạo), đã đóng hoặc đã
      * có {@code due_at} thì bỏ qua. Chạy trong transaction của caller.
      */
     @Transactional
-    public void onAppointmentArrived(Long appointmentId) {
+    public void onAppointmentArrived(Long appointmentId, Instant arrivedAt) {
+        Objects.requireNonNull(arrivedAt, "arrivedAt");
         HandoverRecord record = handoverRecords.findByAppointmentIdForUpdate(appointmentId).orElse(null);
         if (record == null) {
             LOG.debug("Không có HandoverRecord cho lịch hẹn {} — bỏ qua due_at", appointmentId);
@@ -71,16 +75,18 @@ public class HandoverService {
         if (record.getResult() != HandoverResult.IN_PROGRESS || record.getDueAt() != null) {
             return;
         }
-        record.setDueAt(dueAt(record));
+        record.setDueAt(dueAt(record, arrivedAt));
     }
 
     /**
-     * Huỷ theo lịch hẹn — chỉ khi record của lịch đang {@code IN_PROGRESS}; record đã đóng thì no-op.
+     * Huỷ theo lịch hẹn. Record {@code IN_PROGRESS} hoặc đã {@code CANCELED} đều chạy cascade để
+     * dọn contract còn sót; {@code COMPLETED}/{@code REJECTED} thì no-op (đã có kết luận khác).
      */
     @Transactional
     public void cancelByAppointmentId(Long appointmentId, String reason) {
         HandoverRecord record = handoverRecords.findByAppointmentIdForUpdate(appointmentId).orElse(null);
-        if (record == null || record.getResult() != HandoverResult.IN_PROGRESS) {
+        if (record == null || record.getResult() == HandoverResult.COMPLETED
+                || record.getResult() == HandoverResult.REJECTED) {
             return;
         }
         cancelOpenForOrder(record.getOrderId(), reason);
@@ -115,8 +121,13 @@ public class HandoverService {
         }
     }
 
-    private Instant dueAt(HandoverRecord record) {
-        Instant dueAt = Instant.now().plus(pricingQuery.intPolicy(DUE_DAYS_POLICY), ChronoUnit.DAYS);
+    private Instant dueAt(HandoverRecord record, Instant arrivedAt) {
+        int dueDays = pricingQuery.intPolicy(DUE_DAYS_POLICY);
+        if (dueDays < MIN_DUE_DAYS) {
+            throw new IllegalStateException("policies." + DUE_DAYS_POLICY + " phải >= " + MIN_DUE_DAYS
+                    + " ngày (24 giờ), nhận " + dueDays);
+        }
+        Instant dueAt = arrivedAt.plus(dueDays, ChronoUnit.DAYS);
         Instant expiresAt = orderQuery.expiresAt(record.getOrderId()).orElse(null);
         return expiresAt != null && expiresAt.isBefore(dueAt) ? expiresAt : dueAt;
     }

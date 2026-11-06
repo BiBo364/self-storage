@@ -23,6 +23,6 @@ class AppointmentArrivedListener {
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     void onAppointmentArrived(AppointmentArrived event) {
-        handoverService.onAppointmentArrived(event.appointmentId());
+        handoverService.onAppointmentArrived(event.appointmentId(), event.arrivedAt());
     }
 }

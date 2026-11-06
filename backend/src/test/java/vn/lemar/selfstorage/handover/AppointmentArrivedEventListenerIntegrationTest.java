@@ -1,6 +1,7 @@
 package vn.lemar.selfstorage.handover;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -50,16 +51,15 @@ class AppointmentArrivedEventListenerIntegrationTest {
         Fixture fixture = fixture();
         seedHandover(fixture);
         loginAs("fs1@lemar.vn");
-        Instant before = Instant.now();
 
         appointmentActions.arrive(fixture.appointmentId());
-        Instant after = Instant.now();
 
+        Instant arrivedAt = jdbc.queryForObject("select arrived_at from appointments where id = ?",
+                Timestamp.class, fixture.appointmentId()).toInstant();
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class,
                 fixture.appointmentId())).isEqualTo("Done");
-        assertThat(dueAt(fixture.appointmentId())).isBetween(
-                before.plus(1, ChronoUnit.DAYS).minusSeconds(2),
-                after.plus(1, ChronoUnit.DAYS).plusSeconds(2));
+        assertThat(dueAt(fixture.appointmentId()))
+                .isCloseTo(arrivedAt.plus(1, ChronoUnit.DAYS), within(1, ChronoUnit.MILLIS));
         assertThat(jdbc.queryForObject("select count(*) from audit_logs where action = 'APPOINTMENT_ARRIVED' "
                 + "and entity_id = ?", Long.class, String.valueOf(fixture.appointmentId()))).isEqualTo(1L);
     }

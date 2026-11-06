@@ -32,17 +32,19 @@ Bảng `rental_contracts` (V1). Entity `handover/domain/RentalContract.java`.
 
 1. FS bấm xác nhận khách đến: `StaffAppointmentActionService.arrive` (booking) chuyển
    `Appointment` `Pending → Done`, ghi `arrived_at`, audit `APPOINTMENT_ARRIVED`, phát
-   `AppointmentArrived`.
+   `AppointmentArrived(appointmentId, arrivedAt)`.
 2. `AppointmentArrivedListener` (handover) chạy `BEFORE_COMMIT`, trong transaction của arrive:
    - tìm record theo `appointment_id` và khoá row;
    - không có record → bỏ qua. Flow 1 tạo record khi đặt lịch; luồng đó chưa có code nên hiện tại
      arrive vẫn chạy mà không set `due_at`;
    - record không `IN_PROGRESS` hoặc đã có `due_at` → bỏ qua;
-   - ngược lại set `due_at = min(now + handover.due_days, RentalOrder.expires_at)`.
+   - ngược lại set `due_at = min(arrived_at + handover.due_days, RentalOrder.expires_at)`.
 3. Công thức:
-   - `handover.due_days = 1`, seed bằng V16, đọc qua `PricingQuery.intPolicy`;
-   - `RentalOrder.expires_at` null → không có trần, `due_at = now + 1 ngày`;
-   - `expires_at` sớm hơn mốc trên → lấy `expires_at`;
+   - `arrived_at` lấy từ chính `Appointment` qua event, không đọc lại đồng hồ ở listener;
+   - `handover.due_days = 1`, seed bằng V16, đọc qua `PricingQuery.intPolicy`; giá trị `< 1`
+     bị từ chối (`IllegalStateException`) để không tạo hạn dưới 24 giờ;
+   - `RentalOrder.expires_at` null → không có trần, `due_at = arrived_at + 1 ngày`;
+   - `expires_at` sớm hơn mốc trên → lấy `expires_at` (trần của đơn luôn thắng, kể cả dưới 2 giờ);
    - `due_at` chỉ set một lần; đổi policy sau đó không hồi tố các phiên đã mở.
 4. Không ghi audit riêng cho `due_at`: `APPOINTMENT_ARRIVED` đã bao thao tác, bản ghi
    `HANDOVER_DUE_SET` không tồn tại trong catalog.
@@ -51,8 +53,9 @@ Bảng `rental_contracts` (V1). Entity `handover/domain/RentalContract.java`.
 
 `handover/application/HandoverService.java`:
 
-- `cancelByAppointmentId(appointmentId, reason)` — record của lịch phải đang `IN_PROGRESS`, sau đó
-  áp luật theo đơn. Record không tồn tại hoặc đã đóng → no-op.
+- `cancelByAppointmentId(appointmentId, reason)` — record `IN_PROGRESS` hoặc đã `CANCELED` thì áp
+  luật theo đơn (record đã `CANCELED` chỉ dọn contract còn sót). Record không tồn tại,
+  `COMPLETED` hoặc `REJECTED` → no-op.
 - `cancelByOrderId(orderId, reason)` — áp luật trực tiếp theo đơn.
 - Một luật duy nhất cho cả hai entry point:
   - record đang mở → `CANCELED`, ghi `reject_reason`;

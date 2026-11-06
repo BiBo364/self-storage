@@ -72,7 +72,7 @@ public class StaffAppointmentActionService {
         auditRecorder.record(new AuditEntry(AuditAction.APPOINTMENT_ARRIVED, AuditEntityType.APPOINTMENT,
                 String.valueOf(appointmentId), Map.of("status", AppointmentStatus.Pending.name()), newValue,
                 null, actorId));
-        events.publishEvent(new AppointmentArrived(appointmentId));
+        events.publishEvent(new AppointmentArrived(appointmentId, appointment.getArrivedAt()));
         return new ActionResult(response(appointmentId), false, false);
     }
 
