@@ -21,7 +21,8 @@ mỗi package con trực tiếp là một module độc lập (`identity`, `book
 Hiện tại `identity` xử lý xác thực/RBAC; `facility` cung cấp public API kiểm tra facility tồn tại,
 catalog cơ sở public và đọc khoang theo cơ sở; `audit` ghi vết thao tác nghiệp vụ nhạy cảm; `media`
 upload file (ảnh/PDF) lên Cloudinary và dọn asset theo batch; `booking` có luồng nội bộ convert
-request đã duyệt thành đơn + proposal ([booking/conversion.md](booking/conversion.md)).
+request đã duyệt thành đơn + proposal ([booking/conversion.md](booking/conversion.md));
+`handover` có data layer bàn giao + listener set `due_at` ([handover/records.md](handover/records.md)).
 
 Layout trong một module:
 
@@ -92,7 +93,7 @@ hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V20__invoice_refund_state.sql`.
+Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V21__invoice_refund_state.sql`.
 V1/V2 có mirror ở `backend/sql/`
 — sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -120,15 +121,16 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
 - V13 thêm `accounts.name`/`accounts.phone` và backfill từ rental request cũ.
 - V14 thêm audit action `APPOINTMENT_ARRIVED` cho FS xác nhận khách đến.
 - V15 đặt `appointments.started_at/end_at` NOT NULL; no-show và notification đọc trực tiếp hai mốc.
-- V16 thêm status `Duplicate` cho `payment_transactions` và audit action `PAYMENT_DUPLICATE`; dùng khi
+- V16 seed `handover.due_days = 1` — hạn hoàn tất bàn giao sau khi khách đến (Flow 2.1).
+- V17 thêm status `Duplicate` cho `payment_transactions` và audit action `PAYMENT_DUPLICATE`; dùng khi
   một nguồn xác nhận Success thứ hai cho cùng invoice — tiền vào nhưng không ghi Success lần hai.
-- V17 thêm partial unique index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'`: DB
+- V18 thêm partial unique index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'`: DB
   chốt cuối cho bất biến một `PAY/Success` mỗi invoice. Migration fail nếu dữ liệu cũ đã vi phạm.
-- V18 cấp `invoice.read` scope `FACILITY` cho FM — xem hoá đơn cơ sở mình phụ trách; ownership của
+- V19 cấp `invoice.read` scope `FACILITY` cho FM — xem hoá đơn cơ sở mình phụ trách; ownership của
   khách vẫn kiểm ở service, không seed thành role permission.
-- V19 thêm `payment_reconciliation_cases` — case Pending quá hạn cho ADMIN, lưu evidence/note/kết quả
+- V20 thêm `payment_reconciliation_cases` — case Pending quá hạn cho ADMIN, lưu evidence/note/kết quả
   reconcile; không đổi trạng thái transaction.
-- V20 thêm `invoices.refund_status/refund_reason/refund_requested_at/refunded_at` — invoice vẫn
+- V21 thêm `invoices.refund_status/refund_reason/refund_requested_at/refunded_at` — invoice vẫn
   `Paid` khi tiền đã vào nhưng khoang không còn giữ được; refund là trục riêng. Audit check giữ đủ
   action của main + B4, gồm `APPOINTMENT_ARRIVED`.
 
@@ -261,6 +263,7 @@ bấm **Authorize** và dán token (không cần prefix `Bearer `) để gọi A
 | [booking/conversion.md](booking/conversion.md) | Convert request → đơn + proposal, claim sau xác minh |
 | [booking/proposal-flow.md](booking/proposal-flow.md) | Đồng ý / từ chối đề xuất khoang, đề xuất lại: sơ đồ, state, invariant |
 | [booking/appointment-no-show.md](booking/appointment-no-show.md) | Cron no-show check-in, guard `noShowDue`, audit/notification |
+| [handover/records.md](handover/records.md) | `HandoverRecord` + `RentalContract`, `due_at` Flow 2.1, luật huỷ |
 | [flows/cancellation-cascade.md](flows/cancellation-cascade.md) | Cascade huỷ đơn: entity, khoang, audit, notification |
 | [routes.md](routes.md) | Index toàn bộ route hiện có |
 | [routes/health.md](routes/health.md) | `GET /api/health` |
