@@ -192,6 +192,50 @@ class HandoverFoundationIntegrationTest {
     }
 
     @Test
+    void policyChangeDoesNotRetroactivelyChangeDueAt() {
+        Fixture first = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
+        seedHandover(first, "IN_PROGRESS", null);
+        Instant beforeFirst = Instant.now();
+
+        handoverService.onAppointmentArrived(first.appointmentId());
+        Instant afterFirst = Instant.now();
+        entityManager.flush();
+        Instant firstDueAt = dueAt(first.appointmentId());
+        assertThat(firstDueAt).isBetween(beforeFirst.plus(1, ChronoUnit.DAYS).minusSeconds(2),
+                afterFirst.plus(1, ChronoUnit.DAYS).plusSeconds(2));
+
+        jdbc.update("update policies set value = '2' where key = 'handover.due_days'");
+
+        handoverService.onAppointmentArrived(first.appointmentId());
+        entityManager.flush();
+        assertThat(dueAt(first.appointmentId())).isEqualTo(firstDueAt);
+
+        Fixture second = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
+        seedHandover(second, "IN_PROGRESS", null);
+        Instant beforeSecond = Instant.now();
+        handoverService.onAppointmentArrived(second.appointmentId());
+        Instant afterSecond = Instant.now();
+        entityManager.flush();
+
+        assertThat(dueAt(second.appointmentId())).isBetween(
+                beforeSecond.plus(2, ChronoUnit.DAYS).minusSeconds(2),
+                afterSecond.plus(2, ChronoUnit.DAYS).plusSeconds(2));
+    }
+
+    @Test
+    void cancelWithoutRecordOrContractIsNoOp() {
+        Fixture fixture = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
+
+        assertThatCode(() -> handoverService.cancelByOrderId(fixture.orderId(), "Chưa hoàn tất bàn giao"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> handoverService.cancelByAppointmentId(fixture.appointmentId(), "Khách không đến"))
+                .doesNotThrowAnyException();
+
+        assertThat(auditCount("HANDOVER_CANCELED")).isZero();
+        assertThat(auditCount("CONTRACT_CANCELED")).isZero();
+    }
+
+    @Test
     void cancelByAppointmentIdCancelsRecordAndContractOnce() {
         Fixture fixture = fixture(Instant.now().plus(30, ChronoUnit.DAYS));
         long recordId = seedHandover(fixture, "IN_PROGRESS", null);
