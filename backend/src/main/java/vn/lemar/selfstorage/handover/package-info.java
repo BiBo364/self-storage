@@ -5,5 +5,6 @@
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Handover (F2)",
-        allowedDependencies = {"booking", "facility", "pricing", "identity", "payment", "notification"})
+        allowedDependencies = {"booking::application", "facility::application", "pricing::application",
+                "identity::application", "payment", "notification::application", "audit::application"})
 package vn.lemar.selfstorage.handover;

@@ -67,6 +67,7 @@ auditRecorder.record(new AuditEntry(AuditAction.RENTAL_ORDER_CANCELED, AuditEnti
 | `booking` | `APPOINTMENT_CANCELED` | `Appointment` | `booking/application/StaffAppointmentActionService.cancel` — FS chủ động huỷ lịch `Pending`; actor = FS |
 | `booking` | `APPOINTMENT_CANCELED_NO_SHOW` | `Appointment` | `booking/application/AppointmentNoShowService.cancelIfDue` — cron no-show (check-in Pending quá `end_at`); actor = System |
 | `booking` | `APPOINTMENT_ARRIVED` | `Appointment` | `booking/application/StaffAppointmentActionService.arrive` — FS xác nhận khách đến, `Pending → Done`; actor = FS |
+| `handover` | `HANDOVER_CANCELED`, `CONTRACT_CANCELED` | `HandoverRecord`, `RentalContract` | `handover/application/HandoverService.cancelByAppointmentId`/`cancelByOrderId` — một bản ghi mỗi entity; actor = System |
 
 ## Xem thêm
 
