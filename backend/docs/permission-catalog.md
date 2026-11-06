@@ -46,7 +46,7 @@ Sắp theo code alphabet.
 | `handover_record.reject` | Từ chối khoang tại chỗ | | | | | own | §2.5 |
 | `handover_record.verify_identity` | Xác minh danh tính | | | | F | | §2.2 |
 | `invoice.pay` | Thanh toán hóa đơn | | | | | own | §1.4 |
-| `invoice.read` | Xem hóa đơn | | | | | own | §1.4 |
+| `invoice.read` | Xem hóa đơn | | | F | | own | §1.4 |
 | `notification.create_other` | Tạo thông báo `OTHER` thủ công | G | G | | | | `POST /api/notifications` |
 | `payment_transaction.refund` | Ghi nhận hoàn tiền thủ công | | | F | | | §2.5 |
 | `proposal_feedback.override` | Override khoang đã bị từ chối (audit) | | | F | | | §1.3 |
@@ -65,8 +65,9 @@ Sắp theo code alphabet.
 Ghi chú:
 
 - `facility.access` là permission tạm để demo guard; Flow 5 sẽ thay bằng permission nghiệp vụ tương ứng.
-- Các dòng chỉ có `own` (`invoice.*`, `appointment.create`, `handover_record.reject`,
-  `proposal_feedback.respond`) không seed — guard ownership ở service.
+- Các dòng chỉ có `own` (`invoice.pay`, `appointment.create`, `handover_record.reject`,
+  `proposal_feedback.respond`) không seed — guard ownership ở service. `invoice.read` có thêm FM
+  scope `FACILITY`; khách vẫn đọc hoá đơn của mình qua ownership.
 
 ## Không thuộc catalog
 

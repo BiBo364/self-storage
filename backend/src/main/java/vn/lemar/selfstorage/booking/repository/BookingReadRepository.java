@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import vn.lemar.selfstorage.booking.application.InvoiceListView;
 import vn.lemar.selfstorage.booking.application.dto.CustomerProposalResponse;
@@ -20,6 +21,23 @@ import vn.lemar.selfstorage.booking.application.dto.FmRentalOrderResponse;
 public class BookingReadRepository {
 
     private static final String EFFECTIVE_PRICE = "coalesce(u.monthly_price, t.monthly_price)";
+
+    /** Projection hoá đơn dùng chung cho danh sách và chi tiết — một hợp đồng, một chỗ sửa. */
+    private static final String INVOICE_SELECT =
+            "select i.id, i.order_id, i.code, i.title, i.description, i.type, i.status, i.amount, "
+                    + "i.created_at, i.due_date, o.unit_id, u.code as unit_code, f.id as facility_id, "
+                    + "f.name as facility_name "
+                    + "from invoices i "
+                    + "left join rental_orders o on o.id = i.order_id "
+                    + "left join storage_units u on u.id = o.unit_id "
+                    + "left join facilities f on f.id = u.facility_id ";
+
+    private static final RowMapper<InvoiceListView> INVOICE_MAPPER = (rs, rowNum) -> new InvoiceListView(
+            rs.getLong("id"), (Long) rs.getObject("order_id"), rs.getString("code"), rs.getString("title"),
+            rs.getString("description"), rs.getString("type"), rs.getString("status"),
+            rs.getBigDecimal("amount"), instant(rs, "created_at"), instant(rs, "due_date"),
+            (Long) rs.getObject("unit_id"), rs.getString("unit_code"), (Long) rs.getObject("facility_id"),
+            rs.getString("facility_name"));
 
     private final JdbcTemplate jdbc;
 
@@ -50,22 +68,72 @@ public class BookingReadRepository {
 
     /** Hoá đơn của một khách, mới nhất trước; join đơn/khoang/cơ sở để FE hiển thị. */
     public List<InvoiceListView> findCustomerInvoices(Long customerId) {
-        String sql = "select i.id, i.order_id, i.code, i.title, i.description, i.type, i.status, i.amount, "
-                + "i.created_at, i.due_date, o.unit_id, u.code as unit_code, f.id as facility_id, "
-                + "f.name as facility_name "
-                + "from invoices i "
-                + "left join rental_orders o on o.id = i.order_id "
-                + "left join storage_units u on u.id = o.unit_id "
-                + "left join facilities f on f.id = u.facility_id "
-                + "where i.customer_id = ? "
-                + "order by i.created_at desc, i.id desc";
-        return jdbc.query(sql, (rs, rowNum) -> new InvoiceListView(
-                rs.getLong("id"), (Long) rs.getObject("order_id"), rs.getString("code"), rs.getString("title"),
-                rs.getString("description"), rs.getString("type"), rs.getString("status"),
-                rs.getBigDecimal("amount"), instant(rs, "created_at"), instant(rs, "due_date"),
-                (Long) rs.getObject("unit_id"), rs.getString("unit_code"), (Long) rs.getObject("facility_id"),
-                rs.getString("facility_name")),
-                customerId);
+        return jdbc.query(INVOICE_SELECT + "where i.customer_id = ? order by i.created_at desc, i.id desc",
+                INVOICE_MAPPER, customerId);
+    }
+
+    /**
+     * Một hoá đơn của khách. Rỗng khi hoá đơn không tồn tại <em>và</em> khi nó thuộc người khác —
+     * hai ca trả về như nhau để không lộ sự tồn tại của hoá đơn.
+     */
+    public Optional<InvoiceListView> findCustomerInvoice(Long customerId, Long invoiceId) {
+        return jdbc.query(INVOICE_SELECT + "where i.customer_id = ? and i.id = ?",
+                INVOICE_MAPPER, customerId, invoiceId).stream().findFirst();
+    }
+
+    private static final String FACILITY_INVOICE_SELECT =
+            "select i.id, i.order_id, i.code, i.title, i.description, i.type, i.status, i.amount, "
+                    + "i.created_at, i.due_date, coalesce(o.unit_id, c.unit_id) as unit_id, "
+                    + "u.code as unit_code, f.id as facility_id, f.name as facility_name, "
+                    + "i.customer_id, a.email as customer_email, "
+                    + "coalesce(r.customer_name, a.email) as customer_name, "
+                    + "p.status as payment_status, p.vnp_txn_ref, p.created_at as payment_created_at, p.paid_at "
+                    + "from invoices i "
+                    + "left join rental_orders o on o.id = i.order_id "
+                    + "left join rental_contracts c on c.id = i.contract_id "
+                    + "left join storage_units u on u.id = coalesce(o.unit_id, c.unit_id) "
+                    + "left join facilities f on f.id = u.facility_id "
+                    + "join accounts a on a.id = i.customer_id "
+                    + "left join rental_requests r on r.id = o.request_id "
+                    + "left join lateral ("
+                    + "  select pt.status, pt.vnp_txn_ref, pt.created_at, pt.paid_at "
+                    + "  from payment_transactions pt where pt.invoice_id = i.id and pt.direction = 'PAY' "
+                    + "  order by pt.created_at desc, pt.id desc limit 1"
+                    + ") p on true ";
+
+    private static final String FACILITY_INVOICE_WHERE =
+            "where f.id = ? "
+                    + "and (cast(? as varchar) is null or i.status = ?) "
+                    + "and (cast(? as varchar) is null or i.type = ?) "
+                    + "and (cast(? as varchar) is null or p.status = ?) "
+                    + "and (cast(? as varchar) is null or "
+                    + "(p.status = 'Pending' and p.created_at <= now() - (cast(? as bigint) * interval '1 minute'))) ";
+
+    /** Một trang hoá đơn của cơ sở, mới nhất trước; join đơn/hợp đồng/khoang/khách/payment. */
+    public List<FacilityInvoiceRow> findFacilityInvoices(Long facilityId, String status, String type,
+                                                         String paymentStatus, Long olderThanMinutes,
+                                                         long offset, int limit) {
+        String sql = FACILITY_INVOICE_SELECT + FACILITY_INVOICE_WHERE
+                + "order by i.created_at desc, i.id desc limit ? offset ?";
+        return jdbc.query(sql, (rs, rowNum) -> new FacilityInvoiceRow(
+                rs.getLong("id"), (Long) rs.getObject("order_id"), rs.getString("code"),
+                rs.getString("title"), rs.getString("description"), rs.getString("type"),
+                rs.getString("status"), rs.getBigDecimal("amount"), instant(rs, "created_at"),
+                instant(rs, "due_date"), (Long) rs.getObject("unit_id"), rs.getString("unit_code"),
+                rs.getLong("facility_id"), rs.getString("facility_name"), rs.getLong("customer_id"),
+                rs.getString("customer_name"), rs.getString("customer_email"),
+                rs.getString("payment_status"), rs.getString("vnp_txn_ref"),
+                instant(rs, "payment_created_at"), instant(rs, "paid_at")),
+                facilityId, status, status, type, type, paymentStatus, paymentStatus,
+                olderThanMinutes, olderThanMinutes, limit, offset);
+    }
+
+    public long countFacilityInvoices(Long facilityId, String status, String type,
+                                      String paymentStatus, Long olderThanMinutes) {
+        String sql = "select count(*) from (" + FACILITY_INVOICE_SELECT + FACILITY_INVOICE_WHERE + ") counted";
+        Long count = jdbc.queryForObject(sql, Long.class, facilityId, status, status, type, type,
+                paymentStatus, paymentStatus, olderThanMinutes, olderThanMinutes);
+        return count == null ? 0 : count;
     }
 
     /** Đơn + thông tin form yêu cầu; rỗng nếu đơn không tồn tại. */
@@ -111,6 +179,15 @@ public class BookingReadRepository {
     private static Instant instant(ResultSet rs, String column) throws SQLException {
         Timestamp value = rs.getTimestamp(column);
         return value == null ? null : value.toInstant();
+    }
+
+    /** Một dòng hoá đơn của cơ sở, kèm giao dịch PAY gần nhất. */
+    public record FacilityInvoiceRow(Long id, Long orderId, String code, String title, String description,
+                                     String type, String status, java.math.BigDecimal amount,
+                                     Instant createdAt, Instant dueDate, Long unitId, String unitCode,
+                                     Long facilityId, String facilityName, Long customerId,
+                                     String customerName, String customerEmail, String paymentStatus,
+                                     String vnpTxnRef, Instant paymentCreatedAt, Instant paidAt) {
     }
 
     /** Một dòng đơn thuê đã join form yêu cầu. */

@@ -75,6 +75,9 @@ public class NotificationTemplateCatalog {
         put(NotificationType.DEPOSIT_PAYMENT_SUCCEEDED, NotificationRecipient.CUSTOMER,
                 "Đặt cọc thành công",
                 "Hệ thống đã nhận tiền cọc cho đơn {{orderCode}}. Vui lòng chọn lịch hẹn check-in.");
+        put(NotificationType.DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED, NotificationRecipient.CUSTOMER,
+                "Đặt cọc bổ sung thành công",
+                "Hệ thống đã nhận cọc bổ sung cho đơn {{orderCode}}. Khoang {{unitCode}} đã được giữ.");
         put(NotificationType.APPOINTMENT_CREATED, NotificationRecipient.CUSTOMER,
                 "Lịch hẹn check-in đã được tạo",
                 "Lịch hẹn của bạn: {{appointmentTime}} tại {{facilityAddress}}. Vui lòng mang theo CCCD/Passport.");
@@ -108,6 +111,22 @@ public class NotificationTemplateCatalog {
         put(NotificationType.DEPOSIT_REFUND_REQUIRED, NotificationRecipient.FM,
                 "Cần hoàn cọc thủ công",
                 "Đơn {{orderCode}} đổi sang khoang có cọc thấp hơn. Số tiền cần hoàn: {{refundAmount}}.");
+        put(NotificationType.PAYMENT_DUPLICATE_REFUND_REQUIRED, NotificationRecipient.FM,
+                "Có thanh toán trùng cần hoàn tiền",
+                "Đơn {{orderCode}} có thêm giao dịch {{vnpTxnRef}} số tiền {{amount}} sau khi đã "
+                        + "thanh toán. Cần hoàn tiền thủ công.");
+        put(NotificationType.PAYMENT_PENDING_REVIEW_REQUIRED, NotificationRecipient.ADMIN,
+                "Có giao dịch Pending cần đối soát",
+                "Giao dịch {{vnpTxnRef}} của hoá đơn {{invoiceId}} số tiền {{amount}} đã Pending "
+                        + "{{pendingAgeMinutes}} phút. Vui lòng tra portal VNPay và đối soát.");
+        put(NotificationType.PAYMENT_REFUND_REQUIRED, NotificationRecipient.FM,
+                "Có khoản cọc cần hoàn thủ công",
+                "Đơn {{orderCode}} đã thu {{amount}} nhưng khoang không còn giữ được. "
+                        + "Cần hoàn tiền thủ công.");
+        put(NotificationType.PAYMENT_REFUND_PENDING, NotificationRecipient.CUSTOMER,
+                "Khoản cọc sẽ được hoàn",
+                "Đơn {{orderCode}} đã thanh toán nhưng khoang không còn giữ được. "
+                        + "Bộ phận vận hành sẽ liên hệ hoàn tiền.");
         put(NotificationType.UNIT_CHANGE_PAYMENT_REQUIRED, NotificationRecipient.CUSTOMER,
                 "Thanh toán để giữ khoang mới",
                 "Đơn {{orderCode}}: cần thanh toán thêm {{amount}} để giữ khoang mới. "

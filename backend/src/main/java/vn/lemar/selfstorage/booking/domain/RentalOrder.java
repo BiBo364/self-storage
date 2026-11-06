@@ -96,6 +96,15 @@ public class RentalOrder {
     }
 
     /** Spec 1.3: {@code RentalOrder.unit_id} = {@code unit_id} của proposal {@code Agreed} mới nhất. */
+    /**
+     * Đã thu cọc (Flow 1.4). Chỉ đổi trạng thái: `expires_at` là hạn hoàn thành đơn,
+     * `db-table-draft.md` › RentalOrder ghi "set một lần khi tạo đơn", và hạn giữ kho là phần
+     * còn lại của chính hạn đó — cọc không gia hạn thêm.
+     */
+    public void markDeposited() {
+        this.status = RentalOrderStatus.DEPOSITED;
+    }
+
     public void assignUnit(Long agreedUnitId) {
         this.unitId = agreedUnitId;
     }

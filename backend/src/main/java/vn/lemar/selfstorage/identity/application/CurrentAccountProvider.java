@@ -32,4 +32,14 @@ public class CurrentAccountProvider {
     public Long getCurrentAccountId() {
         return getCurrentAccount().getId();
     }
+
+    /**
+     * Khách đã xác minh email chưa.
+     *
+     * <p>Từ #151, account chưa xác minh không được cấp {@code ACCOUNT_ACTIVE} nên đã bị chặn ở
+     * tầng filter — method này còn lại như một lớp phòng thủ cho service, không phải cổng chính.
+     */
+    public boolean isCurrentAccountVerified() {
+        return getCurrentAccount().isVerified();
+    }
 }

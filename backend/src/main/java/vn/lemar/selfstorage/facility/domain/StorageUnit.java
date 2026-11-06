@@ -44,6 +44,22 @@ public class StorageUnit {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Đặt cọc thành công: giữ chỗ {@code Available -> Reserved}.
+     *
+     * <p>Trả {@code false} khi khoang đã rời khỏi {@code Available} — khách khác cọc trước, hoặc
+     * khoang chuyển bảo trì trong lúc phiên thanh toán còn mở. Caller phải xử lý ca đó chứ không
+     * được đè trạng thái.
+     */
+    public boolean reserveIfAvailable() {
+        if (status != StorageUnitStatus.AVAILABLE) {
+            return false;
+        }
+        this.status = StorageUnitStatus.RESERVED;
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
     /** Cancellation Cascade: khoang đang giữ cho đơn bị huỷ được giải phóng {@code Reserved -> Available}. */
     public boolean releaseIfReserved() {
         if (status != StorageUnitStatus.RESERVED) {

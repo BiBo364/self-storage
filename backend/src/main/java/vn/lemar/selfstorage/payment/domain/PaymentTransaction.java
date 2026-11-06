@@ -92,6 +92,19 @@ public class PaymentTransaction {
         this.responsePayload = responsePayload;
     }
 
+    /**
+     * Giao dịch thành công thứ hai cho cùng invoice. Giữ dấu vết tiền đã vào nhưng không được
+     * tính là Success thứ hai; trạng thái này chờ hoàn tiền thủ công.
+     */
+    public void markDuplicate(String gatewayTransactionNo, Instant paidAt, String reason,
+            String responsePayload) {
+        this.status = PaymentStatus.DUPLICATE;
+        this.gatewayTransactionNo = gatewayTransactionNo;
+        this.paidAt = paidAt;
+        this.failureReason = reason;
+        this.responsePayload = responsePayload;
+    }
+
     public boolean isPending() {
         return status == PaymentStatus.PENDING;
     }
@@ -110,6 +123,14 @@ public class PaymentTransaction {
 
     public BigDecimal getAmount() {
         return amount;
+    }
+
+    public String getTransactionContent() {
+        return transactionContent;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
     }
 
     public PaymentStatus getStatus() {

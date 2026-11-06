@@ -17,11 +17,19 @@ Thứ tự kiểm, dừng ngay ở bước đầu tiên không đạt:
 3. `vnp_TmnCode` khớp merchant — không khớp → `01`
 4. `vnp_Amount` khớp số tiền (VNPay gửi đã nhân 100) — lệch → `04`
 5. Giao dịch còn `Pending` — không còn → `02`, **không ghi gì thêm**
-6. Ghi `Success`/`Failed`, bắn `PaymentSucceeded`/`PaymentFailed` → `00`
+6. Nếu là Success: khoá invoice; invoice đã có `PAY/Success` khác → transaction chuyển `Duplicate`,
+   audit `PAYMENT_DUPLICATE`, notify FM, trả `02`; không ghi Success lần hai
+7. Ngược lại ghi `Success`/`Failed`, bắn `PaymentSucceeded`/`PaymentFailed` → `00`
 
 **Idempotent theo `vnp_TxnRef`.** Bước 5 là chốt chặn. Row được khoá `PESSIMISTIC_WRITE` khi đọc,
-nên hai IPN đến song song cũng chỉ một lần được ghi nhận — cái còn lại đợi, đọc lại thấy `Success`
-và trả `02`. Unique constraint không thay thế được khoá này vì cả hai cùng update một row.
+nên hai IPN đến song song cùng `vnp_TxnRef` cũng chỉ một lần được ghi nhận — cái còn lại đợi, đọc
+lại thấy `Success`/`Duplicate` và trả `02`. Unique constraint không thay thế được khoá này vì cả
+hai cùng update một row.
+
+**Thanh toán trùng.** Hai transaction khác nhau cùng invoice đều Success: transaction đầu giữ
+`Success`; transaction sau thành `Duplicate`, có audit/notify FM và **không** phát
+`PaymentSucceeded`. IPN của transaction sau vẫn trả `02` để VNPay dừng retry. Tiền thật vẫn phải
+hoàn thủ công; không tự động mở lại invoice/order.
 
 Lỗi ngoài dự kiến trả `99` thay vì HTTP 500, bắt ở controller nên transaction vẫn rollback.
 
@@ -37,9 +45,10 @@ Lỗi ngoài dự kiến trả `99` thay vì HTTP 500, bắt ở controller nên
   định thấy state chưa commit, và exception từ listener sẽ rollback IPN khiến VNPay retry 10 lần.
 - IPN URL khai trong **cấu hình tài khoản merchant** trên portal VNPay, không gửi kèm lúc tạo URL
   thanh toán. Dev local cần tunnel HTTPS — xem [docs/vnpay-sandbox.md](../../../../docs/vnpay-sandbox.md).
-- `vnp_Amount` hiện đối chiếu với `PaymentTransaction.amount`, mà giá trị đó do caller truyền vào
-  lúc `startPayment`. Khi module invoice có entity thật thì phải đọc amount từ invoice trong DB —
-  đã ghi `TODO(invoice)` tại chỗ so sánh.
+- `vnp_Amount` đối chiếu với `PaymentTransaction.amount`; giá trị đó do caller truyền vào lúc
+  `startPayment`. Caller phải đọc amount từ `Invoice` trong DB — luồng đặt cọc làm vậy, xem
+  [invoice-pay.md](../booking/invoice-pay.md). Module `payment` không import `booking` nên không tự
+  đọc lại.
 
 ## Ví dụ
 

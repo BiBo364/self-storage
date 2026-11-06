@@ -18,7 +18,7 @@ import vn.lemar.selfstorage.notification.application.NotificationType;
  * không rollback nghiệp vụ — {@link NotificationService} đã lo việc đó.
  */
 @Component
-class OrderNotifier {
+public class OrderNotifier {
 
     private static final Logger LOG = LoggerFactory.getLogger(OrderNotifier.class);
 
@@ -27,7 +27,7 @@ class OrderNotifier {
     private final AccountQueryService accountQueryService;
     private final NotificationService notificationService;
 
-    OrderNotifier(RentalOrderRepository orderRepository, FacilityAccess facilityAccess,
+    public OrderNotifier(RentalOrderRepository orderRepository, FacilityAccess facilityAccess,
                   AccountQueryService accountQueryService, NotificationService notificationService) {
         this.orderRepository = orderRepository;
         this.facilityAccess = facilityAccess;
@@ -35,18 +35,18 @@ class OrderNotifier {
         this.notificationService = notificationService;
     }
 
-    void notifyCustomer(RentalOrder order, NotificationType type, Map<String, ?> values) {
+    public void notifyCustomer(RentalOrder order, NotificationType type, Map<String, ?> values) {
         notifyCustomer(order.getCustomerId(), order.getId(), type, values);
     }
 
     /** Báo khách của lịch hẹn; {@code orderId} null thì chỉ ghi notification, không nối order. */
-    void notifyCustomer(Long customerId, Long orderId, NotificationType type, Map<String, ?> values) {
+    public void notifyCustomer(Long customerId, Long orderId, NotificationType type, Map<String, ?> values) {
         notificationService.notify(customerId, accountQueryService.requireEmailById(customerId),
                 NotificationRecipient.CUSTOMER, type, values, orderId);
     }
 
     /** FM = {@code facilities.fm_account_id} của cơ sở của đơn; cơ sở chưa gán FM thì chỉ log cảnh báo. */
-    void notifyFacilityManager(Long orderId, NotificationType type, Map<String, ?> values) {
+    public void notifyFacilityManager(Long orderId, NotificationType type, Map<String, ?> values) {
         Long facilityId = orderRepository.findFacilityId(orderId).orElseThrow(RentalOrderNotFoundException::new);
         facilityAccess.managerAccountId(facilityId).ifPresentOrElse(
                 fmId -> notificationService.notify(fmId, accountQueryService.requireEmailById(fmId),

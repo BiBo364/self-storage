@@ -29,8 +29,8 @@ sinh ra từ nhánh FM đề xuất lại sau khi khách từ chối khoang tạ
 
 - Khoang cũ được nhả ngay (`Reserved → Available`, AuditLog `UNIT_CHANGE_RELEASED`); `order.unit_id` đổi
   sang khoang mới.
-- Khoang mới **chưa được reserve** ở bước này — B4 sẽ reserve sau khi khách thanh toán đủ (hoặc follow-up
-  riêng cho trường hợp `delta ≤ 0`).
+- Khoang mới **chưa được reserve** ở bước này — bước thu cọc bổ sung reserve sau khi thanh toán;
+  trường hợp `delta ≤ 0` chưa có bước reserve (follow-up).
 
 ```text
 paidDeposit = tổng Invoice Deposit + DepositSupplement đã Paid của đơn
@@ -42,7 +42,7 @@ delta       = required − paidDeposit
   hạn như hoá đơn cọc thường; khách nhận `UNIT_CHANGE_PAYMENT_REQUIRED` ("thanh toán để giữ khoang mới").
 - `delta < 0`: không tạo hoá đơn; AuditLog `DEPOSIT_REFUND_REQUIRED` + notification
   `DEPOSIT_REFUND_REQUIRED` cho FM, khách nhận `DEPOSIT_REFUND_PENDING`. Việc ghi nhận hoàn tiền thuộc
-  Flow 2/4: trước B4, FM hoàn thủ công; B4 chuyển sang hoàn tự động về thẻ đã liên kết.
+  Flow 2/4: hiện FM hoàn thủ công; hoàn tự động chưa có trong code.
 - `delta = 0`: không tạo gì.
 - Response 200: `invoice = null` khi `delta ≤ 0` (message "Đã cập nhật khoang mới cho đơn thuê"); khi
   `delta > 0` là hoá đơn bổ sung (message "Đã đồng ý khoang. Vui lòng thanh toán hoá đơn đặt cọc").

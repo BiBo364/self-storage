@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.time.Instant;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -84,6 +85,29 @@ class VnPayGatewayTest {
                 new PaymentRequest("TXN001", new BigDecimal("10000"), "Thanh toan don TXN001", "127.0.0.1"));
 
         assertThat(queryOf(url)).containsEntry("vnp_Amount", "1000000");
+    }
+
+    @Test
+    void orderInfoIsAsciiFoldedBeforeSigning() {
+        String url = gateway.buildPaymentUrl(new PaymentRequest(
+                "TXN003", new BigDecimal("500000"), "Đặt cọc khoang chứa A-01", "127.0.0.1"));
+
+        Map<String, String> params = queryOf(url);
+        assertThat(params).containsEntry("vnp_OrderInfo", "Dat coc khoang chua A-01");
+        assertThat(gateway.verifySignature(params)).isTrue();
+    }
+
+    @Test
+    void rebuildingKeepsTheOriginalCreateAndExpireTime() {
+        Instant createdAt = Instant.parse("2026-10-28T12:30:00Z");
+        String url = gateway.buildPaymentUrl(new PaymentRequest(
+                "TXN004", new BigDecimal("10000"), "Thanh toan", "127.0.0.1"), createdAt);
+
+        Map<String, String> params = queryOf(url);
+        assertThat(params)
+                .containsEntry("vnp_CreateDate", "20261028193000")
+                .containsEntry("vnp_ExpireDate", "20261028194500");
+        assertThat(gateway.verifySignature(params)).isTrue();
     }
 
     @Test

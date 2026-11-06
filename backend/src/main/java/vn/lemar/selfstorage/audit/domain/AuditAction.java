@@ -25,8 +25,11 @@ public enum AuditAction {
     PROPOSAL_CANCELED(AuditEntityType.PROPOSAL_FEEDBACK),
     INVOICE_CREATED(AuditEntityType.INVOICE),
     INVOICE_CANCELED(AuditEntityType.INVOICE),
+    /** Tiền đã vào nhưng khoang không còn giữ được — invoice Paid + refund Required. */
+    INVOICE_REFUND_REQUIRED(AuditEntityType.INVOICE),
     PAYMENT_SUCCEEDED(AuditEntityType.PAYMENT_TRANSACTION),
     PAYMENT_FAILED(AuditEntityType.PAYMENT_TRANSACTION),
+    PAYMENT_DUPLICATE(AuditEntityType.PAYMENT_TRANSACTION),
     MANUAL_REFUND_RECORDED(AuditEntityType.PAYMENT_TRANSACTION),
     /** Đổi khoang sau khi cọc dư — FM phải hoàn tiền thủ công (behavior-gap #165). */
     DEPOSIT_REFUND_REQUIRED(AuditEntityType.RENTAL_ORDER),

@@ -17,6 +17,20 @@ public class StorageUnitService {
     }
 
     /**
+     * Đặt cọc thành công (Flow 1.4): giữ chỗ {@code Available -> Reserved}. Khoá row trước khi đọc
+     * nên hai luồng không thể cùng giữ một khoang; khoang đã bị người khác cọc hoặc chuyển bảo trì
+     * thì không đổi gì.
+     *
+     * @return {@code true} nếu khoang thực sự chuyển sang {@code Reserved} — caller ghi AuditLog
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean reserveIfAvailable(Long unitId) {
+        return storageUnitRepository.findByIdForUpdate(unitId)
+                .map(StorageUnit::reserveIfAvailable)
+                .orElse(false);
+    }
+
+    /**
      * Cancellation Cascade: giải phóng khoang {@code Reserved -> Available}. Khoang ở trạng thái khác (chưa
      * cọc nên vẫn {@code Available}, hoặc {@code Maintenance}) giữ nguyên. Chạy trong transaction của caller.
      *
