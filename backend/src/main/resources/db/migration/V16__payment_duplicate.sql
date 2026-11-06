@@ -1,13 +1,10 @@
--- Tiền đã vào nhưng khoang không còn giữ được: invoice vẫn Paid, refund là trục riêng.
-ALTER TABLE invoices
-    ADD COLUMN refund_status VARCHAR(20) NOT NULL DEFAULT 'None',
-    ADD COLUMN refund_reason VARCHAR(50),
-    ADD COLUMN refund_requested_at TIMESTAMPTZ,
-    ADD COLUMN refunded_at TIMESTAMPTZ;
+-- Giao dịch thứ hai thành công cho cùng một invoice: ghi nhận để hoàn tiền thủ công,
+-- không đánh Success lần hai và không phát PaymentSucceeded.
 
-ALTER TABLE invoices
-    ADD CONSTRAINT invoices_refund_status_check
-    CHECK (refund_status IN ('None', 'Required', 'Processing', 'Refunded'));
+ALTER TABLE payment_transactions DROP CONSTRAINT payment_transactions_status_check;
+
+ALTER TABLE payment_transactions ADD CONSTRAINT payment_transactions_status_check
+    CHECK (status IN ('Pending', 'Failed', 'Success', 'Duplicate'));
 
 ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_action_check;
 
@@ -17,13 +14,13 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_check
         'RENTAL_REQUEST_CONVERTED', 'RENTAL_REQUEST_EXPIRED',
         'PROPOSAL_AGREED', 'PROPOSAL_REJECTED', 'PROPOSAL_REPROPOSED', 'PROPOSAL_CREATED',
         'PROPOSAL_CANCELED',
-        'INVOICE_CREATED', 'INVOICE_CANCELED', 'INVOICE_REFUND_REQUIRED',
+        'INVOICE_CREATED', 'INVOICE_CANCELED',
         'PAYMENT_SUCCEEDED', 'PAYMENT_FAILED', 'PAYMENT_DUPLICATE', 'MANUAL_REFUND_RECORDED',
         'DEPOSIT_REFUND_REQUIRED',
         'UNIT_CHANGE_RELEASED',
         'RENTAL_ORDER_DEPOSITED', 'RENTAL_ORDER_CREATED', 'STORAGE_UNIT_RESERVED',
         'APPOINTMENT_CREATED', 'FS_ASSIGNED', 'APPOINTMENT_RESCHEDULED',
-        'APPOINTMENT_CANCELED_NO_SHOW', 'APPOINTMENT_CANCELED',
+        'APPOINTMENT_CANCELED_NO_SHOW', 'APPOINTMENT_CANCELED', 'APPOINTMENT_ARRIVED',
         'IDENTITY_VERIFIED', 'UNIT_INSPECTED', 'HANDOVER_REJECTED',
         'RENTAL_ORDER_CANCELED', 'HANDOVER_COMPLETED',
         'START_DATE_OVERRIDE_REQUESTED', 'START_DATE_OVERRIDE_APPROVED',

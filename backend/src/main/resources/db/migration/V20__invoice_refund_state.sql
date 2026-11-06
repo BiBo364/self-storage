@@ -1,5 +1,13 @@
--- Flow 2.1: FS xác nhận khách đến — thêm action audit cho Appointment Pending -> Done.
--- Giữ đầy đủ action của B4 đã có trong V18 + APPOINTMENT_ARRIVED.
+-- Tiền đã vào nhưng khoang không còn giữ được: invoice vẫn Paid, refund là trục riêng.
+ALTER TABLE invoices
+    ADD COLUMN refund_status VARCHAR(20) NOT NULL DEFAULT 'None',
+    ADD COLUMN refund_reason VARCHAR(50),
+    ADD COLUMN refund_requested_at TIMESTAMPTZ,
+    ADD COLUMN refunded_at TIMESTAMPTZ;
+
+ALTER TABLE invoices
+    ADD CONSTRAINT invoices_refund_status_check
+    CHECK (refund_status IN ('None', 'Required', 'Processing', 'Refunded'));
 
 ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_action_check;
 

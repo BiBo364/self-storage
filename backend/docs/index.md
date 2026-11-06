@@ -92,7 +92,7 @@ hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V20__appointment_times_not_null.sql`.
+Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V20__invoice_refund_state.sql`.
 V1/V2 có mirror ở `backend/sql/`
 — sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -118,18 +118,19 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
 - V12 thêm `media_uploads` — theo dõi upload theo batch, dọn asset chưa attach khi Hủy (chi tiết ở
   [routes/media/delete-batch.md](routes/media/delete-batch.md)).
 - V13 thêm `accounts.name`/`accounts.phone` và backfill từ rental request cũ.
-- V14 thêm status `Duplicate` cho `payment_transactions` và audit action `PAYMENT_DUPLICATE`; dùng khi
+- V14 thêm audit action `APPOINTMENT_ARRIVED` cho FS xác nhận khách đến.
+- V15 đặt `appointments.started_at/end_at` NOT NULL; no-show và notification đọc trực tiếp hai mốc.
+- V16 thêm status `Duplicate` cho `payment_transactions` và audit action `PAYMENT_DUPLICATE`; dùng khi
   một nguồn xác nhận Success thứ hai cho cùng invoice — tiền vào nhưng không ghi Success lần hai.
-- V15 thêm partial unique index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'`: DB
+- V17 thêm partial unique index `(invoice_id) WHERE direction = 'PAY' AND status = 'Success'`: DB
   chốt cuối cho bất biến một `PAY/Success` mỗi invoice. Migration fail nếu dữ liệu cũ đã vi phạm.
-- V16 cấp `invoice.read` scope `FACILITY` cho FM — xem hoá đơn cơ sở mình phụ trách; ownership của
+- V18 cấp `invoice.read` scope `FACILITY` cho FM — xem hoá đơn cơ sở mình phụ trách; ownership của
   khách vẫn kiểm ở service, không seed thành role permission.
-- V17 thêm `payment_reconciliation_cases` — case Pending quá hạn cho ADMIN, lưu evidence/note/kết quả
+- V19 thêm `payment_reconciliation_cases` — case Pending quá hạn cho ADMIN, lưu evidence/note/kết quả
   reconcile; không đổi trạng thái transaction.
-- V18 thêm `invoices.refund_status/refund_reason/refund_requested_at/refunded_at` — invoice vẫn
-  `Paid` khi tiền đã vào nhưng khoang không còn giữ được; refund là trục riêng.
-- V19 thêm audit action `APPOINTMENT_ARRIVED` cho FS xác nhận khách đến; giữ đầy đủ action của B4.
-- V20 đặt `appointments.started_at/end_at` NOT NULL; no-show và notification đọc trực tiếp hai mốc.
+- V20 thêm `invoices.refund_status/refund_reason/refund_requested_at/refunded_at` — invoice vẫn
+  `Paid` khi tiền đã vào nhưng khoang không còn giữ được; refund là trục riêng. Audit check giữ đủ
+  action của main + B4, gồm `APPOINTMENT_ARRIVED`.
 
 Các migration khác trên main: V5 seed `order.expiry_days` (luồng convert), V6 bỏ `Expired` khỏi CHECK
 `rental_orders.status` (quá hạn cũng là `Canceled` + `cancel_reason`), V7 thêm 4 action convert vào

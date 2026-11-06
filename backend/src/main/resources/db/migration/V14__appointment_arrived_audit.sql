@@ -1,10 +1,5 @@
--- Giao dịch thứ hai thành công cho cùng một invoice: ghi nhận để hoàn tiền thủ công,
--- không đánh Success lần hai và không phát PaymentSucceeded.
-
-ALTER TABLE payment_transactions DROP CONSTRAINT payment_transactions_status_check;
-
-ALTER TABLE payment_transactions ADD CONSTRAINT payment_transactions_status_check
-    CHECK (status IN ('Pending', 'Failed', 'Success', 'Duplicate'));
+-- Flow 2.1: FS xác nhận khách đến — thêm action audit cho Appointment Pending -> Done.
+-- Copy check constraint hiện tại (V10) + APPOINTMENT_ARRIVED.
 
 ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_action_check;
 
@@ -15,12 +10,12 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_check
         'PROPOSAL_AGREED', 'PROPOSAL_REJECTED', 'PROPOSAL_REPROPOSED', 'PROPOSAL_CREATED',
         'PROPOSAL_CANCELED',
         'INVOICE_CREATED', 'INVOICE_CANCELED',
-        'PAYMENT_SUCCEEDED', 'PAYMENT_FAILED', 'PAYMENT_DUPLICATE', 'MANUAL_REFUND_RECORDED',
+        'PAYMENT_SUCCEEDED', 'PAYMENT_FAILED', 'MANUAL_REFUND_RECORDED',
         'DEPOSIT_REFUND_REQUIRED',
         'UNIT_CHANGE_RELEASED',
         'RENTAL_ORDER_DEPOSITED', 'RENTAL_ORDER_CREATED', 'STORAGE_UNIT_RESERVED',
         'APPOINTMENT_CREATED', 'FS_ASSIGNED', 'APPOINTMENT_RESCHEDULED',
-        'APPOINTMENT_CANCELED_NO_SHOW', 'APPOINTMENT_CANCELED',
+        'APPOINTMENT_CANCELED_NO_SHOW', 'APPOINTMENT_CANCELED', 'APPOINTMENT_ARRIVED',
         'IDENTITY_VERIFIED', 'UNIT_INSPECTED', 'HANDOVER_REJECTED',
         'RENTAL_ORDER_CANCELED', 'HANDOVER_COMPLETED',
         'START_DATE_OVERRIDE_REQUESTED', 'START_DATE_OVERRIDE_APPROVED',
