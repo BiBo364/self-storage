@@ -13,15 +13,17 @@ purpose: Khách — xem phiên bàn giao, đồng ý / từ chối khoang, xác 
 |---|---|---|---|
 | GET | `/api/customer/handovers` | — | Phiên của tôi — đang mở trước |
 | GET | `/api/customer/handovers/{id}` | — | `HandoverView` (hợp đồng, hoá đơn tháng đầu, khoá đã cấp, loại truy cập cơ sở bật) |
-| POST | `/api/customer/handovers/{id}/agree` | `{note?}` (tuỳ chọn) | Hiện trạng `Agreed`, sinh hợp đồng `Draft` |
+| POST | `/api/customer/handovers/{id}/agree` | `{note?}` (tuỳ chọn, ≤ 1000 ký tự) | Hiện trạng `Agreed`, sinh hợp đồng `Draft`; FS chưa ghi hiện trạng (ghi chú hoặc ảnh) → 409, FE chờ FS ghi |
 | POST | `/api/customer/handovers/{id}/reject` | `{reason, confirmCancel?}` | Từ chối khoang; chạm ngưỡng mà chưa xác nhận → `requiresConfirmation=true`, không ghi gì |
 | POST | `/api/customer/handovers/{id}/confirm` | `{accessType}` = `AccessCode` \| `PhysicalKey` \| `Both` | `AccessCode` → chốt ngay, `data.accessCode` (hiện một lần); còn lại → chờ FS giao chìa |
-| POST | `/api/customer/contracts/{contractId}/access-code` | — | Thu hồi mã cũ, cấp mã mới (`data.accessCode`) — hợp đồng `Active`, cơ sở bật mã số |
+| POST | `/api/customer/contracts/{contractId}/access-code` | — | Thu hồi mã cũ, cấp mã mới (`data.accessCode`) — hợp đồng `Active`, cơ sở bật mã số, không đang tạm khoá truy cập do quá hạn (409) |
 
 Lỗi 409 thường gặp:
 - xác nhận khi hoá đơn tháng đầu chưa `Paid`;
 - từ chối sau khi đã ký ("chỉ còn lựa chọn huỷ đơn");
-- xác nhận lần hai.
+- xác nhận lần hai;
+- đồng ý hiện trạng khi FS chưa ghi hiện trạng;
+- lấy mã khi quyền truy cập đang tạm khoá do quá hạn kéo dài.
 
 Lỗi 400:
 - `accessType` sai;

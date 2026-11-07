@@ -60,5 +60,8 @@ flowchart TB
 
 - `booking` không gọi `handover` trực tiếp (ModuleStructureTest chặn) — phần biên bản/hợp đồng đi qua event
   `RentalOrderCanceled` (bước 7).
-- Hoàn cọc theo `cancel_reason` thuộc Flow 4; cascade chỉ dừng ở notification + audit.
-- Cron chờ phiên thanh toán đang mở (giao dịch `Pending` < 15') đóng xong mới huỷ đơn / hết hạn hoá đơn.
+- Cascade không hoàn cọc; hoàn tiền (nếu có) do FM chuyển khoản thủ công ngoài hệ thống rồi ghi nhận qua
+  `POST /api/fm/invoices/{invoiceId}/refunds` ([payment.md › Hoàn tiền thủ công](../payment.md#hoàn-tiền-thủ-công)) —
+  cascade chỉ dừng ở notification + audit.
+- Cron chờ phiên thanh toán đang mở (giao dịch `Pending` chưa được cổng xác nhận đóng, tạo trong 24 giờ gần nhất —
+  [payment.md › Khoá phiên](../payment.md#khoá-phiên--huỷ-phiên)) đóng xong mới huỷ đơn / hết hạn hoá đơn.

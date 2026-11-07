@@ -156,8 +156,9 @@ class PostRentalControllerTest {
     }
 
     private static ReturnRequestView returnView(String status) {
+        // ReturnRequestView thêm appointmentArrivedAt (overdue dừng tính phí ở buổi trả kho khách đến) — null ở đây.
         return new ReturnRequestView(3L, 7L, "A-01", 1L, LocalDate.now(), null, status, null, null, null, null,
-                Instant.now());
+                Instant.now(), null);
     }
 
     private static CheckoutView checkoutView() {

@@ -114,6 +114,23 @@ class BackofficeControllerTest {
     }
 
     @Test
+    void managerHoldsPostReturnMaintenance() throws Exception {
+        login("fm@x.vn", "FM", 2L);
+        when(backoffice.holdMaintenance(9L)).thenReturn(new UnitRow(9L, "A-9", 1L, 1L, "Maintenance", null, null));
+        when(backoffice.holdMaintenance(10L))
+                .thenThrow(new IllegalStateException("Chỉ giữ bảo trì được cho khoang đang bảo trì sau trả kho"));
+
+        mockMvc.perform(as(post("/api/fm/storage-units/9/maintenance-hold"), "fm@x.vn"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("Maintenance"));
+        mockMvc.perform(as(post("/api/fm/storage-units/10/maintenance-hold"), "fm@x.vn"))
+                .andExpect(status().isConflict());
+        login("fs@x.vn", "FS", 3L);
+        mockMvc.perform(as(post("/api/fm/storage-units/9/maintenance-hold"), "fs@x.vn"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void bomRoutes() throws Exception {
         login("bom@x.vn", "BOM", 3L);
         when(backoffice.listFacilities()).thenReturn(List.of(facility()));

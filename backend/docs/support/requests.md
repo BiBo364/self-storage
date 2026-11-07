@@ -3,7 +3,8 @@ purpose: Yêu cầu hỗ trợ / sự cố (Flow 7) as-built — khách gửi, F
 ---
 # Yêu cầu hỗ trợ / sự cố
 
-Spec Flow 7 chỉ có tiêu đề; đây là thiết kế đã code trên nhánh full-demo. Code:
+Spec Flow 7 chỉ có tiêu đề; trang này là hành vi as-built và là contract của các route hỗ trợ (không có file riêng
+trong `routes/`; field chi tiết ở Swagger trên `SupportController`). Code:
 `support/application/SupportService.java`, `support/controller/SupportController.java`, bảng `support_requests` (V21).
 
 ## Trạng thái
@@ -23,9 +24,14 @@ Loại: `LOST_KEY`, `ACCESS_CODE`, `UNIT_ISSUE`, `BILLING`, `OTHER`.
 
 Áp dụng khi yêu cầu gắn hợp đồng `Active`. Thứ tự khoá: đơn → hợp đồng → yêu cầu.
 
-- **Thay chìa:** `newKeyQuantity` (1–10) → chìa đang `Active` chuyển `Lost`, cấp bộ chìa mới
+- **Thay chìa:** `newKeyQuantity` nhận 0–10; `0` hoặc bỏ trống = không thay chìa, `1–10` → chìa đang `Active` chuyển
+  `Lost`, cấp bộ chìa mới
   (`RentalContractService.replacePhysicalKey`). Audit `ACCESS_KEY_REVOKED` + `ACCESS_KEY_ISSUED`.
-- **Thu phí:** `feeAmount` > 0 → hoá đơn `Service`:
+- **Thu phí:** phí > 0 → hoá đơn `Service`:
+  - phí = `feeAmount` nếu có nhập (kể cả `0` = không thu);
+  - bỏ trống `feeAmount` + yêu cầu `LOST_KEY` + có thay chìa → phí mặc định = `fee.lost_key × quantity` của bộ chìa
+    `Active` bị thay (đọc trước khi bộ cũ chuyển `Lost`; không có bộ chìa đang dùng → 0, không thu);
+  - loại yêu cầu khác không có phí tự động;
   - mã `INV-SVC-{facility}-…`, gắn hợp đồng, hạn 7 ngày;
   - khách thanh toán qua `/api/invoices/{id}/pay`;
   - khi trả kho mà hoá đơn chưa trả thì được gộp vào quyết toán.
@@ -33,15 +39,19 @@ Loại: `LOST_KEY`, `ACCESS_CODE`, `UNIT_ISSUE`, `BILLING`, `OTHER`.
 
 ## Route
 
-| Method | Path | Quyền |
-|---|---|---|
-| GET / POST | `/api/customer/support-requests` | role `CUSTOMER` |
-| POST | `/api/customer/support-requests/{id}/cancel` | role `CUSTOMER`, chủ yêu cầu |
-| GET | `/api/fm/support-requests?facilityId=&includeClosed=` | role `FM`, `rental_order.read` + facility scope |
-| POST | `/api/fm/support-requests/{id}/assign` `{staffId}` | role `FM`, `appointment.assign` + facility scope |
-| POST | `/api/fm/support-requests/{id}/resolve` | role `FM`, `appointment.assign` + facility scope |
-| GET | `/api/staff/support-requests` | role `FS` — yêu cầu `Assigned` giao cho mình |
-| POST | `/api/staff/support-requests/{id}/resolve` `{resolution, newKeyQuantity?, feeAmount?}` | role `FS`, đúng FS + `unit_access_key.issue` |
+Bearer token + `ACCOUNT_ACTIVE`; prefix quyết role (`/api/customer/**` → `CUSTOMER`, `/api/fm/**` → `FM`,
+`/api/staff/**` → `FS`, sai role → 403). Lỗi nghiệp vụ trả `{message, timestamp}` qua `TenancyExceptionHandler`.
+
+| Method | Path | Ai gọi | Lỗi chính |
+|---|---|---|---|
+| GET | `/api/customer/support-requests` | khách — yêu cầu của mình, mới nhất trước | — |
+| POST | `/api/customer/support-requests` `{contractId?, facilityId?, category, title, description, photos?}` | khách | 400 thiếu/quá dài `title` (255) / `description` (4000), `category` sai, > 10 ảnh, không chọn hợp đồng lẫn cơ sở hợp lệ, `LOST_KEY` không gắn hợp đồng; 404 hợp đồng không phải của khách |
+| POST | `/api/customer/support-requests/{id}/cancel` | khách chủ yêu cầu | 404 (không có / của khách khác); 409 "Yêu cầu hỗ trợ đã đóng" |
+| GET | `/api/fm/support-requests?facilityId=&includeClosed=` | FM có `rental_order.read` tại cơ sở; mặc định chỉ `Open`/`Assigned` | 403 thiếu quyền / ngoài cơ sở |
+| POST | `/api/fm/support-requests/{id}/assign` `{staffId}` | FM có `appointment.assign` tại cơ sở của yêu cầu | 400 FS không thuộc cơ sở / không hoạt động; 403; 404; 409 đã đóng |
+| POST | `/api/fm/support-requests/{id}/resolve` `{resolution, newKeyQuantity?, feeAmount?}` | FM có `appointment.assign` tại cơ sở | như route FS bên dưới |
+| GET | `/api/staff/support-requests` | FS — yêu cầu `Assigned` giao cho mình | — |
+| POST | `/api/staff/support-requests/{id}/resolve` `{resolution, newKeyQuantity?, feeAmount?}` | FS được giao, có `unit_access_key.issue` tại cơ sở (người khác phải có `appointment.assign`) | 400 thiếu/quá dài `resolution` (2000), `newKeyQuantity` ngoài 0–10, `feeAmount` âm; 403; 404; 409 đã đóng, thay chìa / thu phí khi yêu cầu không gắn hợp đồng hoặc hợp đồng không `Active` |
 
 ## Test
 

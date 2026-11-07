@@ -30,6 +30,7 @@ import vn.lemar.selfstorage.backoffice.application.BackofficeService.Report;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.FacilityRow;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.UnitRow;
+import vn.lemar.selfstorage.facility.application.StorageUnitListQuery;
 import vn.lemar.selfstorage.identity.application.AccountAdminService;
 import vn.lemar.selfstorage.identity.application.AccountAdminService.AccountRow;
 import vn.lemar.selfstorage.identity.application.AuthService;
@@ -73,6 +74,8 @@ class SupportBackofficeIntegrationTest {
     private AccountAdminService accounts;
     @Autowired
     private AuthService authService;
+    @Autowired
+    private StorageUnitListQuery unitList;
     @Autowired
     private JdbcTemplate jdbc;
 
@@ -145,6 +148,40 @@ class SupportBackofficeIntegrationTest {
     }
 
     @Test
+    void lostKeyReplacementChargesDefaultFeePerLostKeyUnlessAmountGiven() {
+        BigDecimal perKey = new BigDecimal(jdbc.queryForObject("select value from policies where key = 'fee.lost_key'",
+                String.class));
+        long contractId = seedActiveContract();
+        SupportView first = support.create(customerId, new CreateInput(contractId, null, "LOST_KEY", "Mất chìa",
+                "Rơi cả bộ chìa", null));
+        loginAs(FM);
+        support.assign(first.id(), fsId);
+        loginAs(FS);
+        // Không nhập phí: mặc định fee.lost_key × 2 chìa của bộ cũ (bộ cũ chuyển Lost).
+        SupportView charged = support.resolve(first.id(), new ResolveInput("Thay khoá, giao 3 chìa mới", 3, null));
+        assertThat(charged.feeInvoice()).isNotNull();
+        assertThat(charged.feeInvoice().amount()).isEqualByComparingTo(perKey.multiply(BigDecimal.valueOf(2)));
+        assertThat(charged.feeInvoice().code()).startsWith("INV-SVC-Q7-");
+
+        // Nhập phí rõ ràng (kể cả 0) thì dùng đúng số đó: bộ hiện tại 3 chìa nhưng phí 0 → không lập hoá đơn.
+        SupportView second = support.create(customerId, new CreateInput(contractId, null, "LOST_KEY", "Mất chìa",
+                "Lại rơi chìa", null));
+        loginAs(FM);
+        support.assign(second.id(), fsId);
+        loginAs(FS);
+        assertThat(support.resolve(second.id(), new ResolveInput("Miễn phí lần này", 1, BigDecimal.ZERO))
+                .feeInvoice()).isNull();
+
+        // Không phải LOST_KEY: thay chìa không tự thu phí.
+        SupportView issue = support.create(customerId, new CreateInput(contractId, null, "UNIT_ISSUE", "Khoá kẹt",
+                "Ổ khoá kẹt", null));
+        loginAs(FM);
+        assertThat(support.resolve(issue.id(), new ResolveInput("Thay ổ khoá", 2, null)).feeInvoice()).isNull();
+        assertThat(count("select count(*) from invoices where contract_id = ? and type = 'Service'", contractId))
+                .isEqualTo(1);
+    }
+
+    @Test
     void customerCancelsAndManagerResolvesWithoutContract() {
         SupportView open = support.create(customerId, new CreateInput(null, facilityId, "OTHER", "Hỏi giờ mở cửa",
                 "Cuối tuần mở cửa không?", null));
@@ -197,6 +234,36 @@ class SupportBackofficeIntegrationTest {
         assertThat(report.totalRevenue()).isPositive();
         assertThatThrownBy(() -> backoffice.facilityReport(facilityId, LocalDate.now(), LocalDate.now().minusDays(1)))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void managerHoldsPostReturnMaintenanceSoCronDoesNotReopen() {
+        loginAs(FM);
+        long smallType = id("select id from unit_types where name = 'Small'");
+        UnitRow unit = backoffice.createUnit(facilityId, "MH-" + SEQ.incrementAndGet() + "-" + System.nanoTime()
+                % 100000, smallType, null);
+        // Khoang Available: không có bảo trì sau trả kho để giữ.
+        assertThatThrownBy(() -> backoffice.holdMaintenance(unit.id())).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> backoffice.holdMaintenance(-1L)).isInstanceOf(IllegalArgumentException.class);
+
+        jdbc.update("update storage_units set status = 'Maintenance', maintenance_started_at = now() - interval "
+                + "'1 day' where id = ?", unit.id());
+        assertThat(unitList.listByFacility(facilityId, "Maintenance", null))
+                .filteredOn(u -> u.id().equals(unit.id()))
+                .singleElement().satisfies(u -> assertThat(u.maintenanceStartedAt()).isNotNull());
+
+        UnitRow held = backoffice.holdMaintenance(unit.id());
+        assertThat(held.status()).isEqualTo("Maintenance");
+        assertThat(held.maintenanceStartedAt()).isNull();
+        assertThat(unitList.listByFacility(facilityId, "Maintenance", null))
+                .filteredOn(u -> u.id().equals(unit.id()))
+                .singleElement().satisfies(u -> assertThat(u.maintenanceStartedAt()).isNull());
+        assertThat(count("select count(*) from audit_logs where entity_type = 'StorageUnit' and entity_id = ? "
+                + "and action = 'STORAGE_UNIT_MAINTENANCE' and new_value ->> 'reason' = 'FM giữ bảo trì'",
+                String.valueOf(unit.id()))).isEqualTo(1);
+        // Đã là bảo trì thủ công: giữ lần nữa → 409; FM mở lại tay vẫn được.
+        assertThatThrownBy(() -> backoffice.holdMaintenance(unit.id())).isInstanceOf(IllegalStateException.class);
+        assertThat(backoffice.setMaintenance(unit.id(), false).status()).isEqualTo("Available");
     }
 
     // ------------------------------------------------------------------ BOM

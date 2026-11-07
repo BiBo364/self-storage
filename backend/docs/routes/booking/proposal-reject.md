@@ -26,7 +26,9 @@ Khách bấm "Từ chối" trên một proposal `Pending`, body `{ "note": "..."
 
 ## Ghi chú nghiệp vụ
 
-- Cascade chưa xử lý `RentalContract`, `HandoverRecord`, `Appointment` và hoàn cọc (Flow 2 chưa có code).
+- Cascade đủ bước (lịch hẹn, biên bản bàn giao, hợp đồng, phiên cổng) xem
+  [cancellation-cascade.md](../../flows/cancellation-cascade.md). Hệ thống không hoàn cọc tự động; huỷ do quá ngưỡng
+  từ chối thì cọc không được hoàn.
 
 ## Ví dụ
 

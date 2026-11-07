@@ -26,9 +26,12 @@ flowchart LR
   lưu ở `policies` (`appointment.daily_slot_count = 3` chỉ để BOM đọc).
 - "Lúc cọc" = `paid_at` sớm nhất của giao dịch `Success` thuộc hoá đơn `Deposit` `Paid` của đơn (đọc qua
   `PaymentService.firstPaidAt`). Không xác định được → 409 "Chưa xác định được mốc đặt cọc của đơn…".
-- Quá `lúc cọc + appointment.booking_window_days` (7) → 409 "Đã quá hạn đặt lịch check-in".
-- `minDate` = hôm nay; `maxDate` = `min(lúc cọc + appointment.max_days_after_deposit (14), ngày của expires_at)`;
-  `maxDate < minDate` → 409 "Không còn khung giờ trước hạn giữ kho…".
+- **Lần đặt đầu tiên:** quá `lúc cọc + appointment.booking_window_days` (7) → 409 "Đã quá hạn đặt lịch check-in";
+  `maxDate = min(lúc cọc + appointment.max_days_after_deposit (14), ngày của expires_at)`.
+- **Đặt lại** — đơn đã có lịch `CHECKIN` `Canceled` (no-show, FS huỷ lịch, phiên bàn giao quá hạn đưa đơn về
+  `Deposited`; `AppointmentRepository.existsCanceledCheckinByOrderId`): **bỏ** kiểm `booking_window_days`;
+  `maxDate` = ngày của `expires_at`. Khách đặt lại được chừng nào đơn còn trong hạn giữ.
+- `minDate` = hôm nay; `maxDate < minDate` → 409 "Không còn khung giờ trước hạn giữ kho…".
 - Khung `available = false` khi: đã qua giờ bắt đầu, kết thúc sau `RentalOrder.expires_at`, hoặc cơ sở đã có lịch
   `CHECKIN` chưa huỷ (`Pending`/`Done`) cùng giờ bắt đầu.
 
@@ -56,7 +59,14 @@ Ghi nhận khi tạo: `Appointment(CHECKIN, Pending, staff_id = null)` + dòng `
 - **HandoverRecord sinh cùng transaction:** booking phát `CheckinAppointmentCreated(appointmentId, orderId, unitId)`;
   handover nghe `BEFORE_COMMIT`, idempotent theo `appointment_id`. Insert lỗi (vd đơn đã có record đang mở —
   partial unique index) rollback cả lịch hẹn.
-- Không reschedule ở MVP. Lịch no-show bị cron huỷ và đơn về `Deposited` thì khách đặt lịch mới theo cùng luật.
+- **Không đổi lịch:** khách không đổi được lịch check-in `Pending` — không có API đổi lịch và policy
+  `appointment.checkin_reschedule_enabled` không được seed. Lịch bị huỷ (no-show, FS huỷ, quá hạn bàn giao) và đơn về
+  `Deposited` thì khách đặt lịch mới theo luật "đặt lại" ở trên.
+- **`AppointmentBookingService.bookable(orderId)`** chạy cùng kiểm tra cửa sổ như lúc đặt (trạng thái, chờ đề xuất
+  lại, mốc cọc, cửa sổ ngày) và trả `true`/`false` thay vì 409. Dùng để quyết định hiện hành động `BOOK_CHECKIN`
+  trên đơn ([rental-orders-mine.md](../routes/booking/rental-orders-mine.md)) và trả `bookCheckinOrderId` sau khi trả
+  cọc ([invoice-payment-check.md](../routes/booking/invoice-payment-check.md)) — không hiện nút cho thao tác chắc
+  chắn bị 409.
 - Ba khung cố định dùng chung với lịch `RETURN` (trả kho): một khung đã có lịch check-in **hoặc** trả kho còn hiệu
   lực tại cơ sở thì không đặt được nữa (`AppointmentRepository.findTakenSlotStarts`).
 - Lịch check-in bị huỷ khi khách chưa đến (cron no-show, hoặc FS huỷ lịch): booking khoá đơn → khoá lịch, phát

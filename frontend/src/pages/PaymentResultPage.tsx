@@ -97,10 +97,16 @@ export function PaymentResultPage({ navigate }: { navigate: Navigate }) {
     );
   }
 
+  const bookOrderId = outcome === "success" ? (check?.bookCheckinOrderId ?? null) : null;
   const links = (
     <div className="mt-6 flex flex-wrap justify-center gap-2.5">
+      {bookOrderId !== null && (
+        <Button onClick={() => navigate(`/appointments/new?orderId=${bookOrderId}`)}>
+          Đặt lịch nhận kho <ArrowRight size={16} />
+        </Button>
+      )}
       <Button
-        variant={outcome === "success" ? "primary" : "secondary"}
+        variant={outcome === "success" && bookOrderId === null ? "primary" : "secondary"}
         onClick={() => navigate("/my-storage")}
       >
         Về Kho của tôi <ArrowRight size={16} />
@@ -160,7 +166,7 @@ export function PaymentResultPage({ navigate }: { navigate: Navigate }) {
           {outcome === "success"
             ? "Thanh toán thành công."
             : outcome === "failed"
-              ? "Thanh toán chưa thành công."
+              ? "Thanh toán thất bại, vui lòng thử lại!"
               : "Đang chờ cổng thanh toán xác nhận."}
         </h1>
         <p className="mx-auto mt-2 max-w-[430px] text-small leading-relaxed text-muted">

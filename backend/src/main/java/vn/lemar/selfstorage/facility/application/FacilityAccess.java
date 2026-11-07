@@ -20,6 +20,12 @@ public class FacilityAccess {
         return facilityAccessRepository.isManagedBy(accountId, facilityId);
     }
 
+    /** Cơ sở ngừng hoạt động — không nhận yêu cầu thuê mới (catalog public cũng ẩn cơ sở này). */
+    @Transactional(readOnly = true)
+    public boolean isInactive(Long facilityId) {
+        return facilityAccessRepository.isInactive(facilityId);
+    }
+
     @Transactional(readOnly = true)
     public boolean exists(Long facilityId) {
         return facilityAccessRepository.exists(facilityId);

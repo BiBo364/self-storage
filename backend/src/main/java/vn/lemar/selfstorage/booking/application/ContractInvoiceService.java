@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +38,17 @@ public class ContractInvoiceService {
 
     /** Tiền tố mã hoá đơn phí quá hạn — phân biệt với phạt trả kho trong cùng {@code type = Penalty}. */
     public static final String OVERDUE_KIND = "OVD";
+    /** Mã hoá đơn quyết toán trả kho: hoá đơn chưa trả gộp vào quyết toán (phần đối trừ cọc) và phần còn thiếu. */
+    public static final String SETTLEMENT_KIND = "PEN";
+    /** Phí vệ sinh khi trả kho. */
+    public static final String CLEANING_KIND = "CLN";
+    /** Phí hư hỏng khi trả kho. */
+    public static final String DAMAGE_KIND = "DMG";
+    /** Phí mất chìa khi trả kho. */
+    public static final String LOST_KEY_KIND = "KEY";
+    /** Mọi tiền tố mã hoá đơn quyết toán trả kho — có một hoá đơn chưa huỷ mang mã này = đã chốt trả kho. */
+    public static final Set<String> SETTLEMENT_KINDS =
+            Set.of(CLEANING_KIND, DAMAGE_KIND, LOST_KEY_KIND, SETTLEMENT_KIND);
 
     private final InvoiceRepository invoiceRepository;
     private final RentalOrderRepository orderRepository;
@@ -118,7 +130,13 @@ public class ContractInvoiceService {
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<ContractBill> syncOverdueFee(Long orderId, Long contractId, Long customerId, BigDecimal accrued,
                                                  long days, Instant dueDate) {
-        List<Invoice> overdue = invoiceRepository.findByContractIdOrderByIdDesc(contractId).stream()
+        List<Invoice> all = invoiceRepository.findByContractIdOrderByIdDesc(contractId);
+        // Đã chốt quyết toán trả kho (có hoá đơn INV-CLN/DMG/KEY/PEN): phí quá hạn đã gộp vào quyết toán — không
+        // phát hành lại.
+        if (all.stream().anyMatch(i -> isSettlementCode(i.getCode()) && i.getStatus() != InvoiceStatus.CANCELED)) {
+            return Optional.empty();
+        }
+        List<Invoice> overdue = all.stream()
                 .filter(i -> i.getType() == InvoiceType.PENALTY && i.getCode().startsWith("INV-" + OVERDUE_KIND))
                 .toList();
         BigDecimal paid = overdue.stream().filter(i -> i.getStatus() == InvoiceStatus.PAID)
@@ -184,11 +202,23 @@ public class ContractInvoiceService {
         return total;
     }
 
-    /** Hoá đơn quyết toán trả kho phần đã đối trừ tiền cọc → {@code Paid} ngay (không qua cổng). */
+    /** Mã hoá đơn thuộc quyết toán trả kho ({@code INV-<CLN|DMG|KEY|PEN>-…}). */
+    public static boolean isSettlementCode(String code) {
+        return code != null && SETTLEMENT_KINDS.stream().anyMatch(kind -> code.startsWith("INV-" + kind + "-"));
+    }
+
+    /**
+     * Hoá đơn quyết toán trả kho phần đã đối trừ tiền cọc → {@code Paid} ngay (không qua cổng).
+     *
+     * @param kind một trong {@link #SETTLEMENT_KINDS} — mỗi loại phí một hoá đơn
+     */
     @Transactional(propagation = Propagation.MANDATORY)
-    public ContractBill settleByDeposit(Long orderId, Long contractId, Long customerId, BigDecimal amount,
-                                        String title, Long actorAccountId) {
-        ContractBill issued = issue(orderId, contractId, customerId, InvoiceType.PENALTY.dbValue(), "PEN", title,
+    public ContractBill settleByDeposit(Long orderId, Long contractId, Long customerId, String kind,
+                                        BigDecimal amount, String title, Long actorAccountId) {
+        if (!SETTLEMENT_KINDS.contains(kind)) {
+            throw new IllegalArgumentException("Loại hoá đơn quyết toán không hợp lệ: " + kind);
+        }
+        ContractBill issued = issue(orderId, contractId, customerId, InvoiceType.PENALTY.dbValue(), kind, title,
                 "Đối trừ vào tiền cọc khi trả kho.", amount, Instant.now(), actorAccountId);
         Invoice invoice = invoiceRepository.findByIdForUpdate(issued.invoiceId()).orElseThrow();
         invoice.markPaid();

@@ -3,7 +3,10 @@ purpose: Back-office as-built — FM quản lý khoang / xem hoá đơn, hợp �
 ---
 # Back-office (Flow 4, Flow 5, quản trị hệ thống)
 
-Spec Flow 4/5 chỉ có tiêu đề; đây là thiết kế đã code trên nhánh full-demo.
+Spec Flow 4/5 chỉ có tiêu đề; trang này là hành vi as-built và là contract của các route `/api/fm/invoices`,
+`/api/fm/contracts`, `/api/fm/reports`, `/api/fm/storage-units…`, `/api/fm/facilities/{id}/access-options`,
+`/api/bom/**`, `/api/admin/**` (không có file riêng trong `routes/`; field chi tiết ở Swagger trên
+`BackofficeController`).
 
 | Phần | Code |
 |---|---|
@@ -13,7 +16,11 @@ Spec Flow 4/5 chỉ có tiêu đề; đây là thiết kế đã code trên nhá
 | Ghi policy / giá loại khoang | `pricing/application/PricingAdminCommands.java` |
 | Tài khoản, phân quyền, lịch sử đăng nhập | `identity/application/AccountAdminService.java` |
 
-Lỗi nghiệp vụ của `BackofficeController`: dữ liệu sai → 400, xung đột trạng thái → 409.
+Mọi route cần bearer token + `ACCOUNT_ACTIVE` và đúng role theo prefix (`/api/fm/**` → `FM`, `/api/bom/**` →
+`BOM`, `/api/admin/**` → `ADMIN`; sai role → 403). Lỗi nghiệp vụ của `BackofficeController`
+(`BackofficeExceptionHandler`): dữ liệu sai **và** không tìm thấy khoang / cơ sở / policy / loại khoang → 400
+(`IllegalArgumentException`), xung đột trạng thái → 409 (`IllegalStateException`). Route FM kiểm thêm
+`facility.access` theo cơ sở: thiếu quyền / không được gán cơ sở → 403, `facilityId` không tồn tại → 404.
 
 ## FM (theo cơ sở, `facility.access` + facility scope)
 
@@ -25,18 +32,26 @@ Lỗi nghiệp vụ của `BackofficeController`: dữ liệu sai → 400, xung 
 | POST | `/api/fm/storage-units` `{facilityId, code, unitTypeId, monthlyPrice?}` | thêm khoang `Available`; mã trùng trong cơ sở → 400; cơ sở tự "cung cấp" loại khoang đó (`facility_unit_type`) |
 | PATCH | `/api/fm/storage-units/{id}` `{unitTypeId?, monthlyPrice?}` | đổi loại / giá riêng (`monthlyPrice` null = giá loại khoang) |
 | POST | `/api/fm/storage-units/{id}/maintenance` `{maintenance}` | bảo trì tay: `Available ↔ Maintenance`. Khoang đang có đơn chưa hoàn tất trỏ tới → 409. Mở lại tay xoá `maintenance_started_at` |
-| PUT | `/api/fm/facilities/{id}/access-options` `{keyAccess, codeAccess}` | bật / tắt khóa cơ, mã số; phải bật ít nhất một |
+| POST | `/api/fm/storage-units/{id}/maintenance-hold` | "Giữ bảo trì": khoang `Maintenance` đang chờ cron mở lại (`maintenance_started_at` khác `null`) → xoá mốc, thành bảo trì thủ công — cron không tự mở lại, FM mở lại bằng `/maintenance`. Audit `STORAGE_UNIT_MAINTENANCE` (`new_value.reason` "FM giữ bảo trì", old/new `maintenanceStartedAt`). Không tìm thấy khoang → 400; ngoài cơ sở → 403; khoang không ở bảo trì sau trả kho → 409 |
+| GET | `/api/fm/facilities/{id}/access-options` | thông tin cơ sở kèm hình thức truy cập đang bật (`keyAccess`, `codeAccess`) — màn cấu hình truy cập của FM đọc từ đây |
+| PUT | `/api/fm/facilities/{id}/access-options` `{keyAccess, codeAccess}` | bật / tắt khóa cơ, mã số; tắt cả hai → 400 |
 
-Doanh thu:
-- tính trên hoá đơn `Paid`, theo ngày thanh toán (`max(paid_at)` của giao dịch `Success`, không có thì `created_at`
-  của hoá đơn);
-- gồm cả phần cọc đã đối trừ khi trả kho (hoá đơn `Penalty` `Paid`, `settledBy = deposit` trong audit).
+Doanh thu — luật hiện tại: cộng **mọi** hoá đơn `Paid` của cơ sở, không phân biệt loại:
+- theo ngày thanh toán (`max(paid_at)` của giao dịch `Success` của hoá đơn, không có thì `created_at` của hoá đơn);
+- gồm cả hoá đơn cọc (`Deposit`, `DepositSupplement`) và các hoá đơn quyết toán trả kho đối trừ vào cọc (`INV-CLN` /
+  `INV-DMG` / `INV-KEY` / `INV-PEN` `Paid`, `settledBy = deposit` trong audit) — tiền cọc vì vậy có thể được tính hai
+  lần (lúc thu cọc và lúc đối trừ);
+- khoản hoàn tiền FM ghi nhận thủ công (giao dịch `REFUND`) **không** bị trừ.
 
 KPI:
 - yêu cầu đặt kho `Pending`, đơn đang mở;
 - hợp đồng `Active`, hợp đồng quá hạn;
 - yêu cầu trả kho / hỗ trợ đang mở;
 - tổng hoá đơn `Unpaid`.
+
+Màn "Hoá đơn cơ sở" của FM có panel "Hoàn tiền" trên từng hoá đơn, gọi `GET` / `POST
+/api/fm/invoices/{invoiceId}/refunds` (quyền `payment_transaction.refund`, không phải `facility.access` —
+[routes/booking/fm-invoice-refunds.md](../routes/booking/fm-invoice-refunds.md)).
 
 ## BOM (`/api/bom/**`, role `BOM`)
 
@@ -45,7 +60,7 @@ KPI:
 | GET / POST | `/api/bom/facilities` | danh sách (kèm FM, số khoang, số khoang `Rented`) / tạo cơ sở; mã viết hoa, trùng → 400 |
 | PATCH | `/api/bom/facilities/{id}` | tên, địa chỉ, giờ mở cửa, `status` (`Active`/`Inactive`) |
 | PUT | `/api/bom/facilities/{id}/manager` `{fmAccountId}` | gán FM (1–1: FM đang ở cơ sở khác bị gỡ), `null` = bỏ FM; tài khoản không phải FM → 400 |
-| PUT | `/api/bom/facilities/{id}/access-options` | như FM |
+| PUT | `/api/bom/facilities/{id}/access-options` | như route FM (cùng kiểm `facility.access`; BOM có quyền mọi cơ sở) |
 | GET | `/api/bom/managers` | tài khoản FM đang hoạt động |
 | GET / PUT | `/api/bom/policies`, `/api/bom/policies/{key}` `{value}` | policy đang là số thì giá trị mới phải là số ≥ 0 |
 | GET / PUT | `/api/bom/unit-types`, `/api/bom/unit-types/{id}/price` `{monthlyPrice}` | giá theo loại khoang (> 0). Hợp đồng đã ký giữ giá chốt lúc ký |

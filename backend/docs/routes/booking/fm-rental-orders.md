@@ -20,7 +20,7 @@ Màn "Theo dõi đơn thuê kho" của FM.
 
 ## Ghi chú nghiệp vụ
 
-- fe-pages fm/12-rental-order-list.
+- Màn FE dùng route này: danh sách đơn thuê của FM.
 
 ## Liên quan
 

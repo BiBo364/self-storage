@@ -38,10 +38,12 @@ import vn.lemar.selfstorage.tenancy.application.TenancyService.ReturnRequestView
  * <ol>
  *   <li>FS phụ trách (lịch {@code RETURN} đã xác nhận khách đến) ghi kết quả kiểm tra — khoang còn đồ thì
  *       {@code PENDING_ITEMS}, kiểm lại trên cùng biên bản;</li>
- *   <li>chốt: thu hồi quyền truy cập (thiếu chìa → {@code Lost}), gộp phí vệ sinh / hư hỏng / mất chìa + hoá đơn
- *       {@code Unpaid} của hợp đồng, đối trừ tiền cọc. Dư → FM hoàn thủ công; thiếu → hoá đơn phần còn thiếu, trả xong
- *       mới hoàn tất;</li>
- *   <li>hoàn tất: hợp đồng {@code Ended}, khoang {@code Maintenance}, yêu cầu trả kho {@code Completed}.</li>
+ *   <li>chốt: thu hồi quyền truy cập (thiếu chìa → {@code Lost}), mỗi loại phí một hoá đơn {@code Penalty}
+ *       ({@code INV-CLN} vệ sinh, {@code INV-DMG} hư hỏng, {@code INV-KEY} mất chìa, {@code INV-PEN} hoá đơn
+ *       {@code Unpaid} của hợp đồng gộp vào), cọc đối trừ theo thứ tự đó — phần được cọc phủ {@code Paid} ngay. Dư →
+ *       FM hoàn thủ công; thiếu → một hoá đơn {@code INV-PEN} phần còn thiếu, trả xong mới hoàn tất;</li>
+ *   <li>hoàn tất: hợp đồng {@code Ended}, khoang {@code Maintenance} (mất chìa → bảo trì thủ công tới khi thay khoá),
+ *       yêu cầu trả kho {@code Completed}.</li>
  * </ol>
  * Thứ tự khoá: đơn → hợp đồng → biên bản → hoá đơn.
  */
@@ -53,6 +55,9 @@ public class CheckoutService {
     static final String POLICY_LOST_KEY = "fee.lost_key";
     static final String POLICY_DUE_DAYS = "checkout.invoice_due_days";
     static final String MSG_NOT_FOUND = "Không tìm thấy yêu cầu trả kho";
+    static final String REASON_LOST_KEY_MAINTENANCE = "Bảo trì sau trả kho — thay khoá do mất chìa";
+    private static final String PHYSICAL_KEY = "PhysicalKey";
+    private static final String LOST = "Lost";
 
     private final CheckoutRecordRepository records;
     private final TenancyService tenancy;
@@ -166,20 +171,31 @@ public class CheckoutService {
         BigDecimal cleaning = record.isCleaningRequired() ? decimal(POLICY_CLEANING) : BigDecimal.ZERO;
         BigDecimal lostKeys = decimal(POLICY_LOST_KEY).multiply(BigDecimal.valueOf(revoke.lostKeys()));
         BigDecimal folded = invoices.foldUnpaidIntoSettlement(contract.id(), "Gộp vào quyết toán trả kho");
-        BigDecimal total = cleaning.add(record.getDamageAmount()).add(lostKeys).add(folded)
+        // Mỗi loại phí một hoá đơn; cọc đối trừ lần lượt vệ sinh → hư hỏng → mất chìa → hoá đơn gộp.
+        List<Charge> charges = List.of(
+                new Charge(ContractInvoiceService.CLEANING_KIND, "Phí vệ sinh khi trả kho", cleaning),
+                new Charge(ContractInvoiceService.DAMAGE_KIND, "Phí hư hỏng khi trả kho", record.getDamageAmount()),
+                new Charge(ContractInvoiceService.LOST_KEY_KIND, "Phí mất chìa khi trả kho", lostKeys),
+                new Charge(ContractInvoiceService.SETTLEMENT_KIND, "Hoá đơn chưa thanh toán gộp vào quyết toán",
+                        folded));
+        BigDecimal total = charges.stream().map(Charge::amount).reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
         BigDecimal deposit = contract.depositAmount();
-        BigDecimal covered = total.min(deposit);
-        if (covered.signum() > 0) {
-            invoices.settleByDeposit(contract.orderId(), contract.id(), contract.customerId(), covered,
-                    "Quyết toán trả kho (đối trừ cọc)", actorId);
+        BigDecimal remaining = deposit;
+        for (Charge charge : charges) {
+            BigDecimal covered = charge.amount().setScale(2, RoundingMode.HALF_UP).min(remaining);
+            if (covered.signum() > 0) {
+                invoices.settleByDeposit(contract.orderId(), contract.id(), contract.customerId(), charge.kind(),
+                        covered, charge.title() + " (đối trừ cọc)", actorId);
+                remaining = remaining.subtract(covered);
+            }
         }
         String unitCode = contracts.unitCode(contract.id()).orElse("");
         if (total.compareTo(deposit) > 0) {
             BigDecimal shortfall = total.subtract(deposit);
             Instant due = Instant.now().plus(Duration.ofDays(pricingQuery.intPolicy(POLICY_DUE_DAYS)));
             ContractBill bill = invoices.issue(contract.orderId(), contract.id(), contract.customerId(), "Penalty",
-                    "PEN", "Quyết toán trả kho — phần còn thiếu",
+                    ContractInvoiceService.SETTLEMENT_KIND, "Quyết toán trả kho — phần còn thiếu",
                     "Tổng phí trả kho vượt tiền cọc đã đóng.", shortfall, due, actorId);
             record.settle(deposit, total, BigDecimal.ZERO, bill.invoiceId(), Instant.now());
             notifications.notifyCustomer(contract.orderId(), NotificationType.CHECKOUT_PAYMENT_REQUIRED,
@@ -203,15 +219,44 @@ public class CheckoutService {
         complete(record, contract, null);
     }
 
+    /**
+     * Hoá đơn phần còn thiếu quá hạn mà khách không trả: khách đã dọn đồ và trả chìa, nên vẫn đóng trả kho (kết thúc
+     * hợp đồng, khoang sang bảo trì) để khoang không bị kẹt. Hoá đơn giữ {@code Expired} làm chứng từ công nợ; FM được
+     * báo để thu thủ công.
+     */
+    @Transactional
+    public void onShortfallExpired(Long invoiceId) {
+        CheckoutRecord record = records.findByShortfallInvoiceIdForUpdate(invoiceId).orElse(null);
+        if (record == null || !CheckoutRecord.AWAITING_PAYMENT.equals(record.getResult())) {
+            return;
+        }
+        ContractSnapshot contract = contracts.lock(record.getContractId()).orElseThrow();
+        BigDecimal shortfall = record.getTotalCharges().subtract(record.getDepositAmount());
+        complete(record, contract, null);
+        notifications.notifyFacilityManager(contract.orderId(), NotificationType.CHECKOUT_SHORTFALL_UNPAID,
+                Map.of("unitCode", contracts.unitCode(contract.id()).orElse(""), "contractCode", contract.code(),
+                        "shortfall", shortfall.toPlainString()));
+    }
+
     // ------------------------------------------------------------------ internals
+
+    /** Một loại phí trả kho: tiền tố mã hoá đơn, tiêu đề, số tiền. */
+    private record Charge(String kind, String title, BigDecimal amount) {
+    }
 
     private void complete(CheckoutRecord record, ContractSnapshot contract, Long actorId) {
         Instant now = Instant.now();
         contracts.end(contract.id(), actorId);
-        if (storageUnits.startMaintenanceAfterReturn(contract.unitId())) {
+        // Mất chìa: khoang bảo trì thủ công (không có maintenance_started_at) tới khi thay khoá — cron không tự mở lại,
+        // FM mở lại tay.
+        boolean lostKey = lostKeysAtCheckout(contract.id());
+        boolean maintenance = lostKey ? storageUnits.startManualMaintenanceAfterReturn(contract.unitId())
+                : storageUnits.startMaintenanceAfterReturn(contract.unitId());
+        if (maintenance) {
             auditRecorder.record(new AuditEntry(AuditAction.STORAGE_UNIT_MAINTENANCE, AuditEntityType.STORAGE_UNIT,
                     String.valueOf(contract.unitId()), Map.of("status", "Rented"),
-                    Map.of("status", "Maintenance", "reason", "Bảo trì sau trả kho"), null, actorId));
+                    Map.of("status", "Maintenance", "reason", lostKey ? REASON_LOST_KEY_MAINTENANCE
+                            : "Bảo trì sau trả kho"), null, actorId));
         }
         tenancy.completeReturn(record.getReturnRequestId());
         String before = record.getResult();
@@ -227,6 +272,19 @@ public class CheckoutService {
             notifications.notifyFacilityManager(contract.orderId(), NotificationType.CHECKOUT_REFUND_REQUIRED,
                     Map.of("unitCode", unitCode, "contractCode", contract.code(), "refundAmount", refund));
         }
+    }
+
+    /**
+     * Lúc chốt có thiếu chìa không — tính lại từ chìa của hợp đồng vì {@code complete} có thể chạy sau (phần thiếu
+     * được trả / quá hạn). Chốt trả kho thu hồi bộ chìa đang {@code Active} (mỗi hợp đồng tối đa một bộ, thay chìa ở
+     * hỗ trợ cấp bộ mới với id lớn hơn): bộ chìa mới nhất {@code Lost} ⇔ {@code revokeAll} báo thiếu chìa.
+     */
+    private boolean lostKeysAtCheckout(Long contractId) {
+        return contracts.accessKeys(contractId).stream()
+                .filter(k -> PHYSICAL_KEY.equals(k.accessType()))
+                .reduce((first, second) -> second)
+                .map(k -> LOST.equals(k.status()))
+                .orElse(false);
     }
 
     private record Locked(ReturnRequestView request, ContractSnapshot contract, Long actorId) {

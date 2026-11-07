@@ -192,6 +192,8 @@ export type PaymentCheck = {
   invoiceStatus: string;
   paymentStatus: string | null;
   failureReason: string | null;
+  /** Đơn vừa trả cọc xong và đặt được lịch check-in ngay. */
+  bookCheckinOrderId: number | null;
 };
 
 export const PENDING_INVOICE_KEY = "kho-moc-pending-invoice";

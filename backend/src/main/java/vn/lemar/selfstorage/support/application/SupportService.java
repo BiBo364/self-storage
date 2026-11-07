@@ -27,6 +27,7 @@ import vn.lemar.selfstorage.identity.application.FacilityStaffQuery;
 import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
+import vn.lemar.selfstorage.pricing.application.PricingQuery;
 import vn.lemar.selfstorage.support.domain.SupportRequest;
 import vn.lemar.selfstorage.support.repository.SupportRequestRepository;
 import vn.lemar.selfstorage.tenancy.application.TenancyException;
@@ -37,7 +38,8 @@ import vn.lemar.selfstorage.tenancy.application.TenancyException;
  *   <li>Khách gửi (gắn hợp đồng đang thuê, hoặc chỉ chọn cơ sở), xem, huỷ khi chưa xử lý xong.</li>
  *   <li>FM của cơ sở xem hàng chờ, giao FS (giao lại được khi chưa xử lý).</li>
  *   <li>FS được giao (hoặc FM) xử lý: ghi kết quả; mất chìa thì cấp bộ chìa mới (chìa cũ {@code Lost});
- *       có phí thì lập hoá đơn {@code Service} gắn hợp đồng.</li>
+ *       có phí thì lập hoá đơn {@code Service} gắn hợp đồng. Yêu cầu {@code LOST_KEY} có thay chìa mà không nhập
+ *       phí → phí mặc định {@code fee.lost_key × số chìa của bộ cũ}.</li>
  * </ul>
  */
 @Service
@@ -48,6 +50,8 @@ public class SupportService {
     static final String PERM_RESOLVE = "unit_access_key.issue";
     static final String MSG_NOT_FOUND = "Không tìm thấy yêu cầu hỗ trợ";
     static final int FEE_DUE_DAYS = 7;
+    static final String POLICY_LOST_KEY = "fee.lost_key";
+    static final String CATEGORY_LOST_KEY = "LOST_KEY";
 
     private final SupportRequestRepository requests;
     private final RentalContractService contracts;
@@ -61,11 +65,13 @@ public class SupportService {
     private final CurrentAccountProvider currentAccount;
     private final AuditRecorder auditRecorder;
     private final JdbcTemplate jdbc;
+    private final PricingQuery pricingQuery;
 
     SupportService(SupportRequestRepository requests, RentalContractService contracts, ContractInvoiceService invoices,
                    HandoverOrderService orders, FacilityAccess facilityAccess, FacilityStaffQuery staffQuery,
                    AccountQueryService accountQuery, NotificationService notificationService, Access access,
-                   CurrentAccountProvider currentAccount, AuditRecorder auditRecorder, JdbcTemplate jdbc) {
+                   CurrentAccountProvider currentAccount, AuditRecorder auditRecorder, JdbcTemplate jdbc,
+                   PricingQuery pricingQuery) {
         this.requests = requests;
         this.contracts = contracts;
         this.invoices = invoices;
@@ -78,6 +84,7 @@ public class SupportService {
         this.currentAccount = currentAccount;
         this.auditRecorder = auditRecorder;
         this.jdbc = jdbc;
+        this.pricingQuery = pricingQuery;
     }
 
     /** Yêu cầu hỗ trợ. */
@@ -93,7 +100,11 @@ public class SupportService {
                               List<String> photos) {
     }
 
-    /** Kết quả xử lý: {@code newKeyQuantity} > 0 → thay chìa; {@code feeAmount} > 0 → hoá đơn dịch vụ. */
+    /**
+     * Kết quả xử lý: {@code newKeyQuantity} > 0 → thay chìa; {@code feeAmount} > 0 → hoá đơn dịch vụ. Yêu cầu
+     * {@code LOST_KEY} có thay chìa và {@code feeAmount} bỏ trống → phí mặc định {@code fee.lost_key × số chìa mất};
+     * nhập {@code feeAmount} (kể cả 0) thì dùng đúng số đó.
+     */
     public record ResolveInput(String resolution, Integer newKeyQuantity, BigDecimal feeAmount) {
     }
 
@@ -221,9 +232,9 @@ public class SupportService {
             access.can(PERM_ASSIGN, peek.getFacilityId());
         }
         boolean replaceKey = input.newKeyQuantity() != null && input.newKeyQuantity() > 0;
-        boolean charge = input.feeAmount() != null && input.feeAmount().signum() > 0;
+        boolean lostKeyReplacement = replaceKey && CATEGORY_LOST_KEY.equals(peek.getCategory());
         ContractSnapshot contract = null;
-        if (replaceKey || charge) {
+        if (replaceKey || (input.feeAmount() != null && input.feeAmount().signum() > 0)) {
             if (peek.getContractId() == null) {
                 throw TenancyException.conflict("Yêu cầu không gắn hợp đồng — không thay chìa / thu phí được");
             }
@@ -238,6 +249,10 @@ public class SupportService {
         if (!request.isActive()) {
             throw TenancyException.conflict("Yêu cầu hỗ trợ đã đóng");
         }
+        // Phí mặc định mất chìa tính trên bộ chìa đang Active — đọc trước khi thay (bộ cũ chuyển Lost).
+        BigDecimal fee = input.feeAmount() != null ? input.feeAmount()
+                : lostKeyReplacement ? lostKeyFee(contract.id()) : null;
+        boolean charge = fee != null && fee.signum() > 0;
         if (replaceKey) {
             contracts.replacePhysicalKey(contract.id(), input.newKeyQuantity(), actorId);
         }
@@ -245,7 +260,7 @@ public class SupportService {
         if (charge) {
             ContractBill bill = invoices.issue(contract.orderId(), contract.id(), contract.customerId(), "Service",
                     "SVC", "Phí hỗ trợ #" + id + " — " + request.getTitle(), input.resolution().trim(),
-                    input.feeAmount().setScale(2, RoundingMode.HALF_UP),
+                    fee.setScale(2, RoundingMode.HALF_UP),
                     Instant.now().plus(Duration.ofDays(FEE_DUE_DAYS)), actorId);
             feeInvoiceId = bill.invoiceId();
         }
@@ -258,7 +273,7 @@ public class SupportService {
         audit(AuditAction.SUPPORT_REQUEST_RESOLVED, id, Map.of("status", before), newValue, null, actorId);
         Map<String, String> values = values(request);
         values.put("resolution", request.getResolution());
-        values.put("feeNote", charge ? ". Phí dịch vụ " + input.feeAmount().toPlainString()
+        values.put("feeNote", charge ? ". Phí dịch vụ " + fee.toPlainString()
                 + "đ — thanh toán trong mục Hoá đơn." : "");
         notify(request.getCustomerId(), NotificationRecipient.CUSTOMER, NotificationType.SUPPORT_RESOLVED, values,
                 orderIdOf(request));
@@ -266,6 +281,18 @@ public class SupportService {
     }
 
     // ------------------------------------------------------------------ internals
+
+    /**
+     * {@code fee.lost_key × số chìa mất}: thay chìa chuyển cả bộ chìa đang {@code Active} sang {@code Lost}, nên số
+     * chìa mất = {@code quantity} của bộ đó. Không có bộ chìa đang dùng → 0 (không thu).
+     */
+    private BigDecimal lostKeyFee(Long contractId) {
+        int lost = contracts.accessKeys(contractId).stream()
+                .filter(k -> "PhysicalKey".equals(k.accessType()) && "Active".equals(k.status()))
+                .mapToInt(k -> k.quantity() == null ? 0 : k.quantity())
+                .sum();
+        return pricingQuery.decimalPolicy(POLICY_LOST_KEY).multiply(BigDecimal.valueOf(lost));
+    }
 
     private Long orderIdOf(SupportRequest request) {
         return request.getContractId() == null ? null

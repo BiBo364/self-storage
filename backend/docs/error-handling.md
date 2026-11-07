@@ -102,8 +102,8 @@ WWW-Authenticate: Bearer error="invalid_token"
 
 Exception ném từ **filter** (không phải 401/403 của security — đã có handler riêng) bay ra servlet
 container → error-dispatch `/error` → `BasicErrorController` của Spring Boot trả
-`{timestamp,status,error,path}` — không có `message`. Hiện repo chưa có filter tự viết nên chưa xảy
-ra; khi thêm filter đầu tiên cần `ErrorController` tùy biến theo envelope (issue riêng).
+`{timestamp,status,error,path}` — không có `message`. Repo không có filter tự viết nên trường hợp này
+không xảy ra với route hiện có; không có `ErrorController` tùy biến theo envelope.
 
 ## Test
 

@@ -18,6 +18,13 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     List<Invoice> findByOrderIdAndStatus(Long orderId, InvoiceStatus status);
 
+    /** Cơ sở của hoá đơn — hoá đơn gắn đơn hoặc gắn hợp đồng (qua đơn của hợp đồng). */
+    @Query(value = "select r.facility_id from invoices i "
+            + "left join rental_contracts c on c.id = i.contract_id "
+            + "join rental_orders o on o.id = coalesce(i.order_id, c.order_id) "
+            + "join rental_requests r on r.id = o.request_id where i.id = :invoiceId", nativeQuery = true)
+    Optional<Long> findFacilityIdOfInvoice(@Param("invoiceId") Long invoiceId);
+
     /** Khoá row hoá đơn — thanh toán, huỷ, hết hạn đều khoá rồi mới kiểm trạng thái. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from Invoice i where i.id = :id")

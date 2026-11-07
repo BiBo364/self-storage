@@ -197,14 +197,16 @@ class HandoverFlowIntegrationTest {
         Seed seed = seedInProgress(fsId);
         loginAs(FS);
         workflow.verifyIdentity(seed.handoverId, true, null);
-        workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of("https://img.test/1.jpg"));
+        // URL ảnh phải là upload của FS (media_uploads) — trước đây test dùng URL tuỳ ý "https://img.test/1.jpg".
+        String photo = uploaded(fsId, "1.jpg");
+        workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of(photo));
         loginAs(CUSTOMER);
         workflow.agreeInspection(seed.handoverId, customerId, "Cửa hơi kẹt");
 
         HandoverView view = view(seed.handoverId);
         assertThat(view.step()).isEqualTo("SIGN_CONTRACT");
         assertThat(view.inspectionNotes()).contains("Khoang sạch").contains("Khách lưu ý: Cửa hơi kẹt");
-        assertThat(view.inspectionPhotos()).containsExactly("https://img.test/1.jpg");
+        assertThat(view.inspectionPhotos()).containsExactly(photo);
         HandoverView.Contract contract = view.contract();
         assertThat(contract.status()).isEqualTo("Draft");
         assertThat(contract.code()).startsWith("HD-Q7-");
@@ -234,6 +236,13 @@ class HandoverFlowIntegrationTest {
         assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null))
                 .isInstanceOf(HandoverConflictException.class);
 
+        // Khách chưa đồng ý được khi FS chưa ghi hiện trạng (mốc so sánh khi trả kho).
+        loginAs(CUSTOMER);
+        assertThatThrownBy(() -> workflow.agreeInspection(seed.handoverId, customerId, null))
+                .isInstanceOf(HandoverConflictException.class)
+                .hasMessageContaining("chưa ghi nhận hiện trạng");
+        loginAs(FS);
+        workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of());
         loginAs(CUSTOMER);
         workflow.agreeInspection(seed.handoverId, customerId, null);
         long contractId = contractId(seed.orderId);
@@ -241,7 +250,7 @@ class HandoverFlowIntegrationTest {
                 .isInstanceOf(HandoverConflictException.class);
 
         loginAs(FS);
-        workflow.signContract(contractId, "https://img.test/signed.pdf");
+        workflow.signContract(contractId, uploaded(fsId, "signed.pdf"));
         loginAs(CUSTOMER);
         assertThatThrownBy(() -> workflow.confirm(seed.handoverId, customerId, AccessChoice.ACCESS_CODE))
                 .isInstanceOf(HandoverConflictException.class)
@@ -282,7 +291,8 @@ class HandoverFlowIntegrationTest {
         loginAs(FS);
         workflow.requestStartDateOverride(contractId, requested, "Khách chuyển đồ sau 5 ngày");
         assertThat(view(seed.handoverId).step()).isEqualTo("OVERRIDE_PENDING");
-        assertThatThrownBy(() -> workflow.signContract(contractId, "https://img.test/s.pdf"))
+        String scan = uploaded(fsId, "s.pdf");
+        assertThatThrownBy(() -> workflow.signContract(contractId, scan))
                 .isInstanceOf(HandoverConflictException.class);
         assertThatThrownBy(() -> documentService.render(contractId)).isInstanceOf(HandoverConflictException.class);
 
@@ -294,7 +304,7 @@ class HandoverFlowIntegrationTest {
         assertThat(auditCount("START_DATE_OVERRIDE_APPROVED", "RentalContract", contractId)).isEqualTo(1);
 
         loginAs(FS);
-        workflow.signContract(contractId, "https://img.test/s.pdf");
+        workflow.signContract(contractId, scan);
         assertThat(contractStatus(contractId)).isEqualTo("Signed");
     }
 
@@ -495,6 +505,9 @@ class HandoverFlowIntegrationTest {
         loginAs(CUSTOMER);
         assertThatThrownBy(() -> workflow.agreeInspection(seed.handoverId, customerId, "x".repeat(1001)))
                 .isInstanceOf(HandoverValidationException.class);
+        loginAs(FS);
+        workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of());
+        loginAs(CUSTOMER);
         workflow.agreeInspection(seed.handoverId, customerId, null);
         assertThatThrownBy(() -> workflow.agreeInspection(seed.handoverId, customerId, null))
                 .isInstanceOf(HandoverConflictException.class);
@@ -516,8 +529,9 @@ class HandoverFlowIntegrationTest {
                 .isInstanceOf(HandoverConflictException.class);
 
         loginAs(FS);
-        workflow.signContract(contractId, "https://img.test/s.pdf");
-        assertThatThrownBy(() -> workflow.signContract(contractId, "https://img.test/s.pdf"))
+        String scan = uploaded(fsId, "s.pdf");
+        workflow.signContract(contractId, scan);
+        assertThatThrownBy(() -> workflow.signContract(contractId, scan))
                 .isInstanceOf(HandoverConflictException.class);
         assertThatThrownBy(() -> workflow.requestStartDateOverride(contractId, LocalDate.now(VN), "x"))
                 .isInstanceOf(HandoverConflictException.class);
@@ -588,6 +602,201 @@ class HandoverFlowIntegrationTest {
         assertThat(handoverExpiry.closeIfOverdue(seed.handoverId)).isFalse();
     }
 
+    // ------------------------------------------------------------------ bản hợp đồng chốt lúc ký
+
+    @Test
+    void contractDocumentRendersLiveBeforeSigningAndFrozenAfter() {
+        Seed seed = seedInProgress(fsId);
+        untilAgreed(seed);
+        long contractId = contractId(seed.orderId);
+
+        // Bản nháp render động: đổi dữ liệu là bản xem/in đổi theo.
+        loginAs(FS);
+        String draft = documentService.render(contractId);
+        assertThat(draft).contains("Trạng thái Draft").contains("Khoang sạch, khoá tốt");
+        assertThat(documentHtml(contractId)).isNull();
+        jdbc.update("update handover_records set inspection_notes = 'Ghi chú trước khi ký' where id = ?",
+                seed.handoverId);
+        assertThat(documentService.render(contractId)).contains("Ghi chú trước khi ký");
+
+        workflow.signContract(contractId, uploaded(fsId, "signed.pdf"));
+        String frozen = documentHtml(contractId);
+        assertThat(frozen).contains("Trạng thái Signed").contains("Ghi chú trước khi ký");
+
+        // Sau khi ký: dữ liệu hiện tại đổi (hiện trạng, giá) không làm đổi bản đã ký.
+        jdbc.update("update handover_records set inspection_notes = 'Đổi sau khi ký' where id = ?", seed.handoverId);
+        jdbc.update("update rental_contracts set monthly_price = 999999 where id = ?", contractId);
+        String reprinted = documentService.render(contractId);
+        assertThat(reprinted).isEqualTo(frozen).doesNotContain("Đổi sau khi ký").doesNotContain("999.999");
+        loginAs(CUSTOMER);
+        assertThat(documentService.render(contractId)).isEqualTo(frozen);
+    }
+
+    // ------------------------------------------------------------------ sửa hiện trạng sau khi khách đồng ý
+
+    @Test
+    void staffCorrectsInspectionAfterAgreementWithReasonAndAudit() {
+        Seed seed = seedInProgress(fsId);
+        loginAs(FS);
+        workflow.verifyIdentity(seed.handoverId, true, null);
+        String first = uploaded(fsId, "c1.jpg");
+        workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of(first));
+        loginAs(CUSTOMER);
+        workflow.agreeInspection(seed.handoverId, customerId, null);
+        java.time.Instant agreedAt = view(seed.handoverId).unitInspectedAt();
+
+        loginAs(FS);
+        String second = uploaded(fsId, "c2.jpg");
+        workflow.correctInspection(seed.handoverId, "  Khoang sạch, vết xước cửa trái  ", List.of(first, second),
+                " Bổ sung vết xước khách chỉ ra ");
+
+        HandoverView view = view(seed.handoverId);
+        assertThat(view.inspectionStatus()).isEqualTo("Agreed");
+        assertThat(view.unitInspectedAt()).isEqualTo(agreedAt);
+        assertThat(view.inspectionNotes()).isEqualTo("Khoang sạch, vết xước cửa trái");
+        assertThat(view.inspectionPhotos()).containsExactly(first, second);
+        assertThat(view.result()).isEqualTo("IN_PROGRESS");
+        assertThat(auditCount("INSPECTION_CORRECTED", "HandoverRecord", seed.handoverId)).isEqualTo(1);
+        Map<String, Object> audit = jdbc.queryForMap("select actor_account_id, reason, "
+                + "old_value->>'inspectionNotes' as old_notes, old_value->>'photoCount' as old_count, "
+                + "new_value->>'inspectionNotes' as new_notes, new_value->>'photoCount' as new_count "
+                + "from audit_logs where action = 'INSPECTION_CORRECTED' and entity_id = ?",
+                String.valueOf(seed.handoverId));
+        assertThat(((Number) audit.get("actor_account_id")).longValue()).isEqualTo(fsId);
+        assertThat(audit.get("reason")).isEqualTo("Bổ sung vết xước khách chỉ ra");
+        assertThat(audit.get("old_notes")).isEqualTo("Khoang sạch");
+        assertThat(audit.get("old_count")).isEqualTo("1");
+        assertThat(audit.get("new_notes")).isEqualTo("Khoang sạch, vết xước cửa trái");
+        assertThat(audit.get("new_count")).isEqualTo("2");
+
+        // Sửa được cả khi hợp đồng đã ký (biên bản còn mở) — bản hợp đồng đã chốt không đổi theo.
+        long contractId = contractId(seed.orderId);
+        workflow.signContract(contractId, uploaded(fsId, "signed.pdf"));
+        String frozen = documentHtml(contractId);
+        workflow.correctInspection(seed.handoverId, "Ghi chú sau khi ký", List.of(), "Sửa lại câu chữ");
+        assertThat(view(seed.handoverId).inspectionNotes()).isEqualTo("Ghi chú sau khi ký");
+        assertThat(view(seed.handoverId).inspectionPhotos()).isEmpty();
+        assertThat(documentService.render(contractId)).isEqualTo(frozen);
+        assertThat(auditCount("INSPECTION_CORRECTED", "HandoverRecord", seed.handoverId)).isEqualTo(2);
+    }
+
+    @Test
+    void inspectionCorrectionGuards() {
+        Seed seed = seedInProgress(fsId);
+        loginAs(FS);
+        workflow.verifyIdentity(seed.handoverId, true, null);
+        workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of());
+
+        // Khách chưa đồng ý → dùng bước ghi hiện trạng thường.
+        assertThatThrownBy(() -> workflow.correctInspection(seed.handoverId, "x", List.of(), "Lý do"))
+                .isInstanceOf(HandoverConflictException.class)
+                .hasMessageContaining("Khách chưa đồng ý hiện trạng");
+
+        loginAs(CUSTOMER);
+        workflow.agreeInspection(seed.handoverId, customerId, null);
+        loginAs(FS);
+        assertThatThrownBy(() -> workflow.correctInspection(seed.handoverId, "x", List.of(), " "))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("lý do");
+        assertThatThrownBy(() -> workflow.correctInspection(seed.handoverId, "x", List.of(), null))
+                .isInstanceOf(HandoverValidationException.class);
+        assertThatThrownBy(() -> workflow.correctInspection(seed.handoverId, "x", List.of(), "x".repeat(501)))
+                .isInstanceOf(HandoverValidationException.class);
+        List<String> tooMany = java.util.Collections.nCopies(21, uploaded(fsId, "many.jpg"));
+        assertThatThrownBy(() -> workflow.correctInspection(seed.handoverId, "x", tooMany, "Lý do"))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("Tối đa 20 ảnh");
+        assertThatThrownBy(() -> workflow.correctInspection(seed.handoverId, " ", null, "Lý do"))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("ghi chú hoặc ít nhất một ảnh");
+        assertThatThrownBy(() -> workflow.correctInspection(seed.handoverId, "x",
+                List.of("https://img.test/foreign.jpg"), "Lý do"))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("đã tải lên hệ thống");
+        assertThat(auditCount("INSPECTION_CORRECTED", "HandoverRecord", seed.handoverId)).isZero();
+        assertThat(view(seed.handoverId).inspectionNotes()).isEqualTo("Khoang sạch");
+
+        // FS khác không sửa được.
+        long otherStaff = id("select id from accounts where email = '" + FM + "'");
+        Seed foreign = seedInProgress(otherStaff);
+        assertThatThrownBy(() -> workflow.correctInspection(foreign.handoverId, "x", List.of(), "Lý do"))
+                .isInstanceOf(HandoverForbiddenException.class);
+    }
+
+    @Test
+    void inspectionCorrectionRejectedOnceHandoverCompleted() {
+        Seed seed = seedInProgress(fsId);
+        long contractId = untilSigned(seed);
+        pay(firstMonthInvoice(contractId));
+        loginAs(CUSTOMER);
+        assertThat(workflow.confirm(seed.handoverId, customerId, AccessChoice.ACCESS_CODE).completed()).isTrue();
+
+        loginAs(FS);
+        assertThatThrownBy(() -> workflow.correctInspection(seed.handoverId, "Sửa muộn", List.of(), "Lý do"))
+                .isInstanceOf(HandoverConflictException.class)
+                .hasMessageContaining("Phiên bàn giao đã đóng");
+        assertThat(auditCount("INSPECTION_CORRECTED", "HandoverRecord", seed.handoverId)).isZero();
+    }
+
+    // ------------------------------------------------------------------ nguồn URL ảnh / bản scan
+
+    @Test
+    void inspectionPhotosMustBeUploadsOfCurrentStaff() {
+        Seed seed = seedInProgress(fsId);
+        loginAs(FS);
+        workflow.verifyIdentity(seed.handoverId, true, null);
+
+        assertThatThrownBy(() -> workflow.recordInspection(seed.handoverId, "x",
+                List.of("https://img.test/1.jpg")))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("Ảnh hiện trạng phải là ảnh bạn đã tải lên hệ thống");
+        assertThatThrownBy(() -> workflow.recordInspection(seed.handoverId, "x", List.of(" ")))
+                .isInstanceOf(HandoverValidationException.class);
+        assertThatThrownBy(() -> workflow.recordInspection(seed.handoverId, "x",
+                java.util.Arrays.asList((String) null)))
+                .isInstanceOf(HandoverValidationException.class);
+        String customersUpload = uploaded(customerId, "cus.jpg");
+        assertThatThrownBy(() -> workflow.recordInspection(seed.handoverId, "x", List.of(customersUpload)))
+                .isInstanceOf(HandoverValidationException.class);
+        String canceled = uploaded(fsId, "canceled.jpg", "Canceled");
+        assertThatThrownBy(() -> workflow.recordInspection(seed.handoverId, "x", List.of(canceled)))
+                .isInstanceOf(HandoverValidationException.class);
+        assertThat(view(seed.handoverId).inspectionNotes()).isNull();
+
+        String pending = uploaded(fsId, "pending.jpg", "Pending");
+        workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of(pending));
+        assertThat(view(seed.handoverId).inspectionPhotos()).containsExactly(pending);
+
+        // Ảnh đã có trên biên bản giữ nguyên được dù upload gốc sau đó bị dọn.
+        jdbc.update("update media_uploads set status = 'Deleted' where url = ?", pending);
+        String extra = uploaded(fsId, "extra.jpg");
+        workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of(pending, extra));
+        assertThat(view(seed.handoverId).inspectionPhotos()).containsExactly(pending, extra);
+    }
+
+    @Test
+    void signedScanMustBeUploadOfCurrentStaff() {
+        Seed seed = seedInProgress(fsId);
+        untilAgreed(seed);
+        long contractId = contractId(seed.orderId);
+        loginAs(FS);
+
+        assertThatThrownBy(() -> workflow.signContract(contractId, "https://img.test/signed.pdf"))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("Bản scan hợp đồng phải là tệp bạn đã tải lên hệ thống");
+        String customersUpload = uploaded(customerId, "cus.pdf");
+        assertThatThrownBy(() -> workflow.signContract(contractId, customersUpload))
+                .isInstanceOf(HandoverValidationException.class);
+        assertThat(contractStatus(contractId)).isEqualTo("Draft");
+        assertThat(documentHtml(contractId)).isNull();
+
+        String scan = uploaded(fsId, "ok.pdf", "Pending");
+        workflow.signContract(contractId, "  " + scan + " ");
+        assertThat(contractStatus(contractId)).isEqualTo("Signed");
+        assertThat(jdbc.queryForObject("select pdf_url from rental_contracts where id = ?", String.class,
+                contractId)).isEqualTo(scan);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private record Seed(long unitId, long orderId, long appointmentId, long handoverId) {
@@ -646,9 +855,28 @@ class HandoverFlowIntegrationTest {
         untilAgreed(seed);
         long contractId = contractId(seed.orderId);
         loginAs(FS);
-        ContractInvoice invoice = workflow.signContract(contractId, "https://img.test/signed.pdf");
+        ContractInvoice invoice = workflow.signContract(contractId, uploaded(fsId, "signed.pdf"));
         assertThat(invoice.dueDate()).isBefore(java.time.Instant.now().plusSeconds(24 * 3600 + 60));
         return contractId;
+    }
+
+    /** Giả lập một upload {@code Attached} qua {@code /api/media} của account (row {@code media_uploads}). */
+    private String uploaded(long accountId, String name) {
+        return uploaded(accountId, name, "Attached");
+    }
+
+    private String uploaded(long accountId, String name, String status) {
+        String publicId = "uploads/acc-" + accountId + "/" + SEQ.incrementAndGet() + "-" + System.nanoTime() + "-"
+                + name;
+        String url = "https://res.cloudinary.com/test/image/upload/" + publicId;
+        jdbc.update("insert into media_uploads (account_id, batch_id, public_id, url, bytes, format, status) "
+                + "values (?, gen_random_uuid(), ?, ?, 1024, 'jpg', ?)", accountId, publicId, url, status);
+        return url;
+    }
+
+    private String documentHtml(long contractId) {
+        return jdbc.queryForObject("select document_html from rental_contracts where id = ?", String.class,
+                contractId);
     }
 
     private ContractInvoice firstMonthInvoice(long contractId) {

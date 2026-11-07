@@ -57,12 +57,25 @@ public class StaffHandoverController {
         return ok("Đã ghi nhận xác minh danh tính", id);
     }
 
-    @Operation(summary = "Ghi hiện trạng khoang (2.2)", description = "Ảnh upload trước qua `/api/media`.")
+    @Operation(summary = "Ghi hiện trạng khoang (2.2)",
+            description = "Ảnh upload trước qua `/api/media` — URL không phải file FS đã upload → 400.")
     @PutMapping("/handovers/{id}/inspection")
     public ResponseEntity<ApiEnvelope<HandoverView>> inspection(@PathVariable Long id,
                                                                 @Valid @RequestBody InspectionRequest body) {
         workflow.recordInspection(id, body.notes(), body.photos());
         return ok("Đã lưu hiện trạng khoang", id);
+    }
+
+    @Operation(summary = "Sửa hiện trạng sau khi khách đã đồng ý (2.2)",
+            description = "FS phụ trách, quyền `handover_record.inspect`. Chỉ khi `inspection_status` đã chốt và "
+                    + "phiên còn `IN_PROGRESS` (đã chốt bàn giao → 409). `reason` bắt buộc (400 nếu trống), tối đa "
+                    + "20 ảnh, ảnh mới phải là file FS đã upload qua `/api/media`. Ghi audit `INSPECTION_CORRECTED` "
+                    + "(ghi chú + số ảnh cũ/mới, lý do). Bản hợp đồng đã ký không đổi theo.")
+    @PostMapping("/handovers/{id}/inspection-correction")
+    public ResponseEntity<ApiEnvelope<HandoverView>> correctInspection(
+            @PathVariable Long id, @Valid @RequestBody InspectionCorrectionRequest body) {
+        workflow.correctInspection(id, body.notes(), body.photos(), body.reason());
+        return ok("Đã sửa hiện trạng khoang", id);
     }
 
     @Operation(summary = "Khách không ký hợp đồng (2.5)",
@@ -90,7 +103,9 @@ public class StaffHandoverController {
     }
 
     @Operation(summary = "Upload hợp đồng đã ký (2.3)",
-            description = "Hợp đồng `Draft → Signed`, tạo hoá đơn tháng đầu `INV-RNT-…` trong cùng transaction.")
+            description = "Hợp đồng `Draft → Signed`, chốt bản hợp đồng (in lại trả bản này) và tạo hoá đơn tháng "
+                    + "đầu `INV-RNT-…` trong cùng transaction. `pdfUrl` phải là file FS đã upload qua `/api/media` "
+                    + "(400 nếu không).")
     @PostMapping("/contracts/{contractId}/sign")
     public ResponseEntity<ApiEnvelope<ContractInvoice>> sign(@PathVariable Long contractId,
                                                              @Valid @RequestBody SignRequest body) {
@@ -108,6 +123,15 @@ public class StaffHandoverController {
 
     @Schema(description = "Hiện trạng khoang")
     public record InspectionRequest(@Size(max = 2000) String notes, @Size(max = 20) List<@NotBlank String> photos) {
+    }
+
+    @Schema(description = "Sửa hiện trạng khoang sau khi khách đã đồng ý")
+    public record InspectionCorrectionRequest(
+            @Schema(description = "Ghi chú hiện trạng mới (thay toàn bộ ghi chú cũ)") @Size(max = 2000) String notes,
+            @Schema(description = "Danh sách ảnh mới (thay toàn bộ); ảnh mới phải upload qua /api/media")
+            @Size(max = 20) List<@NotBlank String> photos,
+            @Schema(description = "Lý do sửa", example = "Bổ sung vết xước khách phát hiện sau khi đồng ý")
+            @NotBlank @Size(max = 500) String reason) {
     }
 
     @Schema(description = "Số chìa khóa giao")

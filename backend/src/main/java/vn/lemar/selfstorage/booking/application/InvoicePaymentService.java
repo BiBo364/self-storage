@@ -71,11 +71,14 @@ public class InvoicePaymentService {
     private final AuditRecorder auditRecorder;
     private final OrderNotifier orderNotifier;
     private final TransactionTemplate transaction;
+    private final AppointmentBookingService bookingService;
 
     InvoicePaymentService(InvoiceRepository invoiceRepository, RentalOrderRepository orderRepository,
                           StorageUnitQuery storageUnitQuery, PaymentService paymentService,
                           PaymentSessionCloser sessionCloser, AuditRecorder auditRecorder,
-                          OrderNotifier orderNotifier, PlatformTransactionManager transactionManager) {
+                          OrderNotifier orderNotifier, PlatformTransactionManager transactionManager,
+                          AppointmentBookingService bookingService) {
+        this.bookingService = bookingService;
         this.invoiceRepository = invoiceRepository;
         this.orderRepository = orderRepository;
         this.storageUnitQuery = storageUnitQuery;
@@ -103,7 +106,12 @@ public class InvoicePaymentService {
     }
 
     /** Trạng thái thanh toán của hoá đơn sau khi đối soát. */
-    public record PaymentCheck(Long invoiceId, String invoiceStatus, String paymentStatus, String failureReason) {
+    /**
+     * @param bookCheckinOrderId đơn vừa trả cọc xong và đặt được lịch check-in ngay → FE chuyển khách sang đặt lịch
+     *                           (spec 1.4 → 1.5); {@code null} nếu không áp dụng
+     */
+    public record PaymentCheck(Long invoiceId, String invoiceStatus, String paymentStatus, String failureReason,
+                               Long bookCheckinOrderId) {
     }
 
     /**
@@ -207,9 +215,12 @@ public class InvoicePaymentService {
         }
         var snapshot = paymentService.reconcileLatest(invoiceId, ipAddr).orElse(null);
         Invoice after = invoiceRepository.findById(invoiceId).orElse(before);
+        boolean depositPaid = after.getStatus() == InvoiceStatus.PAID && after.isDepositKind()
+                && after.getOrderId() != null;
+        Long bookOrderId = depositPaid && bookingService.bookable(after.getOrderId()) ? after.getOrderId() : null;
         return new PaymentCheck(invoiceId, after.getStatus().dbValue(),
                 snapshot == null ? null : snapshot.status(),
-                snapshot == null ? null : snapshot.failureReason());
+                snapshot == null ? null : snapshot.failureReason(), bookOrderId);
     }
 
 }

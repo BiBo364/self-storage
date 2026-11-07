@@ -174,10 +174,31 @@ public class HandoverRecord {
     }
 
     /** Spec 2.2: FS ghi hiện trạng khoang — sửa được tới khi khách đồng ý/từ chối. */
+    /** FS đã ghi hiện trạng (ghi chú hoặc ít nhất một ảnh) — mốc so sánh khi trả kho. */
+    public boolean inspectionRecorded() {
+        return (inspectionNotes != null && !inspectionNotes.isBlank())
+                || (inspectionPhotos != null && !inspectionPhotos.isEmpty());
+    }
+
     public void recordInspection(String notes, List<String> photos, Instant now) {
         requireOpen();
         requireIdentityVerified();
         requireInspectionPending();
+        this.inspectionNotes = notes;
+        this.inspectionPhotos = photos == null ? List.of() : List.copyOf(photos);
+        this.updatedAt = now;
+    }
+
+    /**
+     * Sửa hiện trạng sau khi khách đã đồng ý (kèm lý do, audit ở service) — chỉ khi biên bản còn mở. Không đổi
+     * {@code inspection_status} / {@code unit_inspected_at}: mốc khách chốt giữ nguyên.
+     */
+    public void correctInspection(String notes, List<String> photos, Instant now) {
+        requireOpen();
+        if (!inspectionAgreed()) {
+            throw new IllegalStateException("Biên bản " + id + " chưa được khách chốt hiện trạng: "
+                    + inspectionStatus);
+        }
         this.inspectionNotes = notes;
         this.inspectionPhotos = photos == null ? List.of() : List.copyOf(photos);
         this.updatedAt = now;

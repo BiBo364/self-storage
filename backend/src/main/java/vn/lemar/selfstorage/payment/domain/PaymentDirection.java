@@ -3,7 +3,7 @@ package vn.lemar.selfstorage.payment.domain;
 /**
  * Chiều giao dịch. Giá trị trong DB đã viết HOA sẵn nên map thẳng được, không cần converter.
  *
- * <p>{@code REFUND} chưa dùng trong MVP — hoàn tiền do FM xử lý thủ công rồi ghi nhận lại.
+ * <p>{@code REFUND}: FM hoàn tiền thủ công (chuyển khoản ngoài hệ thống) rồi ghi nhận lại — luôn {@code Success}.
  */
 public enum PaymentDirection {
     PAY,

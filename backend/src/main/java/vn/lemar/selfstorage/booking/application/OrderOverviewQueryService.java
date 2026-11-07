@@ -36,10 +36,18 @@ public class OrderOverviewQueryService {
 
     private final OrderOverviewReadRepository repository;
     private final Access access;
+    private final AppointmentBookingService bookingService;
 
-    OrderOverviewQueryService(OrderOverviewReadRepository repository, Access access) {
+    OrderOverviewQueryService(OrderOverviewReadRepository repository, Access access,
+                              AppointmentBookingService bookingService) {
         this.repository = repository;
         this.access = access;
+        this.bookingService = bookingService;
+    }
+
+    private List<String> customerActionsChecked(OrderOverviewRow row) {
+        boolean bookable = !"Deposited".equals(row.status()) || bookingService.bookable(row.id());
+        return customerActions(row, bookable);
     }
 
     /** Đơn kèm danh sách hành động. */
@@ -49,7 +57,7 @@ public class OrderOverviewQueryService {
     @Transactional(readOnly = true)
     public List<OrderOverview> listForCustomer(Long customerId) {
         return repository.findByCustomer(customerId).stream()
-                .map(row -> new OrderOverview(row, customerActions(row)))
+                .map(row -> new OrderOverview(row, customerActionsChecked(row)))
                 .toList();
     }
 
@@ -58,7 +66,7 @@ public class OrderOverviewQueryService {
         OrderOverviewRow row = repository.findById(orderId)
                 .filter(o -> o.customerId().equals(customerId))
                 .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê"));
-        return new OrderOverview(row, customerActions(row));
+        return new OrderOverview(row, customerActionsChecked(row));
     }
 
     @Transactional(readOnly = true)
@@ -74,6 +82,11 @@ public class OrderOverviewQueryService {
     }
 
     static List<String> customerActions(OrderOverviewRow row) {
+        return customerActions(row, true);
+    }
+
+    /** @param bookable đơn {@code Deposited} còn đặt lịch được (không chờ đề xuất lại, còn trong cửa sổ đặt lịch) */
+    static List<String> customerActions(OrderOverviewRow row, boolean bookable) {
         List<String> actions = new ArrayList<>();
         String status = row.status();
         boolean closed = "Canceled".equals(status) || "Done".equals(status);
@@ -83,7 +96,7 @@ public class OrderOverviewQueryService {
         if ("Unpaid".equals(row.invoiceStatus()) && !closed) {
             actions.add(ACTION_PAY_INVOICE);
         }
-        if ("Deposited".equals(status) && !"Unpaid".equals(row.invoiceStatus())) {
+        if ("Deposited".equals(status) && !"Unpaid".equals(row.invoiceStatus()) && bookable) {
             actions.add(ACTION_BOOK_CHECKIN);
         }
         if ("InProgress".equals(status) && "IN_PROGRESS".equals(row.handoverResult())

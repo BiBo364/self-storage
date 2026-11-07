@@ -14,6 +14,8 @@ Body `{ "reason": "Khách yêu cầu huỷ" }`.
 ## Luồng / hành vi
 
 1. Khoá đơn rồi khoá lịch; lịch `Pending`, đúng FS, **chưa quá `end_at`** → 409 nếu sai/đã quá giờ.
+   Chỉ huỷ được lịch `CHECKIN`: lịch `RETURN` → 409 "Lịch trả kho không huỷ ở đây — FM phân công lại hoặc khách huỷ
+   yêu cầu trả kho".
 2. `status = Canceled`, `cancel_reason = reason`; audit `APPOINTMENT_CANCELED` (actor FS, `reason`).
 3. `HandoverRecord` của lịch → `CANCELED` (`reject_reason = reason`); đơn `Scheduled/InProgress → Deposited` để
    khách đặt lịch mới, đơn đã quá `expires_at` → Cascade với `reason`. Không gửi notification khách trong route

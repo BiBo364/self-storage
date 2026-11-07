@@ -1,10 +1,11 @@
-import { ArrowRight, Check, KeyRound, Plus, RotateCcw, Wrench } from "lucide-react";
+import { ArrowRight, Check, KeyRound, Lock, Plus, RotateCcw, Wrench } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { formatMoney } from "../../app/format";
+import { formatDateTime, formatMoney } from "../../app/format";
 import {
   createStorageUnit,
   fetchStorageUnits,
   fetchUnitTypes,
+  holdStorageUnitMaintenance,
   labelOf,
   loadErrorState,
   setStorageUnitMaintenance,
@@ -261,6 +262,14 @@ function UnitPanel({
     }
   }
 
+  async function holdMaintenance() {
+    const outcome = await action.run("hold", () => holdStorageUnitMaintenance(unit.id));
+    if (outcome.ok) onChanged(`Đã giữ khoang ${unit.code} ở trạng thái bảo trì.`);
+  }
+
+  // Bảo trì sau trả kho: cron tự mở lại sau số ngày cấu hình; FM có thể giữ bảo trì (thành bảo trì thủ công).
+  const autoReopen = unit.status === "Maintenance" && unit.maintenanceStartedAt !== null;
+
   return (
     <DetailPanel title={unit.code} eyebrow={unit.unitTypeName} onClose={onClose}>
       <div className="grid gap-5">
@@ -270,6 +279,13 @@ function UnitPanel({
             {labelOf(UNIT_STATUS_LABEL, unit.status)}
           </StatusTag>
         </div>
+        {unit.status === "Maintenance" && (
+          <p className="m-0 text-label text-muted">
+            {autoReopen
+              ? `Bảo trì sau trả kho từ ${formatDateTime(unit.maintenanceStartedAt)} — hệ thống tự mở lại khi đủ số ngày bảo trì.`
+              : "Bảo trì thủ công — khoang chỉ mở lại khi bạn bấm “Mở lại cho thuê”."}
+          </p>
+        )}
         <p className="m-0 text-small text-ink">
           Giá đang áp dụng: <strong>{formatMoney(unit.monthlyPrice)}/tháng</strong>
           {typePrice !== undefined && (
@@ -336,6 +352,11 @@ function UnitPanel({
             onClick={() => toggleMaintenance(false)}
           >
             {action.pending !== "maintenance" && <RotateCcw size={16} />} Mở lại cho thuê
+          </Button>
+        )}
+        {autoReopen && (
+          <Button variant="secondary" pending={action.pending === "hold"} onClick={holdMaintenance}>
+            {action.pending !== "hold" && <Lock size={16} />} Giữ bảo trì
           </Button>
         )}
         {unit.status === "Reserved" && (

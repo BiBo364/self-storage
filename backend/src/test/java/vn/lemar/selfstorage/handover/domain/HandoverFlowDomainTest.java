@@ -115,6 +115,42 @@ class HandoverFlowDomainTest {
     }
 
     @Test
+    void inspectionCorrectionOnlyAfterAgreementWhileOpen() {
+        HandoverRecord record = HandoverRecord.open(1L, 2L, 3L);
+        record.verifyIdentity(true, NOW);
+        record.recordInspection("Sạch", List.of("a"), NOW);
+        assertThatThrownBy(() -> record.correctInspection("x", List.of(), NOW))
+                .isInstanceOf(IllegalStateException.class);
+        record.agreeInspection(null, NOW);
+        Instant later = NOW.plusSeconds(60);
+        record.correctInspection("Có vết xước", null, later);
+        assertThat(record.getInspectionNotes()).isEqualTo("Có vết xước");
+        assertThat(record.getInspectionPhotos()).isEmpty();
+        assertThat(record.getUnitInspectedAt()).isEqualTo(NOW);
+        assertThat(record.getUpdatedAt()).isEqualTo(later);
+        record.complete(later);
+        assertThatThrownBy(() -> record.correctInspection("y", List.of(), later))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void contractDocumentFreezesOnceAfterSigning() {
+        RentalContract contract = RentalContract.draft(1L, 2L, 3L, "HD-2", "builtin-v1", new BigDecimal("500000"),
+                new BigDecimal("500000"), 3, LocalDate.of(2026, 11, 6));
+        assertThat(contract.documentFrozen()).isFalse();
+        assertThatThrownBy(() -> contract.freezeDocument("<html>")).isInstanceOf(IllegalStateException.class);
+        contract.sign("pdf", NOW);
+        assertThatThrownBy(() -> contract.freezeDocument(" ")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> contract.freezeDocument(null)).isInstanceOf(IllegalArgumentException.class);
+        contract.freezeDocument("<html>v1</html>");
+        assertThat(contract.documentFrozen()).isTrue();
+        assertThat(contract.getDocumentHtml()).isEqualTo("<html>v1</html>");
+        assertThatThrownBy(() -> contract.freezeDocument("<html>v2</html>"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(contract.getDocumentHtml()).isEqualTo("<html>v1</html>");
+    }
+
+    @Test
     void accessKeyGuards() {
         assertThatThrownBy(() -> UnitAccessKey.physicalKey(1L, 2L, 0, NOW))
                 .isInstanceOf(IllegalArgumentException.class);

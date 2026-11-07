@@ -90,6 +90,8 @@ export type StorageUnit = {
   monthlyPrice: number;
   /** Giá riêng của khoang; `null` = dùng giá loại khoang. */
   unitPrice: number | null;
+  /** Mốc bảo trì sau trả kho (cron tự mở lại); `null` = không bảo trì hoặc bảo trì thủ công. */
+  maintenanceStartedAt: string | null;
 };
 
 /** `GET /api/unit-types?facilityId=` — loại khoang cơ sở cung cấp. */
@@ -163,6 +165,11 @@ export function setStorageUnitMaintenance(unitId: number, maintenance: boolean):
     method: "POST",
     body: { maintenance },
   });
+}
+
+/** Giữ bảo trì sau trả kho: bỏ mốc tự mở lại, khoang thành bảo trì thủ công. */
+export function holdStorageUnitMaintenance(unitId: number): Promise<UnitRow> {
+  return authed(`/api/fm/storage-units/${unitId}/maintenance-hold`, { method: "POST" });
 }
 
 /** Cơ sở kèm hình thức truy cập đang bật. */
@@ -824,4 +831,26 @@ export function useFmAction() {
   }
 
   return { pending, error, notice, run, clear };
+}
+
+// ---------------------------------------------------------------- Hoàn tiền thủ công
+
+export type RefundEntry = { id: number; amount: number; note: string | null; recordedAt: string };
+export type RefundSummary = { invoiceId: number; refundable: number; refunds: RefundEntry[] };
+
+/** GET /api/fm/invoices/{id}/refunds — lịch sử hoàn + số còn hoàn được. */
+export function fetchInvoiceRefunds(invoiceId: number): Promise<RefundSummary> {
+  return authed<RefundSummary>(`/api/fm/invoices/${invoiceId}/refunds`);
+}
+
+/** POST /api/fm/invoices/{id}/refunds — FM ghi nhận đã chuyển khoản hoàn cho khách. */
+export function recordInvoiceRefund(
+  invoiceId: number,
+  amount: number,
+  note: string,
+): Promise<RefundSummary> {
+  return authed<RefundSummary>(`/api/fm/invoices/${invoiceId}/refunds`, {
+    method: "POST",
+    body: { amount, note },
+  });
 }

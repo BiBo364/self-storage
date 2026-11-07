@@ -4,6 +4,7 @@ import { formatDate, formatDateTime, formatMoney, formatTime, isoDate } from "..
 import { errorMessage, errorStatus } from "../../app/http";
 import { pathId, queryParam } from "../../app/routes";
 import {
+  correctHandoverInspection,
   fetchContractDocumentUrl,
   fetchStaffHandover,
   fetchStaffHandovers,
@@ -148,6 +149,10 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   const [overrideReason, setOverrideReason] = useState("");
   const [keyQuantity, setKeyQuantity] = useState(1);
   const [docLoading, setDocLoading] = useState(false);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [correctionNotes, setCorrectionNotes] = useState("");
+  const [correctionPhotos, setCorrectionPhotos] = useState<PickedFile[]>([]);
+  const [correctionReason, setCorrectionReason] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -300,6 +305,16 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   const tag = handoverStep(step);
   const activeIndex = stepIndex(step);
   const isClosed = current.result !== "IN_PROGRESS";
+  const canCorrectInspection = !isClosed && current.inspectionStatus === "Agreed";
+  const photoCount = current.inspectionPhotos?.length ?? 0;
+  const inspectionSummary = `${current.inspectionNotes || "Không có ghi chú"} · ${photoCount} ảnh`;
+
+  function openCorrection() {
+    setCorrectionNotes(current.inspectionNotes ?? "");
+    setCorrectionPhotos(filesFromUrls(current.inspectionPhotos));
+    setCorrectionReason("");
+    setCorrectionOpen(true);
+  }
 
   return (
     <div className="grid gap-6">
@@ -745,6 +760,103 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
               >
                 <Check size={16} /> Hoàn tất bàn giao
               </Button>
+            </div>
+          )}
+
+          {canCorrectInspection && (
+            <div className="mt-6 bg-surface-subtle p-4">
+              <strong className="block text-small text-ink">
+                Hiện trạng khoang (khách đã đồng ý)
+              </strong>
+              <p className="mb-0 mt-1 whitespace-pre-line text-small text-muted">
+                {inspectionSummary}
+              </p>
+              {!correctionOpen ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-3"
+                  disabled={busy}
+                  onClick={openCorrection}
+                >
+                  Sửa hiện trạng
+                </Button>
+              ) : (
+                <div className="mt-3 grid gap-3">
+                  <p className="m-0 text-label text-muted">
+                    Sửa sau khi khách đã đồng ý cần ghi lý do và được lưu vết. Hợp đồng đã ký giữ
+                    nguyên bản đã chốt.
+                  </p>
+                  <div>
+                    <label className={FIELD_LABEL} htmlFor="correction-notes">
+                      Ghi chú hiện trạng
+                    </label>
+                    <textarea
+                      id="correction-notes"
+                      className={TEXTAREA_CLASS}
+                      value={correctionNotes}
+                      maxLength={2000}
+                      onChange={(event) => setCorrectionNotes(event.target.value)}
+                    />
+                  </div>
+                  <FileUploadField
+                    label="Ảnh hiện trạng (JPEG/PNG/WebP/PDF, ≤ 10MB, tối đa 20)"
+                    files={correctionPhotos}
+                    onChange={setCorrectionPhotos}
+                  />
+                  <div>
+                    <label className={FIELD_LABEL} htmlFor="correction-reason">
+                      Lý do sửa
+                    </label>
+                    <textarea
+                      id="correction-reason"
+                      className={TEXTAREA_CLASS}
+                      value={correctionReason}
+                      maxLength={500}
+                      onChange={(event) => setCorrectionReason(event.target.value)}
+                      placeholder="Ví dụ: bổ sung vết xước khách chỉ ra sau khi đồng ý."
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      pending={busy}
+                      disabled={
+                        !correctionReason.trim() ||
+                        (!correctionNotes.trim() && correctionPhotos.length === 0)
+                      }
+                      onClick={async () => {
+                        const ok = await run(
+                          () =>
+                            correctHandoverInspection(
+                              current.id,
+                              correctionNotes.trim(),
+                              correctionPhotos.map((photo) => photo.url),
+                              correctionReason.trim(),
+                            ),
+                          "Đã sửa hiện trạng khoang.",
+                        );
+                        if (ok) {
+                          await attachUploaded(correctionPhotos);
+                          setCorrectionOpen(false);
+                          setCorrectionPhotos([]);
+                          setCorrectionReason("");
+                        }
+                      }}
+                    >
+                      <Check size={14} /> Lưu hiện trạng đã sửa
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setCorrectionOpen(false)}
+                    >
+                      Đóng
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>

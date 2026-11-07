@@ -54,6 +54,14 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             """, nativeQuery = true)
     boolean existsPendingByOrderId(@Param("orderId") Long orderId);
 
+    /** Đơn đã từng có lịch check-in bị huỷ (no-show, FS huỷ, quá hạn bàn giao) — lần đặt tiếp theo là đặt lại. */
+    @Query(value = """
+            select count(*) > 0 from appointments a
+            join rental_appointments ra on ra.appointment_id = a.id
+            where ra.order_id = :orderId and a.type = 'CHECKIN' and a.status = 'Canceled'
+            """, nativeQuery = true)
+    boolean existsCanceledCheckinByOrderId(@Param("orderId") Long orderId);
+
     /**
      * Khung giờ đã có lịch còn hiệu lực ({@code Pending}/{@code Done}) tại cơ sở trong khoảng ngày — check-in và trả
      * kho dùng chung ba khung cố định (cùng FS phục vụ).

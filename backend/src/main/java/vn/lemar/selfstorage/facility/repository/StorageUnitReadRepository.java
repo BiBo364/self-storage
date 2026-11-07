@@ -1,5 +1,7 @@
 package vn.lemar.selfstorage.facility.repository;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,7 +23,7 @@ public class StorageUnitReadRepository {
         StringBuilder sql = new StringBuilder(
                 "select u.id, u.code, u.facility_id, u.unit_type_id, t.name as unit_type_name, u.size, "
                         + "t.area, u.status, coalesce(u.monthly_price, t.monthly_price) as monthly_price, "
-                        + "u.monthly_price as unit_price "
+                        + "u.monthly_price as unit_price, u.maintenance_started_at "
                         + "from storage_units u join unit_types t on t.id = u.unit_type_id "
                         + "where u.facility_id = ?");
         List<Object> args = new ArrayList<>();
@@ -38,7 +40,12 @@ public class StorageUnitReadRepository {
         return jdbc.query(sql.toString(), (rs, rowNum) -> new StorageUnitListView(
                 rs.getLong("id"), rs.getString("code"), rs.getLong("facility_id"), rs.getLong("unit_type_id"),
                 rs.getString("unit_type_name"), rs.getString("size"), rs.getBigDecimal("area"),
-                rs.getString("status"), rs.getBigDecimal("monthly_price"), rs.getBigDecimal("unit_price")),
+                rs.getString("status"), rs.getBigDecimal("monthly_price"), rs.getBigDecimal("unit_price"),
+                instant(rs.getTimestamp("maintenance_started_at"))),
                 args.toArray());
+    }
+
+    private static Instant instant(Timestamp value) {
+        return value == null ? null : value.toInstant();
     }
 }

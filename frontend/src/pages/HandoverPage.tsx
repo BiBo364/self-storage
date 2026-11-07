@@ -15,6 +15,7 @@ import {
   INVOICE_STATUS,
   openContractDocument,
   rejectHandover,
+  rotateAccessCode,
   useInvoicePayment,
   useResource,
   type AccessChoice,
@@ -136,6 +137,14 @@ function Handover({ handoverId, navigate }: { handoverId: number; navigate: Navi
     });
   }
 
+  // Kiểu "Both": mã khoá số cấp lúc nhân viên giao chìa nên chưa hiển thị cho khách — lấy mã mới tại đây.
+  function collectCode(contractId: number) {
+    return run(async () => {
+      const result = await rotateAccessCode(contractId);
+      setIssuedCode(result.accessCode);
+    });
+  }
+
   async function cancelOrder(view: HandoverView) {
     await run(async () => {
       await cancelMyOrder(view.orderId);
@@ -212,8 +221,15 @@ function Handover({ handoverId, navigate }: { handoverId: number; navigate: Navi
       </p>
     );
   } else if (step === "INSPECTION") {
+    const inspectionRecorded =
+      Boolean(view.inspectionNotes?.trim()) || view.inspectionPhotos.length > 0;
     action =
-      view.inspectionStatus === "Pending" ? (
+      view.inspectionStatus === "Pending" && !inspectionRecorded ? (
+        <p className="text-small text-muted">
+          Nhân viên đang kiểm tra khoang cùng bạn và ghi nhận hiện trạng (ghi chú, ảnh). Khi ghi
+          nhận xong, bạn xem lại và bấm đồng ý tại đây.
+        </p>
+      ) : view.inspectionStatus === "Pending" ? (
         <div className="grid gap-3">
           <p className="text-small text-muted">
             Kiểm tra khoang cùng nhân viên. Nếu hiện trạng đúng như ghi nhận, bấm đồng ý để cơ sở
@@ -336,6 +352,23 @@ function Handover({ handoverId, navigate }: { handoverId: number; navigate: Navi
         <p className="text-small text-muted">
           Bàn giao hoàn tất lúc {formatDateTime(view.completedAt)}. Hợp đồng đã có hiệu lực.
         </p>
+        {view.contract && view.requestedAccess === "Both" && !issuedCode && (
+          <div className="grid gap-2">
+            <p className="m-0 text-small text-muted">
+              Bạn đã chọn cả chìa khoá cơ và mã khoá số. Mã khoá số chưa được hiển thị — bấm để lấy
+              mã (mỗi lần lấy sẽ cấp mã mới, mã cũ hết hiệu lực).
+            </p>
+            <div>
+              <Button
+                variant="secondary"
+                pending={busy}
+                onClick={() => view.contract && collectCode(view.contract.id)}
+              >
+                Lấy mã khoá số
+              </Button>
+            </div>
+          </div>
+        )}
         {view.contract && (
           <div>
             <Button onClick={() => navigate(`/my-storage/${view.contract?.id}`)}>

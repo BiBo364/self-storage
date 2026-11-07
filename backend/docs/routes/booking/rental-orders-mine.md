@@ -20,7 +20,7 @@ Trang "Kho của tôi": mỗi đơn gom nhu cầu, khoang, proposal / hoá đơn
 |---|---|
 | `RESPOND_PROPOSAL` | proposal mới nhất `Pending`, đơn chưa đóng |
 | `PAY_INVOICE` | hoá đơn hiển thị `Unpaid`, đơn chưa đóng |
-| `BOOK_CHECKIN` | đơn `Deposited` và không còn hoá đơn `Unpaid` |
+| `BOOK_CHECKIN` | đơn `Deposited`, không còn hoá đơn `Unpaid`, và `AppointmentBookingService.bookable` = `true` (không chờ đề xuất lại / cọc bổ sung, còn trong cửa sổ đặt lịch — lần đầu theo `booking_window_days`, đặt lại sau lịch huỷ theo `expires_at`; xem [appointment-booking.md](../../booking/appointment-booking.md)) |
 | `HANDOVER` | đơn `InProgress`, lịch mới nhất `Done` (khách đã đến), biên bản `IN_PROGRESS` |
 | `VIEW_CONTRACT` | có hợp đồng `Active`/`Ended` |
 | `CANCEL` | đơn chưa `Canceled`/`Done` |

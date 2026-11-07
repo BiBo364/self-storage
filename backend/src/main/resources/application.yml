@@ -74,9 +74,8 @@ payos:
   return-url: ${PAYOS_RETURN_URL:${FRONTEND_URL:http://localhost:5173}/payments/result}
   cancel-url: ${PAYOS_CANCEL_URL:${FRONTEND_URL:http://localhost:5173}/payments/result}
 
-# VNPay — giá trị thật nằm trong .env của từng người, xem docs/vnpay-sandbox.md.
-# Không đặt default: thiếu env thì @NotBlank cho app chết ngay lúc khởi động,
-# tốt hơn là NPE giữa luồng thu tiền.
+# VNPay — giá trị thật nằm trong .env của từng người, xem docs/vnpay-testing.md.
+# Chỉ bắt buộc khi payment.provider = vnpay (VnPayGateway kiểm lúc tạo phiên); để trống khi dùng payOS.
 vnpay:
   tmn-code: ${VNPAY_TMN_CODE:}
   hash-secret: ${VNPAY_HASH_SECRET:}

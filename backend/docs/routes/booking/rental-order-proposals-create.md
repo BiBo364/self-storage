@@ -21,17 +21,20 @@ Body `{ "unitId": 3, "overrideReason": "..." }` — tạo `ProposalFeedback` `Pe
 - Khoá đơn, khoá khoang; khoang khác cơ sở → 404, khoang không `Available` → 409.
 - Khoang khách đã từ chối trong đơn: thiếu `overrideReason` → 400; có thì lý do ghi vào AuditLog
   `PROPOSAL_REPROPOSED`.
-- Hoá đơn `Deposit` `Unpaid` còn treo của đơn (khách đã đồng ý khoang cũ nhưng chưa trả) → `Canceled` + AuditLog
-  `INVOICE_CANCELED`. Proposal cũ giữ nguyên làm lịch sử.
+- Hoá đơn `Deposit`/`DepositSupplement` `Unpaid` còn treo của đơn (khách đã đồng ý khoang cũ nhưng chưa trả) →
+  `Canceled` + AuditLog `INVOICE_CANCELED` lý do "FM đề xuất lại khoang khác". Sau commit, phiên payOS/VNPay còn mở
+  của các hoá đơn đó được huỷ ở cổng (`PaymentSessionCloser.closeAfterCommit`, best-effort) để khách không trả được
+  vào link cũ. Proposal cũ giữ nguyên làm lịch sử.
 - Proposal mới `Pending`; khách nhận `PROPOSAL_REPROPOSED` kèm link `<FRONTEND_URL>/proposals`.
 
 ## Ghi chú nghiệp vụ
 
-- `needs_reproposal` do Flow 2 bật (vd khách từ chối khoang tại check-in) hoặc B3 bật lại khi khách từ
+- `needs_reproposal` do Flow 2 bật (vd khách từ chối khoang tại check-in) hoặc Flow 1.3 bật lại khi khách từ
   chối/không nhận được khoang trên đơn đã cọc; cờ được **clear ngay khi proposal mới tạo thành công** — chỉ
   dùng cho gate đề xuất lại, không phải điều kiện để khách đồng ý.
-- Đơn còn proposal `Pending` (khách chưa phản hồi): giữ 409 — FM liên hệ khách ngoài hệ thống, không được thì
-  huỷ đơn qua endpoint FM huỷ đơn (chưa triển khai).
+- **Quyết định của chủ dự án:** FM không đề xuất lại khi đơn còn proposal `Pending` (khách chưa phản hồi) —
+  luôn 409 "Đơn đang có đề xuất chờ khách phản hồi". FM liên hệ khách ngoài hệ thống; không được thì huỷ đơn qua
+  `POST /api/fm/rental-orders/{id}/cancel` ([fm-rental-order-cancel.md](fm-rental-order-cancel.md)).
 
 ## Ví dụ
 

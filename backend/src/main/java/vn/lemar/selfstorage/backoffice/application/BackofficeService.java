@@ -145,6 +145,27 @@ public class BackofficeService {
         return facilities.findUnit(unitId).orElseThrow();
     }
 
+    /** FM giữ bảo trì sau trả kho: bỏ mốc {@code maintenance_started_at} để cron không tự mở lại khoang. */
+    @Transactional
+    public UnitRow holdMaintenance(Long unitId) {
+        UnitRow before = facilities.findUnit(unitId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy khoang"));
+        access.can(PERM_FACILITY, before.facilityId());
+        if (!facilities.holdMaintenance(unitId)) {
+            throw new IllegalStateException("Chỉ giữ bảo trì được cho khoang đang bảo trì sau trả kho");
+        }
+        Map<String, Object> oldValue = new HashMap<>();
+        oldValue.put("status", before.status());
+        oldValue.put("maintenanceStartedAt",
+                before.maintenanceStartedAt() == null ? null : before.maintenanceStartedAt().toString());
+        Map<String, Object> newValue = new HashMap<>();
+        newValue.put("status", "Maintenance");
+        newValue.put("maintenanceStartedAt", null);
+        newValue.put("reason", "FM giữ bảo trì");
+        audit(AuditAction.STORAGE_UNIT_MAINTENANCE, AuditEntityType.STORAGE_UNIT, unitId, oldValue, newValue);
+        return facilities.findUnit(unitId).orElseThrow();
+    }
+
     /** Cơ sở (kèm hình thức truy cập đang bật) cho FM / BOM. */
     @Transactional(readOnly = true)
     public FacilityRow facility(Long facilityId) {

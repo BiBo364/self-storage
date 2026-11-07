@@ -54,8 +54,10 @@ public class NotificationTemplateCatalog {
     public NotificationTemplateCatalog() {
         put(NotificationType.RENTAL_REQUEST_APPROVED, NotificationRecipient.CUSTOMER,
                 "Yêu cầu thuê kho đã được duyệt",
-                "Khoang {{unitCode}} đã được chỉ định cho yêu cầu thuê của bạn. "
-                        + "Xác nhận đề xuất tại {{proposalLink}}.");
+                "Khoang {{unitCode}} — loại {{unitType}} — đã được chỉ định cho yêu cầu thuê của bạn. "
+                        + "Xác nhận đề xuất và đặt cọc tại {{proposalLink}}. Lưu ý: khoang chưa được giữ trong lúc "
+                        + "chờ — khoang chỉ được xác nhận cho khách hoàn tất thanh toán cọc đầu tiên (cọc trước giữ "
+                        + "trước).");
         put(NotificationType.RENTAL_REQUEST_REJECTED, NotificationRecipient.CUSTOMER,
                 "Yêu cầu thuê kho bị từ chối",
                 "Yêu cầu thuê kho của bạn đã bị từ chối. Lý do: {{reason}}.");
@@ -128,7 +130,9 @@ public class NotificationTemplateCatalog {
                         + "Số tiền cần hoàn: {{refundAmount}}.");
         put(NotificationType.HANDOVER_COMPLETED, NotificationRecipient.CUSTOMER,
                 "Bàn giao kho hoàn tất",
-                "Đơn {{orderCode}} đã bàn giao khoang {{unitCode}}. Xem biên bản tại {{handoverLink}}.");
+                "Đơn {{orderCode}} đã bàn giao khoang {{unitCode}}. Xem biên bản tại {{handoverLink}}, "
+                        + "hợp đồng đã ký tại "
+                        + "{{contractLink}}.{{accessNote}}");
         put(NotificationType.CONTRACT_EXPIRING_SOON, NotificationRecipient.CUSTOMER,
                 "Hợp đồng thuê sắp hết hạn",
                 "Hợp đồng {{contractCode}} (khoang {{unitCode}}) hết hạn ngày {{endDate}}, còn {{daysLeft}} ngày. "
@@ -163,6 +167,34 @@ public class NotificationTemplateCatalog {
                 "Cần hoàn cọc khi trả kho",
                 "Khoang {{unitCode}} (hợp đồng {{contractCode}}) đã trả. "
                         + "Số tiền cần hoàn cho khách: {{refundAmount}}đ.");
+        put(NotificationType.RENT_INVOICE_ISSUED, NotificationRecipient.CUSTOMER,
+                "Hoá đơn tiền thuê tháng {{month}}",
+                "Hợp đồng {{contractCode}} (khoang {{unitCode}}): tiền thuê kỳ {{periodFrom}} – {{periodTo}} là "
+                        + "{{amount}}đ, hạn thanh toán {{dueDate}}. Thanh toán tại {{invoiceLink}}.");
+        put(NotificationType.RENT_UNPAID, NotificationRecipient.FM,
+                "Khách chưa trả tiền thuê",
+                "Hoá đơn tiền thuê {{invoiceCode}} của hợp đồng {{contractCode}} (khoang {{unitCode}}) đã quá hạn "
+                        + "chưa thanh toán ({{amount}}đ). Cần liên hệ khách.");
+        put(NotificationType.CONTRACT_ACCESS_SUSPENDED, NotificationRecipient.CUSTOMER,
+                "Quyền truy cập khoang tạm khoá",
+                "Hợp đồng {{contractCode}} (khoang {{unitCode}}) đã quá hạn {{days}} ngày. Mã khoá số đã tạm khoá; "
+                        + "gia hạn hoặc trả kho và thanh toán phí quá hạn để mở lại.");
+        put(NotificationType.CONTRACT_ACCESS_SUSPENDED, NotificationRecipient.FM,
+                "Hợp đồng quá hạn kéo dài",
+                "Hợp đồng {{contractCode}} (khoang {{unitCode}}) đã quá hạn {{days}} ngày, mã khoá số đã tạm khoá. "
+                        + "Liên hệ khách để gia hạn hoặc trả kho; khách không phản hồi thì xử lý thu hồi theo "
+                        + "quy trình của cơ sở.");
+        put(NotificationType.CONTRACT_ACCESS_RESTORED, NotificationRecipient.CUSTOMER,
+                "Quyền truy cập khoang đã mở lại",
+                "Hợp đồng {{contractCode}} (khoang {{unitCode}}) không còn quá hạn. Lấy mã khoá số mới trong trang kho "
+                        + "đang thuê.");
+        put(NotificationType.RETURN_DATE_SHIFTED, NotificationRecipient.CUSTOMER,
+                "Ngày trả kho được dời",
+                "Ngày bạn chọn đã kín lịch — buổi trả khoang {{unitCode}} được dời sang {{appointmentTime}}.");
+        put(NotificationType.CHECKOUT_SHORTFALL_UNPAID, NotificationRecipient.FM,
+                "Khách chưa trả phần thiếu khi trả kho",
+                "Khoang {{unitCode}} (hợp đồng {{contractCode}}) đã đóng trả kho nhưng hoá đơn phần còn thiếu "
+                        + "{{shortfall}}đ quá hạn chưa thanh toán. Cần thu thủ công.");
         put(NotificationType.SUPPORT_REQUEST_CREATED, NotificationRecipient.FM,
                 "Yêu cầu hỗ trợ mới",
                 "Khách gửi yêu cầu hỗ trợ #{{requestId}} ({{category}}): {{title}}. Vui lòng phân công FS.");

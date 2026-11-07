@@ -139,6 +139,19 @@ public class FacilityAdminCommands {
                         + "updated_at = now() where id = ? and status = 'Maintenance'", unitId) == 1;
     }
 
+    /**
+     * FM giữ bảo trì sau trả kho: khoang {@code Maintenance} đang chạy cron ({@code maintenance_started_at} có giá
+     * trị) → xoá mốc, thành bảo trì thủ công (cron không tự mở lại). Một câu {@code update} có điều kiện nên không
+     * đua với cron mở lại khoang.
+     *
+     * @return {@code true} khi thực sự đổi
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean holdMaintenance(Long unitId) {
+        return jdbc.update("update storage_units set maintenance_started_at = null, updated_at = now() "
+                + "where id = ? and status = 'Maintenance' and maintenance_started_at is not null", unitId) == 1;
+    }
+
     /** Khoang đang được đơn chưa cọc trỏ tới (đề xuất / hoá đơn cọc đang chờ) — chặn bảo trì tay. */
     @Transactional(readOnly = true)
     public boolean hasPendingOrders(Long unitId) {

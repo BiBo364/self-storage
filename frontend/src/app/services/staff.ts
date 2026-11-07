@@ -142,6 +142,19 @@ export function saveHandoverInspection(
   });
 }
 
+/** Sửa hiện trạng sau khi khách đã đồng ý — bắt buộc lý do; chỉ khi phiên còn mở. */
+export function correctHandoverInspection(
+  id: number,
+  notes: string,
+  photos: string[],
+  reason: string,
+): Promise<HandoverView> {
+  return authed<HandoverView>(`/api/staff/handovers/${id}/inspection-correction`, {
+    method: "POST",
+    body: { notes, photos, reason },
+  });
+}
+
 export function markHandoverNotSigned(id: number): Promise<HandoverView> {
   return authed<HandoverView>(`/api/staff/handovers/${id}/not-signed`, { method: "POST" });
 }

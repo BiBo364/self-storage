@@ -1,8 +1,11 @@
 import { Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatDate, formatDateTime, formatMoney } from "../../app/format";
 import {
   fetchFacilityInvoices,
+  fetchInvoiceRefunds,
+  recordInvoiceRefund,
+  type RefundSummary,
   INVOICE_STATUS_LABEL,
   INVOICE_STATUS_TONE,
   INVOICE_TYPE_LABEL,
@@ -11,6 +14,9 @@ import {
   toneOf,
   useFmLoad,
 } from "../../app/services/fm";
+import { Button } from "../../components/ui/Button";
+import { DemoNotice } from "../../components/ui/DemoNotice";
+import { DetailPanel } from "../../components/ui/DetailPanel";
 import { FilterSelect } from "../../components/ui/FilterSelect";
 import { INPUT_ELEMENT, INPUT_WRAP } from "../../components/ui/FormField";
 import { StatusTag } from "../../components/ui/StatusTag";
@@ -22,6 +28,7 @@ export function FacilityInvoicesPage() {
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
   const [search, setSearch] = useState("");
+  const [refundFor, setRefundFor] = useState<{ id: number; code: string } | null>(null);
 
   const invoices = useFmLoad(`invoices:${status}:${type}`, (facility) =>
     fetchFacilityInvoices(facility.id, { status, type }),
@@ -50,7 +57,8 @@ export function FacilityInvoicesPage() {
         <h1 className="m-0 text-title text-ink">Hoá đơn cơ sở</h1>
         <p className="mt-1.5 text-small text-muted">
           Hoá đơn của {invoices.facility ? `cơ sở ${invoices.facility.name}` : "cơ sở"} — 500 hoá
-          đơn mới nhất. Chỉ xem; khách thanh toán trên ứng dụng.
+          đơn mới nhất. Khách thanh toán trên ứng dụng; hoá đơn đã thu qua cổng có thể ghi nhận hoàn
+          tiền sau khi bạn chuyển khoản hoàn cho khách.
         </p>
       </div>
 
@@ -155,6 +163,15 @@ export function FacilityInvoicesPage() {
                     <span className="mt-0.5 block text-muted">
                       Tạo {formatDate(invoice.createdAt)}
                     </span>
+                    {invoice.paidAt && (
+                      <button
+                        type="button"
+                        className="mt-1 block text-label text-ink underline hover:text-brand"
+                        onClick={() => setRefundFor({ id: invoice.id, code: invoice.code })}
+                      >
+                        Hoàn tiền
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
@@ -166,6 +183,133 @@ export function FacilityInvoicesPage() {
           </div>
         </div>
       )}
+
+      {refundFor && (
+        <RefundPanel
+          key={refundFor.id}
+          invoiceId={refundFor.id}
+          code={refundFor.code}
+          onClose={() => setRefundFor(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** FM ghi nhận đã chuyển khoản hoàn tiền cho khách (payOS không có API hoàn tiền). */
+function RefundPanel({
+  invoiceId,
+  code,
+  onClose,
+}: {
+  invoiceId: number;
+  code: string;
+  onClose: () => void;
+}) {
+  const [summary, setSummary] = useState<RefundSummary | null>(null);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetchInvoiceRefunds(invoiceId).then(
+      (result) => active && setSummary(result),
+      (caught: unknown) =>
+        active && setError(caught instanceof Error ? caught.message : String(caught)),
+    );
+    return () => {
+      active = false;
+    };
+  }, [invoiceId]);
+
+  async function submit() {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0 || !note.trim()) {
+      setError("Nhập số tiền > 0 và ghi chú (lý do, mã chuyển khoản).");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      setSummary(await recordInvoiceRefund(invoiceId, value, note.trim()));
+      setAmount("");
+      setNote("");
+      setDone(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DetailPanel
+      title={`Hoàn tiền ${code}`}
+      eyebrow="Ghi nhận hoàn tiền thủ công"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Đóng
+          </Button>
+          <Button pending={busy} onClick={submit} disabled={!summary || summary.refundable <= 0}>
+            Ghi nhận đã hoàn
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        <p className="m-0 text-small text-muted">
+          Chuyển khoản hoàn cho khách trước, rồi ghi nhận tại đây để đối soát. Không ghi nhận vượt
+          số đã thu qua cổng.
+        </p>
+        {done && <DemoNotice tone="success">Đã ghi nhận hoàn tiền.</DemoNotice>}
+        {error && <DemoNotice tone="error">{error}</DemoNotice>}
+        {!summary ? (
+          !error && <SurfaceState variant="loading" title="Đang tải lịch sử hoàn tiền…" />
+        ) : (
+          <>
+            <p className="m-0 text-small text-ink">
+              Còn hoàn được: <strong>{formatMoney(summary.refundable)}</strong>
+            </p>
+            {summary.refunds.length > 0 && (
+              <ul className="m-0 grid gap-1.5 p-0 text-label text-muted">
+                {summary.refunds.map((refund) => (
+                  <li key={refund.id} className="list-none">
+                    {formatDateTime(refund.recordedAt)} · {formatMoney(refund.amount)} ·{" "}
+                    {refund.note ?? "—"}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <label className="grid gap-1.5">
+              <span className="text-label text-muted">Số tiền đã hoàn (đ)</span>
+              <div className={INPUT_WRAP}>
+                <input
+                  className={INPUT_ELEMENT}
+                  inputMode="numeric"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value.replace(/[^0-9]/g, ""))}
+                />
+              </div>
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-label text-muted">Ghi chú (lý do, mã chuyển khoản)</span>
+              <div className={INPUT_WRAP}>
+                <input
+                  className={INPUT_ELEMENT}
+                  maxLength={500}
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+              </div>
+            </label>
+          </>
+        )}
+      </div>
+    </DetailPanel>
   );
 }

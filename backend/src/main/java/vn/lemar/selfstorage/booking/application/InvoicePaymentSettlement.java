@@ -105,7 +105,12 @@ class InvoicePaymentSettlement {
         if (order != null && invoice.getType() == InvoiceType.DEPOSIT) {
             settleDeposit(order);
         } else if (order != null && invoice.getType() == InvoiceType.DEPOSIT_SUPPLEMENT) {
-            reserveUnit(order);
+            if (order.getStatus() == RentalOrderStatus.PENDING) {
+                // Đơn đã trả cọc nhưng khoang cũ bị giữ trước, nay bù chênh lệch cho khoang thay thế → chốt cọc.
+                settleDeposit(order);
+            } else {
+                reserveUnit(order);
+            }
         } else if (invoice.getContractId() != null) {
             events.publishEvent(new ContractInvoicePaid(invoice.getId(), invoice.getContractId(),
                     invoice.getType().dbValue(), event.paidAt()));

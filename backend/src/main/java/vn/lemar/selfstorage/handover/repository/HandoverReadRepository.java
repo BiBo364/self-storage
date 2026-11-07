@@ -85,7 +85,8 @@ public class HandoverReadRepository {
                                       Instant signedAt, Long orderId, Long customerId, String customerName,
                                       String customerEmail, String customerPhone, String unitCode, String unitType,
                                       BigDecimal unitArea, Long facilityId, String facilityName,
-                                      String facilityAddress, Long staffId, String inspectionNotes) {
+                                      String facilityAddress, Long staffId, String inspectionNotes,
+                                      String documentHtml) {
     }
 
     public Optional<ContractDocumentRow> findContractDocument(Long contractId) {
@@ -97,7 +98,8 @@ public class HandoverReadRepository {
                        (select a.staff_id from handover_records h join appointments a on a.id = h.appointment_id
                          where h.order_id = c.order_id order by h.id desc limit 1) as staff_id,
                        (select h.inspection_notes from handover_records h
-                         where h.order_id = c.order_id order by h.id desc limit 1) as inspection_notes
+                         where h.order_id = c.order_id order by h.id desc limit 1) as inspection_notes,
+                       c.document_html
                 from rental_contracts c
                 join accounts acc on acc.id = c.customer_id
                 join storage_units u on u.id = c.unit_id
@@ -111,7 +113,8 @@ public class HandoverReadRepository {
                 rs.getLong("order_id"), rs.getLong("customer_id"), rs.getString("name"), rs.getString("email"),
                 rs.getString("phone"), rs.getString("unit_code"), rs.getString("unit_type"),
                 rs.getBigDecimal("area"), rs.getLong("facility_id"), rs.getString("facility_name"),
-                rs.getString("address"), nullableLong(rs, "staff_id"), rs.getString("inspection_notes")), contractId)
+                rs.getString("address"), nullableLong(rs, "staff_id"), rs.getString("inspection_notes"),
+                rs.getString("document_html")), contractId)
                 .stream().findFirst();
     }
 

@@ -52,6 +52,19 @@ public class StorageUnitService {
                 .orElse(false);
     }
 
+    /**
+     * Trả kho hoàn tất khi khách mất chìa: {@code Rented -> Maintenance} không ghi {@code maintenance_started_at} —
+     * bảo trì thủ công tới khi thay khoá, cron không tự mở lại.
+     *
+     * @return {@code true} nếu trạng thái khoang thực sự đổi — caller ghi AuditLog cho khoang
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean startManualMaintenanceAfterReturn(Long unitId) {
+        return storageUnitRepository.findByIdForUpdate(unitId)
+                .map(unit -> unit.startManualMaintenanceAfterReturn(java.time.Instant.now()))
+                .orElse(false);
+    }
+
     @Transactional(readOnly = true)
     public java.util.List<Long> maintenanceDueIds(java.time.Instant cutoff) {
         return storageUnitRepository.findMaintenanceDueIds(cutoff);

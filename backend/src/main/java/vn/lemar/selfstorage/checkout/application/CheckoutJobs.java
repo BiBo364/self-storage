@@ -14,6 +14,7 @@ import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.audit.domain.AuditAction;
 import vn.lemar.selfstorage.audit.domain.AuditEntityType;
+import vn.lemar.selfstorage.booking.application.ContractInvoiceExpired;
 import vn.lemar.selfstorage.booking.application.ContractInvoicePaid;
 import vn.lemar.selfstorage.facility.application.StorageUnitService;
 import vn.lemar.selfstorage.pricing.application.PricingQuery;
@@ -47,6 +48,13 @@ public class CheckoutJobs {
     public void on(ContractInvoicePaid event) {
         if ("Penalty".equals(event.invoiceType())) {
             checkoutService.onShortfallPaid(event.invoiceId());
+        }
+    }
+
+    @EventListener
+    public void on(ContractInvoiceExpired event) {
+        if ("Penalty".equals(event.invoiceType())) {
+            checkoutService.onShortfallExpired(event.invoiceId());
         }
     }
 

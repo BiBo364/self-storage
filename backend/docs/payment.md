@@ -5,7 +5,8 @@ purpose: Module payment — cổng thanh toán (payOS mặc định, VNPay tuỳ
 
 ## Cổng đang dùng
 
-`payment.provider` (`PAYMENT_PROVIDER`): **`payos` (mặc định)** | `vnpay`. Chỉ một `PaymentGateway` được dựng
+`payment.provider` (`PAYMENT_PROVIDER`): **`payos` (mặc định)** | `vnpay`. payOS là cổng mặc định, VNPay là tuỳ
+chọn — quyết định của chủ dự án. Chỉ một `PaymentGateway` được dựng
 (`@ConditionalOnProperty`); chỉ cổng đang dùng bắt buộc đủ credential — thiếu là app chết lúc khởi động.
 
 | | payOS (`PayOsGateway`) | VNPay (`VnPayGateway`) |
@@ -17,7 +18,7 @@ purpose: Module payment — cổng thanh toán (payOS mặc định, VNPay tuỳ
 | Đối soát dự phòng | `GET /v2/payment-requests/{orderCode}` | `querydr` |
 | Huỷ phiên | `POST /v2/payment-requests/{orderCode}/cancel` | không hỗ trợ (phiên tự hết hạn) |
 | Sandbox | **không có** — giao dịch là tiền thật | có |
-| Hoàn tiền | không có API — hoàn thủ công | thủ công |
+| Hoàn tiền | cổng không có API — FM chuyển khoản tay rồi ghi nhận ([Hoàn tiền thủ công](#hoàn-tiền-thủ-công)) | như payOS |
 
 Nội dung chuyển khoản payOS: ASCII, tối đa 25 ký tự (`TT hoa don {invoiceId}`). `returnUrl`/`cancelUrl` = trang
 `<FRONTEND_URL>/payments/result` của FE; FE gọi `POST /api/invoices/{id}/payment-check` để đối soát, không tin query
@@ -57,7 +58,8 @@ Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
 ## Hành vi
 
 - **Đồng hồ của hóa đơn: `Invoice.due_date`.** Quá hạn là mốc duy nhất của "quá hạn thanh toán" —
-  Flow 6 xử lý (`Expired` + cascade hủy đơn).
+  `BookingExpiryJob` (5 phút) chuyển hoá đơn `Unpaid` quá `due_date` sang `Expired` rồi xử lý theo loại hoá đơn
+  ([booking/deposit-payment.md › Cron Flow 1](booking/deposit-payment.md#cron-flow-1)).
   - **LƯU Ý:** đừng nhầm với cửa sổ phiên VNPay (`vnp_ExpireDate` = lúc tạo URL + `PAYMENT_WINDOW`,
     hiện 15') — cửa sổ chỉ là giới hạn kỹ thuật (hết cửa sổ là cổng không cho trả tiếp); khách bấm
     trả sát `due_date` vẫn có đủ 15'.
@@ -82,8 +84,8 @@ Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
   → `vnp_Amount` (`04`) → guard trạng thái (`02`) → OK (`00`). Sai chữ ký thì không để lộ gì về
   giao dịch.
 - **Số tiền:** cổng nhận `amount × 100`; đối chiếu khi IPN về. Nguồn số tiền tin cậy là **hóa đơn
-  trong DB** — caller phải truyền đúng từ đó (chưa có entity invoice: TODO(invoice) trong
-  `PaymentService`).
+  trong DB** — booking truyền `invoice.amount` đọc từ DB lúc mở phiên
+  (`InvoicePaymentService` → `PaymentService.startInvoicePayment`), không nhận số tiền từ client.
 - **Ranh giới module:** `PaymentTransaction.invoiceId` là `Long`, không quan hệ JPA với bảng
   `invoices`; module khác giao tiếp qua event, không import chéo.
 - **Listener event bắt buộc `AFTER_COMMIT`.** `PaymentSucceeded`/`PaymentFailed` được publish
@@ -107,9 +109,13 @@ Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
 
 ## Khoá phiên & huỷ phiên
 
-- **Phiên đang mở = còn giao dịch `Pending`**, cho tới khi cổng xác nhận phiên đóng (đã trả / huỷ / hết hạn — qua
-  webhook, `payment-check` hoặc job đối soát). Không tự hết theo đồng hồ của mình → khoang không thể có hai phiên trả
-  được tiền cùng lúc (`PaymentService.invoicesWithOpenSession`).
+- **Phiên đang mở = còn giao dịch `Pending` tạo trong 24 giờ gần nhất** (`PaymentService.invoicesWithOpenSession`,
+  `OPEN_SESSION_LIMIT` = 24h), cho tới khi cổng xác nhận phiên đóng (đã trả / huỷ / hết hạn — qua webhook,
+  `payment-check` hoặc job đối soát). Trong 24 giờ đó khoang không thể có hai phiên trả được tiền cùng lúc.
+- Giao dịch `Pending` quá 24 giờ (cổng không trả lời được, đối soát lỗi liên tục) **không còn tính là phiên mở**: cron
+  hết hạn hoá đơn / huỷ đơn / đóng phiên bàn giao và nút thanh toán lại không bị chặn mãi bởi một giao dịch treo.
+  `PaymentReconcileJob` vẫn tiếp tục hỏi cổng về giao dịch đó; nếu sau đó cổng báo đã thu tiền thì đi nhánh
+  [xác nhận muộn](#hành-vi) (ghi `Success`, log ERROR, FM hoàn tiền thủ công).
 - `PaymentService.cancelSession(txnRef, reason)`: cổng xác nhận đã huỷ → khoá row, còn `Pending` thì `Failed`
   "Đã huỷ phiên: …" + `PaymentFailed` (booking ghi audit `PAYMENT_FAILED`). Cổng không huỷ được → giữ `Pending`,
   webhook / đối soát quyết.
@@ -119,6 +125,25 @@ Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
   - `closeNow(invoiceId, reason)` — khách bấm thanh toán lại: đối soát trước (đã trả thì chốt luôn), chưa trả thì huỷ
     phiên cũ rồi mới mở phiên mới.
 
+## Hoàn tiền thủ công
+
+payOS / VNPay không có API hoàn tiền dùng được — FM chuyển khoản trả khách ngoài hệ thống rồi ghi nhận lại qua
+`GET` / `POST /api/fm/invoices/{invoiceId}/refunds`
+([routes/booking/fm-invoice-refunds.md](routes/booking/fm-invoice-refunds.md)). Áp dụng cho mọi trường hợp hệ thống
+báo "cần hoàn": hoàn cọc khi trả kho, cọc thừa khi đổi khoang, tiền vào sau khi hoá đơn đã đóng, huỷ sau khi đã trả
+tháng đầu.
+
+- `booking/application/ManualRefundService` kiểm quyền `payment_transaction.refund` theo cơ sở của hoá đơn, validate
+  (số tiền > 0, ghi chú bắt buộc ≤ 500 ký tự → 400), khoá hoá đơn rồi gọi `PaymentService.recordManualRefund`.
+- `recordManualRefund` (propagation `MANDATORY`): số tiền > **còn hoàn được** → 409; ghi `PaymentTransaction`
+  `direction = REFUND`, `status = Success`, `txn_ref = RF{invoiceId}-{epochMillis}`, nội dung = ghi chú,
+  `paid_at` = lúc ghi.
+- **Còn hoàn được** (`PaymentService.refundable`) = tổng giao dịch `PAY` `Success` của hoá đơn − tổng `REFUND`
+  `Success`. Hoá đơn không thu qua cổng (đối trừ cọc khi trả kho) có số này = 0.
+- Audit `MANUAL_REFUND_RECORDED` (entity `PaymentTransaction`, `new_value` = `invoiceId`, `invoiceCode`, `amount`;
+  `reason` = ghi chú).
+- Ghi nhận hoàn tiền không đổi trạng thái hoá đơn, đơn hay hợp đồng.
+
 ## Cấu hình
 
 - `PAYMENT_PROVIDER` — `payos` (mặc định) | `vnpay`.
@@ -126,7 +151,7 @@ Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
   (mặc định `https://api-merchant.payos.vn`), `PAYOS_RETURN_URL` / `PAYOS_CANCEL_URL` (mặc định
   `<FRONTEND_URL>/payments/result`).
 - VNPay (bắt buộc khi `vnpay`): `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAY_URL`, `VNPAY_RETURN_URL`;
-  `VNPAY_API_URL` tuỳ chọn (API `querydr`, mặc định sandbox). Hướng dẫn sandbox: `docs/vnpay-sandbox.md`.
+  `VNPAY_API_URL` tuỳ chọn (API `querydr`, mặc định sandbox). Hướng dẫn sandbox: [`docs/vnpay-testing.md`](../../docs/vnpay-testing.md).
 
 ## Đối soát `querydr`
 
@@ -149,7 +174,8 @@ Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
 - Khởi tạo thanh toán `POST /api/invoices/{invoiceId}/pay` và chốt hoá đơn sau khi cổng xác nhận: xem
   [booking/deposit-payment.md](booking/deposit-payment.md).
 - Cron chờ phiên thanh toán đang mở đóng xong mới hết hạn hoá đơn / huỷ đơn.
-- `PaymentFailed` chưa có listener: hoá đơn giữ `Unpaid`, phiên đóng làm khoá ngắn hạn tự hết.
+- `PaymentFailed` có một listener — `booking/application/PaymentFailureAudit` (AFTER_COMMIT + REQUIRES_NEW) ghi audit
+  `PAYMENT_FAILED`; hoá đơn giữ `Unpaid`, khách mở phiên mới được.
 - payOS: đã chạy thật tạo link / tra cứu / huỷ link; chưa có giao dịch chuyển khoản thật và chưa nhận webhook thật
   (cần URL public).
 - VNPay: chưa kiểm chứng `querydr` với terminal sandbox thật (cần credential VNPay sandbox hợp lệ).

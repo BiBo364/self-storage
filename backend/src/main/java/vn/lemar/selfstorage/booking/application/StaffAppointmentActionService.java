@@ -16,10 +16,15 @@ import vn.lemar.selfstorage.booking.application.exception.AppointmentForbiddenEx
 import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.booking.domain.Appointment;
 import vn.lemar.selfstorage.booking.domain.AppointmentStatus;
+import vn.lemar.selfstorage.booking.domain.AppointmentType;
+import vn.lemar.selfstorage.booking.domain.Invoice;
+import vn.lemar.selfstorage.booking.domain.InvoiceStatus;
 import vn.lemar.selfstorage.booking.domain.RentalOrder;
 import vn.lemar.selfstorage.booking.repository.RentalOrderRepository;
 import vn.lemar.selfstorage.booking.repository.AppointmentReadRepository;
 import vn.lemar.selfstorage.booking.repository.AppointmentRepository;
+import vn.lemar.selfstorage.booking.repository.InvoiceRepository;
+import vn.lemar.selfstorage.facility.application.StorageUnitQuery;
 import vn.lemar.selfstorage.identity.application.Access;
 import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
 
@@ -28,9 +33,12 @@ import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
  * không thuộc riêng handover:
  * <ul>
  *   <li>{@code arrive}: {@code Pending -> Done}, ghi {@code arrived_at}, audit, phát {@code AppointmentArrived}
- *       để handover tự set {@code HandoverRecord.due_at}.</li>
- *   <li>{@code cancel} chủ động: {@code Pending -> Canceled} + lý do, chưa quá {@code end_at}; quá giờ thì
- *       huỷ no-show ngay rồi trả 409; không đụng {@code RentalOrder}.</li>
+ *       để handover tự set {@code HandoverRecord.due_at}. Lịch CHECKIN phải đủ điều kiện vào Flow 2 (đơn đã cọc,
+ *       giữ khoang Reserved, không còn hoá đơn cọc chưa trả, không chờ đề xuất lại) và chưa quá {@code end_at};
+ *       lịch RETURN nhận cả khi khách đến trễ.</li>
+ *   <li>{@code cancel} chủ động (chỉ lịch CHECKIN): {@code Pending -> Canceled} + lý do, chưa quá {@code end_at};
+ *       quá giờ thì huỷ no-show ngay rồi trả 409. Đóng phiên bàn giao của lịch và trả đơn về {@code Deposited}
+ *       (quá hạn giữ kho thì Cascade).</li>
  * </ul>
  */
 @Service
@@ -45,12 +53,17 @@ public class StaffAppointmentActionService {
     private final AppointmentNoShowService noShowService;
     private final RentalOrderRepository orderRepository;
     private final HandoverOrderService handoverOrders;
+    private final InvoiceRepository invoiceRepository;
+    private final StorageUnitQuery storageUnitQuery;
 
     StaffAppointmentActionService(AppointmentRepository appointmentRepository,
                                   AppointmentReadRepository readRepository, Access access,
                                   CurrentAccountProvider currentAccount, AuditRecorder auditRecorder,
                                   ApplicationEventPublisher events, AppointmentNoShowService noShowService,
-                                  RentalOrderRepository orderRepository, HandoverOrderService handoverOrders) {
+                                  RentalOrderRepository orderRepository, HandoverOrderService handoverOrders,
+                                  InvoiceRepository invoiceRepository, StorageUnitQuery storageUnitQuery) {
+        this.invoiceRepository = invoiceRepository;
+        this.storageUnitQuery = storageUnitQuery;
         this.orderRepository = orderRepository;
         this.handoverOrders = handoverOrders;
         this.appointmentRepository = appointmentRepository;
@@ -65,12 +78,17 @@ public class StaffAppointmentActionService {
     /** FS xác nhận khách đã đến; lịch chỉ đổi từ {@code Pending}. */
     @Transactional
     public ActionResult arrive(Long appointmentId) {
-        lockOrderOf(appointmentId);
+        RentalOrder order = lockOrderOf(appointmentId);
         Appointment appointment = lockAssigned(appointmentId);
         requirePending(appointment);
-        if (appointment.getEndAt().isBefore(Instant.now())) {
+        boolean checkin = appointment.getType() == AppointmentType.CHECKIN;
+        // Quá giờ: lịch CHECKIN đi nhánh no-show; lịch RETURN không có no-show — khách đến trễ vẫn nhận trả kho.
+        if (checkin && appointment.getEndAt().isBefore(Instant.now())) {
             boolean noShow = noShowService.cancelIfDue(appointmentId);
             return new ActionResult(response(appointmentId), true, noShow);
+        }
+        if (checkin) {
+            requireCheckinReady(order);
         }
         appointment.arrive();
         Long actorId = currentAccount.getCurrentAccountId();
@@ -90,6 +108,10 @@ public class StaffAppointmentActionService {
         RentalOrder order = lockOrderOf(appointmentId);
         Appointment appointment = lockAssigned(appointmentId);
         requirePending(appointment);
+        if (appointment.getType() != AppointmentType.CHECKIN) {
+            throw new AppointmentConflictException(
+                    "Lịch trả kho không huỷ ở đây — FM phân công lại hoặc khách huỷ yêu cầu trả kho");
+        }
         if (appointment.getEndAt().isBefore(Instant.now())) {
             boolean noShow = noShowService.cancelIfDue(appointmentId);
             return new ActionResult(response(appointmentId), true, noShow);
@@ -134,6 +156,29 @@ public class StaffAppointmentActionService {
             throw new AppointmentForbiddenException("Bạn không phải FS phụ trách lịch này");
         }
         return appointment;
+    }
+
+    /**
+     * Spec 2.1 — điều kiện vào Flow 2: đơn đã cọc và đang giữ khoang, không còn hoá đơn cọc / cọc bổ sung chưa trả,
+     * không chờ đề xuất lại, khoang ở {@code Reserved}. Thiếu điều kiện nào → 409, lịch giữ {@code Pending}.
+     */
+    private void requireCheckinReady(RentalOrder order) {
+        if (order == null || !order.holdsUnit()) {
+            throw new AppointmentConflictException("Đơn chưa đặt cọc hoặc đã đóng — chưa thể check-in");
+        }
+        if (order.isNeedsReproposal()) {
+            throw new AppointmentConflictException("Đơn đang chờ FM đề xuất lại khoang — chưa thể check-in");
+        }
+        boolean unpaidDeposit = invoiceRepository.findByOrderIdAndStatus(order.getId(), InvoiceStatus.UNPAID).stream()
+                .anyMatch(Invoice::isDepositKind);
+        if (unpaidDeposit) {
+            throw new AppointmentConflictException("Khách còn hoá đơn cọc chưa thanh toán — chưa thể check-in");
+        }
+        boolean reserved = order.getUnitId() != null && storageUnitQuery.find(order.getUnitId())
+                .map(unit -> "Reserved".equals(unit.status())).orElse(false);
+        if (!reserved) {
+            throw new AppointmentConflictException("Khoang của đơn không ở trạng thái giữ chỗ — liên hệ FM");
+        }
     }
 
     private static void requirePending(Appointment appointment) {

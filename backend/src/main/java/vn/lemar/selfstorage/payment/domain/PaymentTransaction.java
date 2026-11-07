@@ -79,6 +79,19 @@ public class PaymentTransaction {
         this.status = PaymentStatus.PENDING;
     }
 
+    /**
+     * Hoàn tiền FM đã chuyển trả khách ngoài hệ thống (payOS không có API hoàn tiền) — ghi nhận lại để đối soát:
+     * {@code direction = REFUND}, {@code Success} ngay.
+     */
+    public static PaymentTransaction manualRefund(Long invoiceId, String ref, BigDecimal amount, String note,
+                                                  Instant now) {
+        PaymentTransaction refund = new PaymentTransaction(invoiceId, ref, amount, note);
+        refund.direction = PaymentDirection.REFUND;
+        refund.status = PaymentStatus.SUCCESS;
+        refund.paidAt = now;
+        return refund;
+    }
+
     /** Ghi nhận cổng báo thành công. Chỉ gọi khi giao dịch còn {@code PENDING}. */
     public void markSucceeded(String gatewayTransactionNo, Instant paidAt, String responsePayload) {
         this.status = PaymentStatus.SUCCESS;

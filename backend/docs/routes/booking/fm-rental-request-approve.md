@@ -22,7 +22,7 @@ FM duyệt `RentalRequest` đang `Pending` bằng cách gán một khoang cụ t
 3. Request không còn `Pending` (2 FM / double-click) → 409 "Yêu cầu đã được xử lý bởi FM khác",
    không đổi gì.
 4. Request đã quá `expires_at` → 409 "Yêu cầu đã quá hạn xử lý", không đổi gì (guard đọc
-   `expires_at`; chưa có cron đổi status sang `Expired`).
+   `expires_at`, không đợi `BookingExpiryJob` đổi status sang `Expired`).
 5. Tài khoản khách đang bị chặn (`AccountStatus.BANNED`) → request chuyển `Rejected` (reason
    `OTHER`, note "Tài khoản khách đã bị chặn"), audit `RENTAL_REQUEST_REJECTED`, gửi mail
    "Yêu cầu thuê kho bị từ chối" (tài khoản bị chặn, liên hệ CSKH nếu sai sót); response 200 với
@@ -45,7 +45,8 @@ FM duyệt `RentalRequest` đang `Pending` bằng cách gán một khoang cụ t
     Nếu convert phát hiện trùng khoang (race hiếm — request khác vừa convert) → **409**
     `RentalRequestDuplicateUnitException`, rollback cả transaction duyệt, request giữ `Pending`
     ([booking/conversion.md](../../booking/conversion.md)).
-11. Mail duyệt nhánh chưa-có-account theo template `draft.md:156` (after-commit, lỗi chỉ log);
+11. Mail duyệt nhánh chưa-có-account theo template `draft.md:156` (after-commit, lỗi chỉ log); link đăng ký là URL
+    tuyệt đối `<FRONTEND_URL>/register`, kèm hạn đăng ký và lưu ý "cọc trước giữ trước";
     với verify-first, email đang pending registration chưa có account nên vẫn nhận mail này;
     account legacy chưa xác minh không nhận mail — claim + notification sau khi xác minh.
 

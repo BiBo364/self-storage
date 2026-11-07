@@ -86,7 +86,12 @@ public enum AuditAction {
     ACCOUNT_CREATED(AuditEntityType.ACCOUNT),
     ACCOUNT_UPDATED(AuditEntityType.ACCOUNT),
     ROLE_PERMISSIONS_UPDATED(AuditEntityType.ROLE),
-    ACCOUNT_REGISTERED(AuditEntityType.ACCOUNT);
+    ACCOUNT_REGISTERED(AuditEntityType.ACCOUNT),
+    /** FS/FM sửa hiện trạng bàn giao sau khi khách đã chốt (kèm lý do). */
+    INSPECTION_CORRECTED(AuditEntityType.HANDOVER_RECORD),
+    /** Quá hạn kéo dài: tạm khoá mã khoá số / mở lại khi hết quá hạn. */
+    CONTRACT_ACCESS_SUSPENDED(AuditEntityType.RENTAL_CONTRACT),
+    CONTRACT_ACCESS_RESTORED(AuditEntityType.RENTAL_CONTRACT);
 
     private final Set<AuditEntityType> entityTypes;
 

@@ -36,7 +36,8 @@ public class ContractController {
     }
 
     @Operation(summary = "Bản hợp đồng (HTML để in)",
-            description = "Render từ mẫu `builtin-v1` + dữ liệu hiện tại. Còn đề nghị đổi mốc `Pending` → 409.")
+            description = "Đã ký: trả bản chốt lúc ký. Chưa ký: render từ mẫu `builtin-v1` + dữ liệu hiện tại; "
+                    + "còn đề nghị đổi mốc `Pending` → 409.")
     @GetMapping(value = "/api/contracts/{contractId}/document", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> document(@PathVariable Long contractId) {
         return ResponseEntity.ok()

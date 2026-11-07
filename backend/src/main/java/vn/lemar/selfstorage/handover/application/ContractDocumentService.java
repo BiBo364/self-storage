@@ -18,7 +18,10 @@ import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
 
 /**
  * Spec 2.3: render tài liệu hợp đồng từ mẫu đang hiệu lực + dữ liệu phiên. Chưa có bảng mẫu (Flow 4) — dùng mẫu
- * dựng sẵn {@code builtin-v1}; tài liệu render động từ dữ liệu hiện tại nên {@code document_url} trỏ về endpoint này.
+ * dựng sẵn {@code builtin-v1}; {@code document_url} trỏ về endpoint này.
+ *
+ * <p>Trước khi ký: render động từ dữ liệu hiện tại (bản nháp để xem/in). Lúc FS upload bản đã ký, workflow render
+ * một lần ({@link #html}) và chốt vào {@code rental_contracts.document_html}; từ đó endpoint trả đúng bản đã chốt.
  * Còn đề nghị đổi mốc tính tiền {@code Pending} → không render (409).
  */
 @Service
@@ -43,7 +46,10 @@ public class ContractDocumentService {
         ContractDocumentRow row = readRepository.findContractDocument(contractId)
                 .orElseThrow(() -> new HandoverNotFoundException("Không tìm thấy hợp đồng"));
         if (!row.customerId().equals(currentAccount.getCurrentAccountId())) {
-            access.can(HandoverQueryService.PERMISSION_READ, row.facilityId());
+            access.canGlobalOrAt(HandoverQueryService.PERMISSION_READ, row.facilityId());
+        }
+        if (row.documentHtml() != null) {
+            return row.documentHtml();
         }
         if (RentalContract.OVERRIDE_PENDING.equals(row.overrideStatus())) {
             throw new HandoverConflictException("Đề nghị đổi mốc tính tiền đang chờ FM duyệt — chưa thể in hợp đồng");
@@ -51,6 +57,7 @@ public class ContractDocumentService {
         return html(row);
     }
 
+    /** Render mẫu từ dòng đã nạp — không kiểm quyền; gọi được trong transaction ký hợp đồng. */
     static String html(ContractDocumentRow row) {
         StringBuilder out = new StringBuilder(4096);
         out.append("<!doctype html><html lang=\"vi\"><head><meta charset=\"utf-8\"><title>Hợp đồng ")

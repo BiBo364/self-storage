@@ -174,6 +174,54 @@ public class RentalContractService {
                 actorAccountId);
     }
 
+    /** Mọi hợp đồng đang thuê ({@code Active}) — đầu vào cron thu tiền thuê định kỳ. */
+    @Transactional(readOnly = true)
+    public List<Long> activeIds() {
+        return contracts.findByStatusAndEndDateAfter(RentalContractStatus.ACTIVE, LocalDate.of(1970, 1, 1)).stream()
+                .map(RentalContract::getId).toList();
+    }
+
+    /** Hợp đồng đang bị tạm khoá truy cập do quá hạn kéo dài. */
+    @Transactional(readOnly = true)
+    public boolean accessSuspended(Long contractId) {
+        return contracts.findById(contractId).map(c -> c.getAccessSuspendedAt() != null).orElse(false);
+    }
+
+    /**
+     * Quá hạn kéo dài: thu hồi mã khoá số đang {@code Active}, đánh dấu {@code access_suspended_at}. Chìa cơ không thu
+     * hồi từ xa được — FM xử lý tại chỗ. Idempotent; {@code true} khi vừa khoá.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean suspendAccess(Long contractId, long daysOverdue, Long actorAccountId) {
+        RentalContract contract = contracts.findByIdForUpdate(contractId).orElseThrow();
+        Instant now = Instant.now();
+        if (!contract.suspendAccess(now)) {
+            return false;
+        }
+        accessKeys.findActiveForUpdate(contractId, UnitAccessKey.ACCESS_CODE).ifPresent(code -> {
+            code.revoke(now);
+            audit(AuditAction.ACCESS_KEY_REVOKED, AuditEntityType.UNIT_ACCESS_KEY, code.getId(),
+                    Map.of("status", UnitAccessKey.ACTIVE),
+                    Map.of("status", code.getStatus(), "reason", "Tạm khoá do quá hạn"), actorAccountId);
+        });
+        audit(AuditAction.CONTRACT_ACCESS_SUSPENDED, AuditEntityType.RENTAL_CONTRACT, contractId, null,
+                Map.of("accessSuspendedAt", now.toString(), "daysOverdue", daysOverdue), actorAccountId);
+        return true;
+    }
+
+    /** Hết quá hạn (gia hạn / trả phí): bỏ tạm khoá; khách tự lấy mã mới. {@code true} khi vừa mở lại. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean restoreAccess(Long contractId, Long actorAccountId) {
+        RentalContract contract = contracts.findByIdForUpdate(contractId).orElseThrow();
+        Instant before = contract.getAccessSuspendedAt();
+        if (!contract.restoreAccess()) {
+            return false;
+        }
+        audit(AuditAction.CONTRACT_ACCESS_RESTORED, AuditEntityType.RENTAL_CONTRACT, contractId,
+                Map.of("accessSuspendedAt", before.toString()), Map.of("accessSuspendedAt", "null"), actorAccountId);
+        return true;
+    }
+
     /** Mã khoang để hiển thị. */
     @Transactional(readOnly = true)
     public Optional<String> unitCode(Long contractId) {

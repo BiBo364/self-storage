@@ -40,6 +40,7 @@ import vn.lemar.selfstorage.handover.repository.RentalContractRepository;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
 import vn.lemar.selfstorage.identity.application.Access;
 import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
+import vn.lemar.selfstorage.media.MediaUrlLookup;
 import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
@@ -83,6 +84,12 @@ public class HandoverWorkflowService {
     static final String MSG_NOT_ASSIGNED = "Bạn không phải FS phụ trách lịch này";
     static final String MSG_NOT_ARRIVED = "Khách chưa được xác nhận đã đến cơ sở";
     static final String MSG_CONTRACT_NOT_FOUND = "Không tìm thấy hợp đồng";
+    static final String MSG_MAX_PHOTOS = "Tối đa 20 ảnh hiện trạng";
+    static final String MSG_PHOTO_NOT_UPLOADED = "Ảnh hiện trạng phải là ảnh bạn đã tải lên hệ thống — vui lòng "
+            + "tải ảnh lên lại";
+    static final String MSG_SCAN_NOT_UPLOADED = "Bản scan hợp đồng phải là tệp bạn đã tải lên hệ thống — vui lòng "
+            + "tải bản scan lên lại";
+    static final int MAX_PHOTOS = 20;
 
     private static final Logger LOG = LoggerFactory.getLogger(HandoverWorkflowService.class);
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -103,13 +110,15 @@ public class HandoverWorkflowService {
     private final AccountQueryService accountQuery;
     private final NotificationService notificationService;
     private final AuditRecorder auditRecorder;
+    private final MediaUrlLookup mediaUrls;
 
     HandoverWorkflowService(HandoverRecordRepository records, RentalContractRepository contracts,
                             HandoverReadRepository readRepository, HandoverOrderService orders,
                             HandoverCompletion completion, HandoverService handoverService,
                             FacilityAccess facilityAccess, PricingQuery pricingQuery, Access access,
                             CurrentAccountProvider currentAccount, AccountQueryService accountQuery,
-                            NotificationService notificationService, AuditRecorder auditRecorder) {
+                            NotificationService notificationService, AuditRecorder auditRecorder,
+                            MediaUrlLookup mediaUrls) {
         this.records = records;
         this.contracts = contracts;
         this.readRepository = readRepository;
@@ -123,6 +132,7 @@ public class HandoverWorkflowService {
         this.accountQuery = accountQuery;
         this.notificationService = notificationService;
         this.auditRecorder = auditRecorder;
+        this.mediaUrls = mediaUrls;
     }
 
     /** Khách từ chối khoang: chạm ngưỡng mà chưa xác nhận huỷ đơn → {@code requiresConfirmation}. */
@@ -165,10 +175,43 @@ public class HandoverWorkflowService {
         if (!HandoverRecord.PENDING.equals(record.getInspectionStatus())) {
             throw new HandoverConflictException("Hiện trạng khoang đã được khách chốt, không sửa được");
         }
-        if (photos != null && photos.size() > 20) {
-            throw new HandoverValidationException("Tối đa 20 ảnh hiện trạng");
+        if (photos != null && photos.size() > MAX_PHOTOS) {
+            throw new HandoverValidationException(MSG_MAX_PHOTOS);
         }
+        requireUploadedPhotos(locked.actorId(), photos, record);
         record.recordInspection(trimToNull(notes), photos, Instant.now());
+    }
+
+    /**
+     * Sửa hiện trạng sau khi khách đã đồng ý (bắt buộc lý do + audit {@code INSPECTION_CORRECTED}). Chỉ khi biên
+     * bản còn mở ({@code IN_PROGRESS}); đã chốt bàn giao → 409. Bản hợp đồng đã ký (đã chốt) không đổi theo.
+     */
+    @Transactional
+    public void correctInspection(Long handoverId, String notes, List<String> photos, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new HandoverValidationException("Vui lòng nhập lý do sửa hiện trạng");
+        }
+        if (reason.length() > 500) {
+            throw new HandoverValidationException("Lý do tối đa 500 ký tự");
+        }
+        if (photos != null && photos.size() > MAX_PHOTOS) {
+            throw new HandoverValidationException(MSG_MAX_PHOTOS);
+        }
+        String newNotes = trimToNull(notes);
+        List<String> newPhotos = photos == null ? List.of() : photos;
+        if (newNotes == null && newPhotos.isEmpty()) {
+            throw new HandoverValidationException("Hiện trạng sau khi sửa cần ghi chú hoặc ít nhất một ảnh");
+        }
+        Locked locked = lockForStaff(handoverId, PERM_INSPECT);
+        HandoverRecord record = locked.record();
+        if (!record.inspectionAgreed()) {
+            throw new HandoverConflictException("Khách chưa đồng ý hiện trạng — cập nhật ở bước kiểm tra khoang");
+        }
+        requireUploadedPhotos(locked.actorId(), newPhotos, record);
+        Map<String, Object> oldValue = inspectionSnapshot(record);
+        record.correctInspection(newNotes, newPhotos, Instant.now());
+        audit(AuditAction.INSPECTION_CORRECTED, AuditEntityType.HANDOVER_RECORD, record.getId(), oldValue,
+                inspectionSnapshot(record), reason.trim(), locked.actorId());
     }
 
     /** Spec 2.3: FS đề nghị đổi mốc tính tiền trên hợp đồng {@code Draft}; FM duyệt. */
@@ -210,6 +253,9 @@ public class HandoverWorkflowService {
         if (!record.identityVerified() || !record.inspectionAgreed()) {
             throw new HandoverConflictException("Cần xác minh danh tính và khách đồng ý hiện trạng trước khi ký");
         }
+        if (!mediaUrls.notUploadedBy(locked.actorId(), List.of(pdfUrl.trim())).isEmpty()) {
+            throw new HandoverValidationException(MSG_SCAN_NOT_UPLOADED);
+        }
         RentalContract contract = lockContract(contractId, locked);
         if (contract.getStatus() != RentalContractStatus.DRAFT) {
             throw new HandoverConflictException("Hợp đồng không còn ở bản nháp");
@@ -219,6 +265,7 @@ public class HandoverWorkflowService {
         }
         Instant now = Instant.now();
         contract.sign(pdfUrl.trim(), now);
+        freezeDocument(contract);
         audit(AuditAction.CONTRACT_SIGNED, AuditEntityType.RENTAL_CONTRACT, contractId,
                 Map.of("status", RentalContractStatus.DRAFT.dbValue()),
                 Map.of("status", contract.getStatus().dbValue(), "pdfUrl", contract.getPdfUrl()), null,
@@ -281,6 +328,10 @@ public class HandoverWorkflowService {
         }
         if (note != null && note.length() > 1000) {
             throw new HandoverValidationException("Ghi chú tối đa 1000 ký tự");
+        }
+        if (!record.inspectionRecorded()) {
+            throw new HandoverConflictException("Nhân viên chưa ghi nhận hiện trạng khoang — chờ nhân viên ghi nhận "
+                    + "rồi mới đồng ý");
         }
         record.agreeInspection(note, Instant.now());
         audit(AuditAction.UNIT_INSPECTED, AuditEntityType.HANDOVER_RECORD, record.getId(),
@@ -476,6 +527,39 @@ public class HandoverWorkflowService {
             throw new HandoverNotFoundException(MSG_CONTRACT_NOT_FOUND);
         }
         return contract;
+    }
+
+    /**
+     * Chốt bản hợp đồng lúc ký: flush trạng thái {@code Signed} + {@code signed_at} để read model (JDBC, cùng
+     * connection của transaction) đọc đúng, render một lần rồi lưu {@code document_html}.
+     */
+    private void freezeDocument(RentalContract contract) {
+        contracts.flush();
+        String html = readRepository.findContractDocument(contract.getId()).map(ContractDocumentService::html)
+                .orElseThrow(() -> new HandoverNotFoundException(MSG_CONTRACT_NOT_FOUND));
+        contract.freezeDocument(html);
+    }
+
+    /** Ảnh hiện trạng phải là file FS này đã upload qua media; ảnh đã có sẵn trên biên bản được giữ nguyên. */
+    private void requireUploadedPhotos(Long actorId, List<String> photos, HandoverRecord record) {
+        if (photos == null || photos.isEmpty()) {
+            return;
+        }
+        if (photos.stream().anyMatch(url -> url == null || url.isBlank())) {
+            throw new HandoverValidationException(MSG_PHOTO_NOT_UPLOADED);
+        }
+        List<String> existing = record.getInspectionPhotos() == null ? List.of() : record.getInspectionPhotos();
+        List<String> fresh = photos.stream().filter(url -> !existing.contains(url)).toList();
+        if (!fresh.isEmpty() && !mediaUrls.notUploadedBy(actorId, fresh).isEmpty()) {
+            throw new HandoverValidationException(MSG_PHOTO_NOT_UPLOADED);
+        }
+    }
+
+    private static Map<String, Object> inspectionSnapshot(HandoverRecord record) {
+        Map<String, Object> value = new HashMap<>();
+        value.put("inspectionNotes", record.getInspectionNotes());
+        value.put("photoCount", record.getInspectionPhotos() == null ? 0 : record.getInspectionPhotos().size());
+        return value;
     }
 
     private RentalContract currentContract(HandoverRecord record, Locked locked) {

@@ -65,6 +65,7 @@ public class RentalRequestConversionService {
     private final NotificationService notificationService;
     private final AuditRecorder auditRecorder;
     private final String frontendUrl;
+    private final vn.lemar.selfstorage.pricing.application.UnitTypeQueryService unitTypes;
 
     public RentalRequestConversionService(RentalRequestRepository requestRepository,
                                           RentalOrderRepository orderRepository,
@@ -73,7 +74,9 @@ public class RentalRequestConversionService {
                                           AccountQueryService accountQueryService,
                                           StorageUnitQuery storageUnitQuery, PricingQuery pricingQuery,
                                           NotificationService notificationService, AuditRecorder auditRecorder,
-                                          @Value("${app.frontend-url}") String frontendUrl) {
+                                          @Value("${app.frontend-url}") String frontendUrl,
+                                          vn.lemar.selfstorage.pricing.application.UnitTypeQueryService unitTypes) {
+        this.unitTypes = unitTypes;
         this.requestRepository = requestRepository;
         this.orderRepository = orderRepository;
         this.proposalRepository = proposalRepository;
@@ -192,7 +195,8 @@ public class RentalRequestConversionService {
                 null, null));
         notificationService.notify(account.id(), account.email(), NotificationRecipient.CUSTOMER,
                 NotificationType.RENTAL_REQUEST_APPROVED,
-                Map.of("unitCode", unit.code(), "proposalLink", frontendUrl + "/proposals"), order.getId());
+                Map.of("unitCode", unit.code(), "unitType", unitTypeLabel(unit.unitTypeId()),
+                        "proposalLink", frontendUrl + "/proposals"), order.getId());
         return ConversionResult.converted(requestId, order.getId(), proposal.getId());
     }
 
@@ -200,6 +204,15 @@ public class RentalRequestConversionService {
      * {@code order.expiry_days} theo spec — không có fallback: thiếu key hoặc sai kiểu là lỗi cấu
      * hình (bug #130), convert rollback.
      */
+    /** "Small (1 × 2 × 2,2 m)" cho nội dung thông báo duyệt (spec 1.1). */
+    private String unitTypeLabel(Long unitTypeId) {
+        return unitTypes.find(unitTypeId)
+                .map(t -> t.name() + " (" + t.width().stripTrailingZeros().toPlainString() + " × "
+                        + t.depth().stripTrailingZeros().toPlainString() + " × "
+                        + t.height().stripTrailingZeros().toPlainString() + " m)")
+                .orElse("");
+    }
+
     private int orderExpiryDays() {
         String value = pricingQuery.valueOf(ORDER_EXPIRY_DAYS)
                 .orElseThrow(() -> new IllegalStateException("Thiếu policy '" + ORDER_EXPIRY_DAYS + "'"));

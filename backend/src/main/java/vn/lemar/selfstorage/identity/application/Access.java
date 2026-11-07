@@ -105,6 +105,24 @@ public class Access {
         }
     }
 
+    /**
+     * Cho route mở cho mọi role (không bị khoá namespace): permission có thể là {@code GLOBAL} với role này
+     * (ADMIN/BOM) và {@code FACILITY} với role khác (FM/FS). Mapping GLOBAL → cho qua; FACILITY → kiểm như
+     * {@link #can(String, Long)}. 403 nếu role không có permission.
+     */
+    @Transactional(readOnly = true)
+    public void canGlobalOrAt(String permissionCode, Long facilityId) {
+        Objects.requireNonNull(permissionCode, "permissionCode");
+        Account account = currentAccountProvider.getCurrentAccount();
+        PermissionScope scope = permissionRepository
+                .findScope(account.getRole().getId(), permissionCode)
+                .orElseThrow(ForbiddenException::new);
+        if (scope == PermissionScope.GLOBAL) {
+            return;
+        }
+        can(permissionCode, facilityId);
+    }
+
     private Account requirePermission(String permissionCode, PermissionScope requiredScope) {
         Objects.requireNonNull(permissionCode, "permissionCode");
         Account account = currentAccountProvider.getCurrentAccount();

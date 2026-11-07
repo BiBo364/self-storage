@@ -40,6 +40,7 @@ import vn.lemar.selfstorage.booking.application.BookingExpiryService;
 import vn.lemar.selfstorage.booking.application.InvoicePaymentService;
 import vn.lemar.selfstorage.booking.application.InvoicePaymentService.PayResult;
 import vn.lemar.selfstorage.booking.application.OrderOverviewQueryService;
+import vn.lemar.selfstorage.booking.application.ProposalService;
 import vn.lemar.selfstorage.booking.application.OrderOverviewQueryService.OrderOverview;
 import vn.lemar.selfstorage.booking.application.RentalOrderCancelService;
 import vn.lemar.selfstorage.booking.application.exception.BookingConflictException;
@@ -86,6 +87,8 @@ class Flow1CompletionIntegrationTest {
     private BookingExpiryService expiryService;
     @Autowired
     private OrderOverviewQueryService overviewQuery;
+    @Autowired
+    private ProposalService proposalService;
     @Autowired
     private JdbcTemplate jdbc;
 
@@ -293,10 +296,13 @@ class Flow1CompletionIntegrationTest {
         assertThat(invoiceStatus(seed.invoiceId)).isEqualTo("Paid");
         assertThat(orderStatus(seed.orderId)).isEqualTo("Deposited");
         assertThat(unitStatus(seed.unitId)).isEqualTo("Reserved");
-        assertThat(count("select count(*) from audit_logs where action in ('INVOICE_PAID', 'RENTAL_ORDER_DEPOSITED', "
-                + "'STORAGE_UNIT_RESERVED', 'PAYMENT_SUCCEEDED') and (entity_id = ? or entity_id = ? or entity_id = ? "
-                + "or new_value ->> 'invoiceId' = ?)", String.valueOf(seed.invoiceId), String.valueOf(seed.orderId),
-                String.valueOf(seed.unitId), String.valueOf(seed.invoiceId))).isEqualTo(4);
+        // Khớp từng action với đúng entity của nó — id các bảng có thể trùng nhau giữa các test.
+        assertThat(count("select count(*) from audit_logs where (action = 'INVOICE_PAID' and entity_id = ?) "
+                + "or (action = 'RENTAL_ORDER_DEPOSITED' and entity_id = ?) "
+                + "or (action = 'STORAGE_UNIT_RESERVED' and entity_id = ? and new_value ->> 'orderId' = ?) "
+                + "or (action = 'PAYMENT_SUCCEEDED' and new_value ->> 'invoiceId' = ?)",
+                String.valueOf(seed.invoiceId), String.valueOf(seed.orderId), String.valueOf(seed.unitId),
+                String.valueOf(seed.orderId), String.valueOf(seed.invoiceId))).isEqualTo(4);
         assertThat(notificationsFor("customer1@lemar.vn", "DEPOSIT_PAYMENT_SUCCEEDED")).isPositive();
     }
 
@@ -409,6 +415,84 @@ class Flow1CompletionIntegrationTest {
         assertThatThrownBy(() -> bookingService.slots(seed.orderId, customerId))
                 .isInstanceOf(BookingConflictException.class)
                 .hasMessageContaining("Đã quá hạn đặt lịch check-in");
+    }
+
+    @Test
+    void rebookingAfterCanceledCheckinIgnoresBookingWindowAndActionFollowsIt() {
+        Seed seed = seedPendingOrder();
+        deposit(seed);
+        jdbc.update("update payment_transactions set paid_at = now() - interval '8 days' where invoice_id = ?",
+                seed.invoiceId);
+        assertThat(bookingService.bookable(seed.orderId)).isFalse();
+        assertThat(overviewQuery.detailForCustomer(seed.orderId, customerId).availableActions())
+                .doesNotContain(OrderOverviewQueryService.ACTION_BOOK_CHECKIN);
+
+        long canceled = id("insert into appointments (customer_id, facility_id, type, date, started_at, end_at, "
+                + "status, cancel_reason) values (" + customerId + ", " + facilityId + ", 'CHECKIN', current_date - 1, "
+                + "now() - interval '26 hours', now() - interval '24 hours', 'Canceled', 'Quá giờ và khách không đến') "
+                + "returning id");
+        jdbc.update("insert into rental_appointments (appointment_id, order_id) values (?, ?)", canceled,
+                seed.orderId);
+
+        assertThat(bookingService.bookable(seed.orderId)).isTrue();
+        assertThat(bookingService.slots(seed.orderId, customerId).days()).isNotEmpty();
+        assertThat(overviewQuery.detailForCustomer(seed.orderId, customerId).availableActions())
+                .contains(OrderOverviewQueryService.ACTION_BOOK_CHECKIN);
+    }
+
+    @Test
+    void reproposeCancelsDepositInvoiceAndClosesItsPaymentSession() {
+        Seed seed = seedPendingOrder();
+        invoicePaymentService.start(seed.invoiceId, customerId, "127.0.0.1");
+        String ref = txnRef(seed.invoiceId);
+        when(gateway.cancel(eq(ref), anyString())).thenReturn(true);
+        long other = id("insert into storage_units (code, facility_id, unit_type_id, status) values ('RP-"
+                + System.nanoTime() % 100000 + "', " + facilityId
+                + ", (select id from unit_types where name = 'Small'), 'Available') returning id");
+        loginAs("fm1@lemar.vn");
+
+        long fmId = id("select id from accounts where email = 'fm1@lemar.vn'");
+        proposalService.repropose(seed.orderId, other, null, fmId);
+
+        verify(gateway).cancel(eq(ref), anyString());
+        assertThat(invoiceStatus(seed.invoiceId)).isEqualTo("Canceled");
+        assertThat(jdbc.queryForObject("select status from payment_transactions where vnp_txn_ref = ?", String.class,
+                ref)).isEqualTo("Failed");
+    }
+
+    @Test
+    void paidDepositOnTakenUnitBecomesDepositedOnAgreedReplacementWithoutSecondDeposit() {
+        Seed seed = seedPendingOrder();
+        // Khách mở phiên thanh toán, rồi khoang bị đơn khác giữ trước khi tiền cọc của đơn này về.
+        invoicePaymentService.start(seed.invoiceId, customerId, "127.0.0.1");
+        jdbc.update("update storage_units set status = 'Reserved' where id = ?", seed.unitId);
+        Map<String, String> ipn = new HashMap<>();
+        ipn.put("vnp_TxnRef", txnRef(seed.invoiceId));
+        ipn.put("vnp_TmnCode", "TESTTMN1");
+        ipn.put("vnp_Amount", "50000000");
+        ipn.put("vnp_ResponseCode", "00");
+        ipn.put("vnp_TransactionStatus", "00");
+        ipn.put("vnp_TransactionNo", "IPN" + SEQ.incrementAndGet() + System.nanoTime() % 100000);
+        ipn.put("vnp_PayDate", nowPayDate());
+        ipn.put("vnp_SecureHash", "mocked");
+        assertThat(paymentService.handleIpn(ipn).rspCode()).isEqualTo("00");
+        assertThat(invoiceStatus(seed.invoiceId)).isEqualTo("Paid");
+        assertThat(orderStatus(seed.orderId)).isEqualTo("Pending");
+
+        long replacement = id("insert into storage_units (code, facility_id, unit_type_id, status) values ('RX-"
+                + System.nanoTime() % 100000 + "', " + facilityId
+                + ", (select id from unit_types where name = 'Small'), 'Available') returning id");
+        long proposalId = id("insert into proposal_feedbacks (order_id, customer_id, unit_id, status) values ("
+                + seed.orderId + ", " + customerId + ", " + replacement + ", 'Pending') returning id");
+        loginAs("customer1@lemar.vn");
+
+        proposalService.agree(proposalId, customerId);
+
+        assertThat(orderStatus(seed.orderId)).isEqualTo("Deposited");
+        assertThat(unitStatus(replacement)).isEqualTo("Reserved");
+        assertThat(unitStatus(seed.unitId)).isEqualTo("Reserved");
+        assertThat(count("select count(*) from invoices where order_id = ? and type = 'Deposit'", seed.orderId))
+                .isEqualTo(1);
     }
 
     // ------------------------------------------------------------------ huỷ đơn

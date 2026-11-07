@@ -132,7 +132,7 @@ class Flow1CompletionControllerTest {
     void paymentCheckReturnsStatuses() throws Exception {
         customer();
         when(invoicePaymentService.check(eq(5L), eq(6L), anyString()))
-                .thenReturn(new PaymentCheck(5L, "Paid", "Success", null));
+                .thenReturn(new PaymentCheck(5L, "Paid", "Success", null, null));
 
         mockMvc.perform(as(post("/api/invoices/5/payment-check"), CUSTOMER))
                 .andExpect(status().isOk())

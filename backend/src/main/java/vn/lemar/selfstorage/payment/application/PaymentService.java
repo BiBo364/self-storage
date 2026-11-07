@@ -47,6 +47,13 @@ public class PaymentService {
     /** Cửa sổ phiên VNPay (15') + đệm 5' — quá mốc này cổng chắc chắn không nhận thanh toán nữa. */
     static final java.time.Duration SESSION_EXPIRY = java.time.Duration.ofMinutes(20);
 
+    /**
+     * Trần coi một giao dịch {@code Pending} là "phiên mở": cổng đã đóng link sau {@link #PAYMENT_WINDOW}, nên quá
+     * mốc này mà vẫn chưa xác nhận được (cổng lỗi kéo dài, sai cấu hình) thì không chặn hết hạn hoá đơn / huỷ đơn
+     * nữa. Giao dịch vẫn {@code Pending} để đối soát tiếp; tiền về muộn đi nhánh "xác nhận muộn" (báo FM hoàn).
+     */
+    static final java.time.Duration OPEN_SESSION_LIMIT = java.time.Duration.ofHours(24);
+
     /** Cửa sổ phiên VNPay — khớp {@code vnp_ExpireDate} của {@link VnPayGateway}. */
     public static final java.time.Duration PAYMENT_WINDOW = java.time.Duration.ofMinutes(15);
 
@@ -206,16 +213,56 @@ public class PaymentService {
     }
 
     /**
-     * Hoá đơn nào trong danh sách đang có phiên thanh toán mở: còn giao dịch {@code Pending} — **cho tới khi cổng
-     * xác nhận phiên đã đóng** (đã trả / huỷ / hết hạn, qua webhook hoặc đối soát), không tự hết theo đồng hồ của
-     * mình. Nhờ vậy không thể mở phiên thứ hai cho cùng khoang trong lúc phiên đầu còn trả được tiền.
+     * Hoá đơn nào trong danh sách đang có phiên thanh toán mở: còn giao dịch {@code Pending} — cho tới khi cổng
+     * xác nhận phiên đã đóng (đã trả / huỷ / hết hạn, qua webhook hoặc đối soát). Nhờ vậy không thể mở phiên thứ
+     * hai cho cùng khoang trong lúc phiên đầu còn trả được tiền. Giao dịch {@code Pending} quá
+     * {@link #OPEN_SESSION_LIMIT} không còn tính là phiên mở.
      */
     @Transactional(readOnly = true)
     public List<Long> invoicesWithOpenSession(Collection<Long> invoiceIds) {
         if (invoiceIds == null || invoiceIds.isEmpty()) {
             return List.of();
         }
-        return repository.findInvoiceIdsWithStatusSince(invoiceIds, PaymentStatus.PENDING, Instant.EPOCH);
+        return repository.findInvoiceIdsWithStatusSince(invoiceIds, PaymentStatus.PENDING,
+                Instant.now().minus(OPEN_SESSION_LIMIT));
+    }
+
+    /** Lần hoàn tiền thủ công đã ghi nhận. */
+    public record RefundView(Long id, java.math.BigDecimal amount, String note, Instant recordedAt) {
+    }
+
+    /** Số tiền còn hoàn được của hoá đơn = đã thu qua cổng − đã hoàn. */
+    @Transactional(readOnly = true)
+    public java.math.BigDecimal refundable(Long invoiceId) {
+        return repository.sumSucceeded(invoiceId, vn.lemar.selfstorage.payment.domain.PaymentDirection.PAY)
+                .subtract(repository.sumSucceeded(invoiceId,
+                        vn.lemar.selfstorage.payment.domain.PaymentDirection.REFUND));
+    }
+
+    @Transactional(readOnly = true)
+    public List<RefundView> refunds(Long invoiceId) {
+        return repository.findByInvoiceIdAndDirectionOrderByIdAsc(invoiceId,
+                        vn.lemar.selfstorage.payment.domain.PaymentDirection.REFUND).stream()
+                .map(t -> new RefundView(t.getId(), t.getAmount(), t.getTransactionContent(), t.getPaidAt()))
+                .toList();
+    }
+
+    /**
+     * Ghi nhận khoản hoàn tiền FM đã chuyển cho khách. Caller (booking) kiểm quyền + khoá hoá đơn; ở đây chặn hoàn
+     * vượt số đã thu qua cổng.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public RefundView recordManualRefund(Long invoiceId, java.math.BigDecimal amount, String note) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Số tiền hoàn phải lớn hơn 0");
+        }
+        if (amount.compareTo(refundable(invoiceId)) > 0) {
+            throw new IllegalStateException("Số tiền hoàn vượt số đã thu qua cổng thanh toán của hoá đơn");
+        }
+        Instant now = Instant.now();
+        String ref = "RF" + invoiceId + "-" + now.toEpochMilli();
+        PaymentTransaction refund = repository.save(PaymentTransaction.manualRefund(invoiceId, ref, amount, note, now));
+        return new RefundView(refund.getId(), refund.getAmount(), refund.getTransactionContent(), refund.getPaidAt());
     }
 
     /** Mã các giao dịch {@code Pending} của các hoá đơn — đầu vào huỷ phiên ở cổng. */
@@ -287,9 +334,8 @@ public class PaymentService {
             return IpnResponse.orderNotFound();
         }
 
-        // TODO(invoice): hiện neo vào transaction.amount, mà giá trị đó do caller truyền vào lúc
-        // startPayment. Khi module invoice có entity thật thì phải đọc amount từ invoice trong DB —
-        // không tin tham số của caller cho một bước đối chiếu tiền.
+        // Đối chiếu với transaction.amount — giá trị này booking lấy từ invoice.amount trong DB lúc mở phiên
+        // (InvoicePaymentService), không phải tham số do client gửi.
         if (!amountMatches(params.get("vnp_Amount"), transaction.getAmount())) {
             return IpnResponse.invalidAmount();
         }

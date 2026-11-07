@@ -50,8 +50,10 @@ Chức năng mà gán cho role khác là vô nghĩa hoặc nguy hiểm. Guard n�
 | `/api/admin/**` | `hasRole("ADMIN")` | Quản trị hệ thống |
 | `/api/**` (còn lại) | `ACCOUNT_ACTIVE` | Route permission-bound / ownership — guard ở method/service |
 | `/api/health`, `/api/auth/**`, `/swagger-ui/**`, `/v3/api-docs/**` | `permitAll` | Public (`/api/auth/me` khớp rule riêng trước, vẫn cần token) |
-| `POST /api/rental-requests`, `GET /api/unit-types` | `permitAll` đúng scope method | Form đặt kho + dropdown loại khoang (đặt trước rule vét `/api/**`) |
+| `POST /api/rental-requests`, `GET /api/unit-types`, `GET /api/facilities` | `permitAll` đúng scope method | Form đặt kho + dropdown loại khoang + catalog cơ sở public (đặt trước rule vét `/api/**`) |
 | `/api/payments/vnpay/ipn`, `/api/payments/vnpay/return` | `permitAll` | Callback của VNPay — xem ghi chú bên dưới |
+| `POST /api/payments/payos/webhook` | `permitAll` đúng method | Webhook payOS — xác thực bằng chữ ký HMAC-SHA256 trên `data` ([payment.md › Webhook payOS](payment.md#webhook-payos)) |
+| `POST /api/chat` | `permitAll` đúng method | Chatbot tư vấn công khai ([chat/assistant.md](chat/assistant.md)) |
 
 Quy tắc đặt route: dùng role-bound → đặt controller dưới prefix của role; không dùng role-bound
 (permission-bound / ownership) → để trong `/api/**` chung, guard ở method/service — **không** tự
@@ -84,6 +86,15 @@ access.can("facility.access", facilityId);  // 403 thiếu permission → 404 fa
 `facilityId` bắt buộc ở dạng 2 tham số; ADMIN/BOM bỏ qua scope, FM/FS kiểm
 `fm_account_id` / `account_facility_assignments`.
 
+Dạng thứ ba cho route mở cho mọi role mà permission có scope khác nhau theo role (GLOBAL với ADMIN/BOM, FACILITY
+với FM/FS):
+
+```java
+// Mapping GLOBAL với role hiện tại → cho qua; FACILITY → kiểm như can(permission, facilityId)
+// ContractDocumentService.java — ADMIN/BOM mở được bản hợp đồng của mọi cơ sở
+access.canGlobalOrAt("rental_order.read", facilityId);  // 403 nếu role không có permission
+```
+
 ### Ownership — guard ở service, không thuộc RBAC
 
 Quyền gắn với **instance dữ liệu**, không theo role → không tạo permission. Kiểm ở service;
@@ -108,7 +119,7 @@ tả lỗi token từ Spring. 403 có các message sau:
 | Account `BANNED` | `"Tài khoản đã bị chặn"` |
 | Account `ACTIVE` chưa xác minh email | `"Tài khoản chưa xác minh email"` |
 | `Access.can()` — role thiếu permission | `"Bạn không có quyền thực hiện thao tác này"` |
-| `Access.can(permission, facilityId)` — ngoài phạm vi cơ sở | `"Bạn không được gán vào cơ sở này"` |
+| `Access.can(permission, facilityId)` / `canGlobalOrAt` — ngoài phạm vi cơ sở | `"Bạn không được gán vào cơ sở này"` |
 
 Chi tiết: [error-handling.md](error-handling.md).
 
@@ -124,13 +135,17 @@ Chi tiết: [error-handling.md](error-handling.md).
 - Spec: [db-table-draft.md › Account](../../specs/db-table-draft.md#account);
   [draft.md › Business workflow](../../specs/draft.md#business-workflow).
 
-## Chưa có
+## Quản trị quyền và người phụ trách
 
-- UI quản trị gán permission cho role (Flow 5): mapping hiện sửa qua seed/SQL.
-- Luồng gán lại FM khi account FM bị `BANNED`/chưa xác minh. `facilities.fm_account_id` giữ
-  nguyên, nên facility không còn account vận hành; reassign hiện thủ công hoặc thuộc Flow 5.
-- Namespace `/api/fm/**` có các màn của FM: hàng đợi + duyệt/từ chối yêu cầu đặt kho, xem đơn để đề xuất
-  lại (`GET /api/fm/rental-orders/{orderId}`, role FM **cộng** facility scope); lịch check-in theo ngày, danh sách FS
-  của cơ sở và phân công FS (`appointment.read` / `appointment.assign` theo cơ sở). Thao tác đề xuất khoang theo
-  quy tắc đặt route ở trên: `/api/proposals/**` (ownership) và `/api/rental-orders/{orderId}/proposals`
-  (permission `proposal_feedback.repropose` theo cơ sở) nằm trong `/api/**` chung. `/api/bom/**`… vẫn chưa có.
+- **Permission theo role:** ADMIN thay toàn bộ quyền của một role qua `PUT /api/admin/roles/{role}/permissions`
+  (`ADMIN` không chỉnh được; code / scope sai → 400) và xem ma trận qua `GET /api/admin/permissions`
+  ([backoffice/overview.md › Admin](backoffice/overview.md#admin-apiadmin-role-admin)). Role đọc lại quyền từ DB mỗi
+  request nên thay đổi có hiệu lực ngay.
+- **FM của cơ sở:** BOM gán / bỏ FM qua `PUT /api/bom/facilities/{id}/manager` (1–1: FM đang phụ trách cơ sở khác bị
+  gỡ khỏi cơ sở đó). Khoá (`BANNED`) một tài khoản FM không tự gỡ `facilities.fm_account_id` — BOM gán FM khác bằng
+  route trên.
+- **FS của cơ sở:** ADMIN gán qua `PUT /api/admin/accounts/{id}/facilities`; đổi role khỏi `FS` thì gán cơ sở bị xoá.
+- Namespace `/api/fm/**`, `/api/bom/**`, `/api/admin/**` đều role-bound như bảng trên; route FM còn kiểm permission
+  theo cơ sở ở service. Thao tác đề xuất khoang theo quy tắc đặt route ở trên: `/api/proposals/**` (ownership) và
+  `/api/rental-orders/{orderId}/proposals` (permission `proposal_feedback.repropose` theo cơ sở) nằm trong `/api/**`
+  chung.

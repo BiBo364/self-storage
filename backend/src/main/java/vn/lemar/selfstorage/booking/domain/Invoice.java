@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * Hoá đơn ({@code specs/db-table-draft.md} › Invoice). B3 chỉ tạo hoá đơn {@code Deposit} gắn đơn thuê
- * và huỷ hoá đơn {@code Unpaid} trong Cancellation Cascade; thanh toán thuộc B4.
+ * và huỷ hoá đơn {@code Unpaid} trong Cancellation Cascade; thanh toán qua {@code InvoicePaymentService}.
  *
  * <p>CHECK của V1 buộc đúng một trong hai FK được set: hoá đơn cọc gắn {@code order_id}, hoá đơn tháng đầu
  * (Flow 2.3) và các hoá đơn sau khi có hợp đồng gắn {@code contract_id}.

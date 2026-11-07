@@ -5,7 +5,8 @@ purpose: Bàn giao kho (Flow 2) as-built — HandoverRecord, RentalContract, Uni
 
 Code: `handover/application/HandoverWorkflowService.java` (thao tác FS/khách/FM), `HandoverCompletion.java` (chốt
 bàn giao), `HandoverService.java` (huỷ phiên), `HandoverExpiryService.java` (cron), `HandoverQueryService.java`
-(view), `ContractDocumentService.java` (bản hợp đồng). Booking cung cấp `booking/application/HandoverOrderService.java`
+(view), `ContractDocumentService.java` (bản hợp đồng), `RentalContractService.java` (API hợp đồng cho module sau
+bàn giao — gia hạn, trả kho, tạm khoá truy cập). Booking cung cấp `booking/application/HandoverOrderService.java`
 — handover chỉ đổi `RentalOrder`/`Invoice` qua API này.
 
 ## Sơ đồ
@@ -18,12 +19,15 @@ sequenceDiagram
     participant B as booking
     FS->>H: identity (Verified / Failed)
     FS->>H: inspection (ghi chú + ảnh)
-    K->>H: agree → sinh RentalContract Draft
+    K->>H: agree (FS đã ghi hiện trạng) → sinh RentalContract Draft
+    opt Sửa hiện trạng (trước khi chốt bàn giao)
+        FS->>H: inspection-correction (lý do bắt buộc, audit INSPECTION_CORRECTED)
+    end
     opt Đổi mốc tính tiền
         FS->>H: start-date-override (Pending, khoá bước ký)
         Note over H: FM approve / reject
     end
-    FS->>H: sign (pdfUrl) → Signed
+    FS->>H: sign (pdfUrl) → Signed, chốt document_html
     H->>B: issueFirstMonthInvoice (INV-RNT, cùng transaction)
     K->>B: /api/invoices/{id}/pay → Paid
     K->>H: confirm(accessType)
@@ -55,6 +59,11 @@ Bảng `rental_contracts` (V1). Entity `handover/domain/RentalContract.java`.
 - `status`: `Draft → Signed → Active`; `Draft`/`Signed` → `Canceled` khi phiên bàn giao đóng.
 - `end_date = start_date + period tháng − 1 ngày`, tính lại khi FM duyệt mốc mới.
 - `start_date_override_status`: `Pending → Approved | Rejected`; `Pending` khoá bước ký và bản in.
+- `document_html` (V22): bản hợp đồng render một lần lúc ký và lưu lại; hợp đồng chưa ký hoặc ký trước V22 để
+  `NULL` (xem [Bản hợp đồng](#bản-hợp-đồng)).
+- `access_suspended_at` (V22): mốc tạm khoá truy cập do quá hạn kéo dài; `NULL` = không khoá. Ghi / xoá qua
+  `RentalContractService.suspendAccess` / `restoreAccess` (luật ở
+  [tenancy/rentals.md](../tenancy/rentals.md#quá-hạn-kéo-dài--tạm-khoá-truy-cập)).
 
 ## UnitAccessKey
 
@@ -64,11 +73,15 @@ Bảng `unit_access_keys` (V1). Entity `handover/domain/UnitAccessKey.java`.
   với mật khẩu); mã rõ chỉ trả trong response lúc cấp.
 - "Lấy mã" (`POST /api/customer/contracts/{id}/access-code`): thu hồi dòng `AccessCode` `Active` (`Revoked`, audit
   `ACCESS_KEY_REVOKED`) rồi cấp mã mới. Spec vừa yêu cầu "không lưu plain text" vừa "khách xem mã trong tài khoản" —
-  hai điều không cùng đúng với hash, nên "xem" được làm thành "cấp mã mới". Chỉ hợp đồng `Active`, cơ sở bật mã số.
+  hai điều không cùng đúng với hash, nên "xem" được làm thành "cấp mã mới". Chỉ hợp đồng `Active`, cơ sở bật mã số;
+  hợp đồng đang tạm khoá truy cập (`access_suspended_at` có giá trị) → 409 "Quyền truy cập đang tạm khoá do hợp đồng
+  quá hạn…".
 
 ## Cấu hình cơ sở
 
-`facilities.enabled_key_access`, `enabled_code_access` (V19, mặc định `true`) — chưa có màn hình Flow 5 để đổi.
+`facilities.enabled_key_access`, `enabled_code_access` (V19, mặc định `true`). FM đọc / đổi qua
+`GET`/`PUT /api/fm/facilities/{id}/access-options`, BOM qua `PUT /api/bom/facilities/{id}/access-options`; tắt cả
+hai → 400 ([backoffice/overview.md](../backoffice/overview.md)).
 Khách chỉ chọn được loại cơ sở đang bật; `Both` cần bật cả hai.
 
 ## Tạo record khi đặt lịch (Flow 1.5)
@@ -94,17 +107,34 @@ kiện chung: record `IN_PROGRESS`, đơn `InProgress`, khách đã đến (`arr
 | Bước | Ai | Điều kiện thêm | Kết quả | Audit |
 |---|---|---|---|---|
 | Xác minh danh tính | FS phụ trách (`appointments.staff_id`), `handover_record.verify_identity` | chưa `Verified` | `Verified` + `identity_verified_at`, hoặc `Failed` (phiên vẫn mở) | `IDENTITY_VERIFIED` (old/new `identityStatus`, `note`) |
-| Ghi hiện trạng | FS, `handover_record.inspect` | `Verified`, hiện trạng còn `Pending` | `inspection_notes`, `inspection_photos` (≤ 20 URL từ `/api/media`) | — |
-| Đồng ý hiện trạng | Khách của đơn | `Verified`, hiện trạng `Pending` | `Agreed` + `unit_inspected_at`; ghi chú khách nối vào notes ("Khách lưu ý: …"); sinh hợp đồng `Draft` nếu đơn chưa có | `UNIT_INSPECTED` |
+| Ghi hiện trạng | FS, `handover_record.inspect` | `Verified`, hiện trạng còn `Pending`; ảnh là upload của chính FS này (xem dưới) | `inspection_notes`, `inspection_photos` (≤ 20 URL) | — |
+| Đồng ý hiện trạng | Khách của đơn | `Verified`, hiện trạng `Pending`, ghi chú khách ≤ 1000 ký tự (400, kiểm trước), FS đã ghi hiện trạng — có ghi chú hoặc ≥ 1 ảnh (`HandoverRecord.inspectionRecorded()`), chưa ghi → 409 | `Agreed` + `unit_inspected_at`; ghi chú khách nối vào notes ("Khách lưu ý: …"); sinh hợp đồng `Draft` nếu đơn chưa có | `UNIT_INSPECTED` |
+| Sửa hiện trạng | FS, `handover_record.inspect` | hiện trạng đã `Agreed`; lý do bắt buộc ≤ 500 ký tự; ≤ 20 ảnh; sau khi sửa phải còn ghi chú hoặc ≥ 1 ảnh (400) | thay toàn bộ `inspection_notes` + `inspection_photos`; hợp đồng đã ký không đổi theo | `INSPECTION_CORRECTED` (old/new `inspectionNotes` + `photoCount`, `reason`) |
 | Đề nghị đổi mốc | FS, `rental_contract.start_date_override.request` | hợp đồng `Draft`, chưa có đề nghị `Pending`, ngày ≥ hôm nay | `start_date_override_* = Pending` | `START_DATE_OVERRIDE_REQUESTED` |
 | Duyệt / từ chối mốc | FM, `rental_contract.start_date_override.review` + facility scope | có đề nghị `Pending` | duyệt: `start_date` = ngày đề nghị; từ chối: giữ ngày chính sách | `START_DATE_OVERRIDE_APPROVED` / `_REJECTED` |
-| Ký hợp đồng | FS, `rental_contract.sign` | `Verified` + `Agreed`, hợp đồng `Draft`, không còn đề nghị `Pending` | `Signed`, `signed_at`, `pdf_url`; tạo hoá đơn tháng đầu | `CONTRACT_SIGNED`, `INVOICE_CREATED` |
+| Ký hợp đồng | FS, `rental_contract.sign` | `Verified` + `Agreed`, `pdfUrl` là upload của chính FS này (400), hợp đồng `Draft`, không còn đề nghị `Pending` | `Signed`, `signed_at`, `pdf_url`; chốt `document_html`; tạo hoá đơn tháng đầu | `CONTRACT_SIGNED`, `INVOICE_CREATED` |
 | Xác nhận biên bản | Khách | hợp đồng `Signed`, hoá đơn tháng đầu `Paid`, chưa xác nhận, loại truy cập cơ sở đang bật | ghi `requested_access`; `AccessCode` → chốt ngay; `PhysicalKey`/`Both` → FS nhận `HANDOVER_KEY_REQUESTED` | — |
 | Giao chìa | FS, `unit_access_key.issue` | khách đã chọn `PhysicalKey`/`Both` | chốt bàn giao | — |
 
+Xác minh danh tính: FS đối chiếu giấy tờ thật khách mang tới với thông tin tài khoản của đơn (tên, email, số điện
+thoại hiển thị trong phiên). Hệ thống không so ảnh giấy tờ — tài khoản không lưu ảnh giấy tờ tuỳ thân; kết quả chỉ là
+`Verified` / `Failed` kèm ghi chú.
+
+Ảnh hiện trạng và bản scan hợp đồng phải là file FS đang thao tác đã upload qua `POST /api/media/uploads` — đối chiếu
+với `media_uploads` của FS ở trạng thái `Pending`/`Attached` qua `media.MediaUrlLookup.notUploadedBy` (API chỉ đọc
+module media mở cho handover). URL lạ, URL rỗng hoặc upload đã huỷ/xoá → 400 "Ảnh hiện trạng phải là ảnh bạn đã tải
+lên hệ thống…" / "Bản scan hợp đồng phải là tệp bạn đã tải lên hệ thống…". Ảnh đã có sẵn trên biên bản được giữ,
+không kiểm lại.
+
+Sửa hiện trạng (`POST /api/staff/handovers/{id}/inspection-correction`, `HandoverWorkflowService.correctInspection`):
+dùng khi khách đã đồng ý hiện trạng mà FS cần ghi lại (sai sót, phát hiện thêm). Chạy được ở mọi bước sau khi khách
+đồng ý, miễn biên bản còn `IN_PROGRESS` (và điều kiện chung ở trên) — phiên đã chốt (`COMPLETED`) hoặc đã đóng → 409.
+Hợp đồng còn `Draft` thì bản nháp render động nên thấy hiện trạng mới; hợp đồng đã ký giữ nguyên bản đã chốt lúc ký
+(`document_html`).
+
 Sinh hợp đồng `Draft`:
 - `code = HD-{facility}-{YYMMDD}-{6 ký tự}`;
-- `terms_version = builtin-v1` (mẫu dựng sẵn — chưa có bảng mẫu Flow 4);
+- `terms_version = builtin-v1` (mẫu dựng sẵn trong code, không có bảng mẫu);
 - `monthly_price = PricingQuery.effectiveMonthlyPrice(unit)`;
 - `deposit_amount` = tổng `Deposit` + `DepositSupplement` đã `Paid`;
 - `period = rental_requests.period`;
@@ -114,7 +144,9 @@ Sinh hợp đồng `Draft`:
 
 Không có audit riêng cho việc tạo hợp đồng (catalog không có `CONTRACT_CREATED`).
 
-Hoá đơn tháng đầu (`HandoverOrderService.issueFirstMonthInvoice`):
+Hoá đơn tháng đầu (`HandoverOrderService.issueFirstMonthInvoice`; đọc lại qua `firstMonthInvoice` = hoá đơn `Rental`
+sớm nhất của hợp đồng, vì các tháng sau cũng là `Rental` — xem
+[tenancy/rentals.md](../tenancy/rentals.md#thu-tiền-thuê-hằng-tháng)):
 - `type = Rental`, `code = INV-RNT-{facility}-{YYMMDD}-{rand}`;
 - chỉ gắn `contract_id`, vì CHECK V1 `num_nonnulls(order_id, contract_id) = 1`;
 - `amount = monthly_price × contract.prepaid_months`;
@@ -134,8 +166,13 @@ Một transaction, chỉ khi record `IN_PROGRESS` (chạy lại → 409):
 5. biên bản `COMPLETED` + `completed_at` — `HANDOVER_COMPLETED`;
 6. đơn `InProgress → Done` (`HandoverOrderService.complete`) — `RENTAL_ORDER_DONE`.
 
-Sau commit (`HandoverCompleted`, transaction riêng): khách nhận `HANDOVER_COMPLETED` (in-app + email) với link
-`{frontend}/handovers/{id}`; lỗi gửi chỉ log ERROR, không rollback.
+Sau commit (`HandoverCompleted(handoverId, orderId, contractId, unitCode, codeToCollect)`, transaction riêng): khách
+nhận `HANDOVER_COMPLETED` (in-app + email) với `{{handoverLink}}` = `{frontend}/handovers/{id}` và `{{contractLink}}` =
+`{frontend}/my-storage/{contractId}`; lỗi gửi chỉ log ERROR, không rollback.
+
+Kiểu `Both`: mã khoá số được cấp ở bước FS giao chìa nên không trả cho khách (`codeToCollect = true`). Thông báo có
+thêm `{{accessNote}}` nhắc khách lấy mã tại trang biên bản bàn giao hoặc trang kho đang thuê (mỗi lần lấy cấp mã mới);
+trang biên bản của khách ở bước `COMPLETED` hiện nút "Lấy mã khoá số". Kiểu khác `{{accessNote}}` rỗng.
 
 ## Flow 2.5 — từ chối / huỷ
 
@@ -186,15 +223,20 @@ Từ chối khoang:
 | Record `IN_PROGRESS`, `due_at < now`, hoá đơn tháng đầu **không** còn phiên cổng mở | huỷ phiên ("Chưa hoàn tất bàn giao trong hạn"). Đơn còn hạn → `Deposited` + khách nhận `HANDOVER_OVERDUE`; quá `expires_at` → Cascade cùng lý do |
 | Hoá đơn tháng đầu `Unpaid` quá `due_date` (cron booking chuyển `Expired`, phát `ContractInvoiceExpired`), hợp đồng `Signed` | huỷ phiên ("Quá hạn thanh toán tháng đầu"), đơn về `Deposited` hoặc Cascade như trên |
 
-No-show (cron booking) giờ cũng đóng record của lịch và trả đơn về `Deposited`. Đơn đã quá `expires_at` thì chạy
+No-show (cron booking) cũng đóng record của lịch và trả đơn về `Deposited`. Đơn đã quá `expires_at` thì chạy
 Cascade "Không đến nhận kho quá hạn giữ"; chỉ báo khách `APPOINTMENT_CANCELED_NO_SHOW` khi đơn không bị huỷ.
 
 ## Bản hợp đồng
 
-`GET /api/contracts/{id}/document` render HTML (để in) từ mẫu `builtin-v1` và dữ liệu hiện tại:
-- các bên, khoang + diện tích, hiện trạng (`inspection_notes`), mốc tính tiền, thời hạn, giá, cọc, điều khoản chung;
-- người xem: khách của hợp đồng, hoặc FS/FM của cơ sở (`rental_order.read`);
-- còn đề nghị đổi mốc `Pending` → 409.
+`GET /api/contracts/{id}/document` trả HTML (để in) từ mẫu `builtin-v1`:
+- nội dung: các bên, khoang + diện tích, hiện trạng (`inspection_notes`), mốc tính tiền, thời hạn, giá, cọc, điều
+  khoản chung;
+- **trước khi ký:** render động từ dữ liệu hiện tại; còn đề nghị đổi mốc `Pending` → 409;
+- **lúc ký:** render một lần trong cùng transaction ký và lưu vào `rental_contracts.document_html`;
+- **sau khi ký:** trả nguyên bản đã chốt — sửa hiện trạng, gia hạn hay đổi dữ liệu khác không làm đổi bản in. Hợp
+  đồng ký trước V22 (`document_html` `NULL`) vẫn render động;
+- người xem: khách của hợp đồng; hoặc account có `rental_order.read` — kiểm bằng `Access.canGlobalOrAt`: ADMIN/BOM
+  (mapping `GLOBAL`) xem mọi cơ sở, FS/FM (mapping `FACILITY`) chỉ cơ sở của mình.
 
 ## Test
 

@@ -14,6 +14,16 @@ import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
 
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Long> {
 
+    /** Tổng tiền giao dịch {@code Success} theo chiều (PAY / REFUND) của hoá đơn. */
+    @Query("select coalesce(sum(t.amount), 0) from PaymentTransaction t where t.invoiceId = :invoiceId "
+            + "and t.status = vn.lemar.selfstorage.payment.domain.PaymentStatus.SUCCESS and t.direction = :direction")
+    java.math.BigDecimal sumSucceeded(
+            @Param("invoiceId") Long invoiceId,
+            @Param("direction") vn.lemar.selfstorage.payment.domain.PaymentDirection direction);
+
+    List<PaymentTransaction> findByInvoiceIdAndDirectionOrderByIdAsc(Long invoiceId,
+            vn.lemar.selfstorage.payment.domain.PaymentDirection direction);
+
     /**
      * Khoá row khi xử lý IPN ({@code SELECT ... FOR UPDATE}).
      *

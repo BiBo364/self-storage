@@ -63,13 +63,16 @@ public class StaffAppointmentController {
 
     @Operation(summary = "FS xác nhận khách đã đến",
             description = "Lịch `Pending` của chính FS: `status = Done`, `arrived_at = now`, audit "
-                    + "`APPOINTMENT_ARRIVED`; handover nghe event `AppointmentArrived` để set `due_at`.")
+                    + "`APPOINTMENT_ARRIVED`; handover nghe event `AppointmentArrived` để set `due_at`. Lịch CHECKIN "
+                    + "phải đủ điều kiện vào bàn giao (đơn đã cọc, khoang Reserved, không còn hoá đơn cọc chưa trả, "
+                    + "không chờ đề xuất lại) và chưa quá `end_at`; lịch RETURN nhận cả khi khách đến trễ.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Đã xác nhận khách đến"),
             @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
             @ApiResponse(responseCode = "403", description = "Không phải FS phụ trách lịch / ngoài cơ sở"),
             @ApiResponse(responseCode = "404", description = "Lịch hẹn không tồn tại"),
-            @ApiResponse(responseCode = "409", description = "Lịch không còn `Pending`")
+            @ApiResponse(responseCode = "409", description = "Lịch không còn `Pending`, đã quá giờ (CHECKIN) "
+                    + "hoặc đơn chưa đủ điều kiện check-in")
     })
     @PostMapping("/appointments/{appointmentId}/arrive")
     public ResponseEntity<ApiEnvelope<StaffAppointmentResponse>> arrive(@PathVariable Long appointmentId) {
@@ -82,15 +85,17 @@ public class StaffAppointmentController {
 
     @Operation(summary = "FS chủ động huỷ lịch đang chờ",
             description = "Lịch `Pending` của chính FS và chưa quá `end_at`: `status = Canceled`, "
-                    + "`cancel_reason = reason`, audit `APPOINTMENT_CANCELED` (actor FS). Không đụng "
-                    + "`RentalOrder`; quá `end_at` → huỷ no-show ngay rồi trả 409.")
+                    + "`cancel_reason = reason`, audit `APPOINTMENT_CANCELED` (actor FS). Đóng phiên bàn giao của "
+                    + "lịch, đơn về `Deposited` (quá hạn giữ kho thì Cascade); quá `end_at` → huỷ no-show ngay rồi "
+                    + "trả 409. Chỉ lịch CHECKIN — lịch trả kho trả 409.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Đã huỷ lịch hẹn"),
             @ApiResponse(responseCode = "400", description = "Thiếu lý do huỷ"),
             @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
             @ApiResponse(responseCode = "403", description = "Không phải FS phụ trách lịch / ngoài cơ sở"),
             @ApiResponse(responseCode = "404", description = "Lịch hẹn không tồn tại"),
-            @ApiResponse(responseCode = "409", description = "Lịch không còn `Pending` hoặc đã quá giờ")
+            @ApiResponse(responseCode = "409", description = "Lịch không còn `Pending`, đã quá giờ hoặc là lịch "
+                    + "trả kho")
     })
     @PostMapping("/appointments/{appointmentId}/cancel")
     public ResponseEntity<ApiEnvelope<StaffAppointmentResponse>> cancel(

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -226,11 +227,84 @@ class PostRentalIntegrationTest {
         assertThat(done.refundAmount()).isEqualByComparingTo("0");
         assertThat(done.result()).isEqualTo("COMPLETED");
         assertThat(invoiceStatus(extension.invoiceId())).isEqualTo("Canceled");
-        assertThat(count("select count(*) from invoices where contract_id = ? and type = 'Penalty' and status = 'Paid' "
-                + "and amount = 500000", seed.contractId)).isEqualTo(1);
+        // Quyết toán tách mỗi loại phí một hoá đơn Penalty (trước đây gộp một INV-PEN 500.000), cọc phủ hết → Paid.
+        assertThat(paidPenalty(seed.contractId, "CLN")).isEqualByComparingTo("100000");
+        assertThat(paidPenalty(seed.contractId, "DMG")).isEqualByComparingTo("100000");
+        assertThat(paidPenalty(seed.contractId, "KEY")).isEqualByComparingTo("200000");
+        assertThat(paidPenalty(seed.contractId, "PEN")).isEqualByComparingTo("100000");
         assertThat(count("select count(*) from unit_access_keys where contract_id = ? and status = 'Lost'",
                 seed.contractId)).isEqualTo(1);
         assertThat(notifications(FM, "CHECKOUT_REFUND_REQUIRED", seed.orderId)).isZero();
+        // Mất chìa, hoàn tất ngay lúc chốt: bảo trì thủ công (không có mốc tự mở lại).
+        assertThat(unitStatus(seed.unitId)).isEqualTo("Maintenance");
+        assertThat(maintenanceStartedAtIsNull(seed.unitId)).isTrue();
+    }
+
+    @Test
+    void penaltiesAreSplitPerCategoryAndUncoveredPartGoesIntoOneShortfall() {
+        Seed seed = seedActive(LocalDate.now(VN).plusMonths(1));
+        tenancy.requestExtension(seed.contractId, customerId, 1);
+        ReturnRequestView request = assignedAndArrived(seed);
+
+        loginAs(FS);
+        checkout.inspect(request.id(), new Inspection(true, true, new BigDecimal("300000"), "Móp vách", 1,
+                List.of(), null));
+        CheckoutView awaiting = checkout.confirm(request.id());
+
+        // 100.000 vệ sinh + 300.000 hư hỏng + 200.000 mất 1 chìa + 100.000 gia hạn chưa trả = 700.000; cọc 500.000
+        // phủ lần lượt CLN (100.000) → DMG (300.000) → KEY (100.000/200.000); còn thiếu 200.000 vào một INV-PEN.
+        assertThat(awaiting.result()).isEqualTo("AWAITING_PAYMENT");
+        assertThat(awaiting.totalCharges()).isEqualByComparingTo("700000");
+        assertThat(paidPenalty(seed.contractId, "CLN")).isEqualByComparingTo("100000");
+        assertThat(paidPenalty(seed.contractId, "DMG")).isEqualByComparingTo("300000");
+        assertThat(paidPenalty(seed.contractId, "KEY")).isEqualByComparingTo("100000");
+        assertThat(paidPenalty(seed.contractId, "PEN")).isEqualByComparingTo("0");
+        assertThat(awaiting.shortfallInvoice().code()).startsWith("INV-PEN-Q7-");
+        assertThat(awaiting.shortfallInvoice().status()).isEqualTo("Unpaid");
+        assertThat(awaiting.shortfallInvoice().amount()).isEqualByComparingTo("200000");
+        assertThat(count("select count(*) from invoices where contract_id = ? and type = 'Penalty'", seed.contractId))
+                .isEqualTo(4);
+        assertThat(count("select count(*) from audit_logs a join invoices i on a.entity_id = i.id::text "
+                + "where a.entity_type = 'Invoice' and a.action = 'INVOICE_PAID' and i.contract_id = ?",
+                seed.contractId)).isEqualTo(3);
+
+        pay(awaiting.shortfallInvoice());
+
+        // Hoàn tất khi trả phần thiếu: mất chìa → bảo trì thủ công tới khi thay khoá, cron không tự mở lại.
+        assertThat(contractStatus(seed.contractId)).isEqualTo("Ended");
+        assertThat(unitStatus(seed.unitId)).isEqualTo("Maintenance");
+        assertThat(maintenanceStartedAtIsNull(seed.unitId)).isTrue();
+        assertThat(count("select count(*) from audit_logs where action = 'STORAGE_UNIT_MAINTENANCE' and entity_type = "
+                + "'StorageUnit' and entity_id = ? and new_value ->> 'reason' = ?", String.valueOf(seed.unitId),
+                "Bảo trì sau trả kho — thay khoá do mất chìa")).isEqualTo(1);
+        checkoutJobs.reopenUnits();
+        assertThat(unitStatus(seed.unitId)).isEqualTo("Maintenance");
+    }
+
+    @Test
+    void returnDateShiftedWhenPreferredDayIsFullNotifiesCustomer() {
+        Seed seed = seedActive(LocalDate.now(VN).plusMonths(2));
+        LocalDate preferred = LocalDate.now(VN).plusDays(25);
+        for (LocalTime start : List.of(LocalTime.of(8, 0), LocalTime.of(13, 0), LocalTime.of(17, 0))) {
+            jdbc.update("insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, "
+                    + "status) values (?, ?, ?, 'RETURN', ?, ?, ?, 'Pending')", customerId, facilityId, fsId,
+                    preferred, timestamp(preferred, start), timestamp(preferred, start.plusHours(2)));
+        }
+        ReturnRequestView request = tenancy.requestReturn(seed.contractId, customerId, preferred, null);
+        loginAs(FM);
+        ReturnRequestView assigned = tenancy.assign(request.id(), fsId);
+
+        assertThat(assigned.appointmentStart().atZone(VN).toLocalDate()).isAfter(preferred);
+        assertThat(notifications(CUSTOMER, "RETURN_DATE_SHIFTED", seed.orderId)).isEqualTo(1);
+        assertThat(notifications(CUSTOMER, "RETURN_SCHEDULED", seed.orderId)).isEqualTo(1);
+        String unitCode = jdbc.queryForObject("select code from storage_units where id = ?", String.class,
+                seed.unitId);
+        String body = jdbc.queryForObject("select n.body from notifications n join order_notifications o on "
+                + "o.notification_id = n.id where n.type = 'RETURN_DATE_SHIFTED' and o.order_id = ?", String.class,
+                seed.orderId);
+        assertThat(body).contains(unitCode)
+                .contains(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy").withZone(VN)
+                        .format(assigned.appointmentStart()));
     }
 
     @Test
@@ -348,14 +422,39 @@ class PostRentalIntegrationTest {
         ReturnRequestView request = tenancy.requestReturn(late.contractId, customerId, LocalDate.now(VN), null);
         jdbc.update("update return_requests set created_at = now() - interval '5 days' where id = ?", request.id());
         overdue.accrue(late.contractId);
-        // Dừng tính ở ngày gửi yêu cầu: 5 ngày quá hạn − 3 ân hạn = 2 ngày.
-        assertThat(openOverdueAmount(late.contractId)).isEqualByComparingTo("40000");
+        // Quy tắc mới: gửi yêu cầu không còn dừng tính phí (trước đây 40.000) — chưa đến buổi trả kho nên tính tới
+        // hôm nay: 10 ngày quá hạn − 3 ân hạn = 7 ngày.
+        assertThat(openOverdueAmount(late.contractId)).isEqualByComparingTo("140000");
 
         Seed soon = seedActive(LocalDate.now(VN).plusDays(3));
         assertThat(overdue.expiringIds()).contains(soon.contractId);
         assertThat(overdue.remindExpiring(soon.contractId)).isTrue();
         assertThat(overdue.remindExpiring(soon.contractId)).isFalse();
         assertThat(notifications(CUSTOMER, "CONTRACT_EXPIRING_SOON", soon.orderId)).isEqualTo(1);
+    }
+
+    @Test
+    void overdueStopsAtAttendedReturnAppointmentDateOtherwiseCountsToToday() {
+        LocalDate today = LocalDate.now(VN);
+        Seed attended = seedActive(today.minusDays(10));
+        ReturnRequestView request = assignedAndArrived(attended);
+        overdue.accrue(attended.contractId);
+        // Khách đã đến nhưng buổi hẹn là hôm nay/tương lai: tính tới hôm nay, 10 − 3 ân hạn = 7 ngày.
+        assertThat(openOverdueAmount(attended.contractId)).isEqualByComparingTo("140000");
+
+        moveAppointment(request.appointmentId(), today.minusDays(4));
+        overdue.accrue(attended.contractId);
+        // Dừng ở ngày buổi trả kho khách đến: 6 ngày quá hạn − 3 ân hạn = 3 ngày.
+        assertThat(openOverdueAmount(attended.contractId)).isEqualByComparingTo("60000");
+
+        Seed missed = seedActive(today.minusDays(10));
+        ReturnRequestView open = tenancy.requestReturn(missed.contractId, customerId, today.plusDays(1), null);
+        loginAs(FM);
+        ReturnRequestView scheduled = tenancy.assign(open.id(), fsId);
+        moveAppointment(scheduled.appointmentId(), today.minusDays(4));
+        overdue.accrue(missed.contractId);
+        // Lịch đã qua mà khách không đến: vẫn tính tới hôm nay.
+        assertThat(openOverdueAmount(missed.contractId)).isEqualByComparingTo("140000");
     }
 
     @Test
@@ -454,6 +553,28 @@ class PostRentalIntegrationTest {
         ipn.put("vnp_SecureHash", "mocked");
         assertThat(paymentService.handleIpn(ipn).rspCode()).isEqualTo("00");
         assertThat(invoiceStatus(bill.invoiceId())).isEqualTo("Paid");
+    }
+
+    /** Tổng hoá đơn Penalty {@code Paid} mã {@code INV-<kind>-…} của hợp đồng. */
+    private BigDecimal paidPenalty(long contractId, String kind) {
+        return jdbc.queryForObject("select coalesce(sum(amount), 0) from invoices where contract_id = ? "
+                + "and type = 'Penalty' and status = 'Paid' and code like ?", BigDecimal.class, contractId,
+                "INV-" + kind + "-%");
+    }
+
+    private Boolean maintenanceStartedAtIsNull(long unitId) {
+        return jdbc.queryForObject("select maintenance_started_at is null from storage_units where id = ?",
+                Boolean.class, unitId);
+    }
+
+    /** Dời lịch trả kho sang khung 08:00–10:00 của {@code date} (giờ VN). */
+    private void moveAppointment(long appointmentId, LocalDate date) {
+        jdbc.update("update appointments set date = ?, started_at = ?, end_at = ? where id = ?", date,
+                timestamp(date, LocalTime.of(8, 0)), timestamp(date, LocalTime.of(10, 0)), appointmentId);
+    }
+
+    private static java.sql.Timestamp timestamp(LocalDate date, LocalTime time) {
+        return java.sql.Timestamp.from(date.atTime(time).atZone(VN).toInstant());
     }
 
     private BigDecimal openOverdueAmount(long contractId) {

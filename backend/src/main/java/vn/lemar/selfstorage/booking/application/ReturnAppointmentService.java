@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -19,23 +20,38 @@ import vn.lemar.selfstorage.booking.application.exception.BookingConflictExcepti
 import vn.lemar.selfstorage.booking.domain.Appointment;
 import vn.lemar.selfstorage.booking.domain.AppointmentStatus;
 import vn.lemar.selfstorage.booking.repository.AppointmentRepository;
+import vn.lemar.selfstorage.booking.repository.RentalOrderRepository;
+import vn.lemar.selfstorage.facility.application.StorageUnitQuery;
+import vn.lemar.selfstorage.facility.application.StorageUnitView;
+import vn.lemar.selfstorage.notification.application.NotificationType;
 
 /**
  * Lịch {@code RETURN} cho trả kho (tenancy gọi khi FM phân công FS). Dùng chung ba khung cố định với check-in: map
  * {@code preferred_date} vào khung trống đầu tiên của ngày đó; hết khung thì dời sang ngày gần nhất (tối đa
- * {@link #SEARCH_DAYS} ngày). Booking vẫn là module duy nhất ghi {@code appointments}.
+ * {@link #SEARCH_DAYS} ngày) và báo khách {@code RETURN_DATE_SHIFTED}. Booking vẫn là module duy nhất ghi
+ * {@code appointments}.
  */
 @Service
 public class ReturnAppointmentService {
 
     static final int SEARCH_DAYS = 14;
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    /** Cùng định dạng {@code appointmentTime} của {@code RETURN_SCHEDULED}. */
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy").withZone(ZONE);
 
     private final AppointmentRepository appointmentRepository;
+    private final RentalOrderRepository orderRepository;
+    private final StorageUnitQuery storageUnitQuery;
+    private final OrderNotifier orderNotifier;
     private final AuditRecorder auditRecorder;
 
-    ReturnAppointmentService(AppointmentRepository appointmentRepository, AuditRecorder auditRecorder) {
+    ReturnAppointmentService(AppointmentRepository appointmentRepository, RentalOrderRepository orderRepository,
+                             StorageUnitQuery storageUnitQuery, OrderNotifier orderNotifier,
+                             AuditRecorder auditRecorder) {
         this.appointmentRepository = appointmentRepository;
+        this.orderRepository = orderRepository;
+        this.storageUnitQuery = storageUnitQuery;
+        this.orderNotifier = orderNotifier;
         this.auditRecorder = auditRecorder;
     }
 
@@ -71,11 +87,28 @@ public class ReturnAppointmentService {
                 value.put("startedAt", start.toString());
                 auditRecorder.record(new AuditEntry(AuditAction.APPOINTMENT_CREATED, AuditEntityType.APPOINTMENT,
                         String.valueOf(appointment.getId()), null, value, null, actorAccountId));
-                return new ReturnAppointment(appointment.getId(), d, start, end, !d.equals(preferredDate));
+                boolean shifted = !d.equals(preferredDate);
+                if (shifted) {
+                    notifyShifted(orderId, customerId, start);
+                }
+                return new ReturnAppointment(appointment.getId(), d, start, end, shifted);
             }
         }
         throw new BookingConflictException("Không còn khung giờ trống trong " + SEARCH_DAYS
                 + " ngày tới để hẹn trả kho");
+    }
+
+    /** Ngày khách chọn đã kín lịch — báo khách ngày giờ mới (in-app + email, nối đơn). */
+    private void notifyShifted(Long orderId, Long customerId, Instant start) {
+        String unitCode = orderRepository.findById(orderId)
+                .map(order -> order.getUnitId())
+                .flatMap(storageUnitQuery::find)
+                .map(StorageUnitView::code)
+                .orElse("");
+        Map<String, Object> values = new HashMap<>();
+        values.put("unitCode", unitCode);
+        values.put("appointmentTime", TIME.format(start));
+        orderNotifier.notifyCustomer(customerId, orderId, NotificationType.RETURN_DATE_SHIFTED, values);
     }
 
     /** Huỷ lịch trả kho còn {@code Pending} (khách huỷ yêu cầu / FM phân công lại). */

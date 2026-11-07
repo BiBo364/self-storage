@@ -122,9 +122,10 @@ public class HandoverOrderService {
     /** Hoá đơn tháng đầu mới nhất của hợp đồng. */
     @Transactional(readOnly = true)
     public Optional<ContractInvoice> firstMonthInvoice(Long contractId) {
+        // Hoá đơn Rental sớm nhất của hợp đồng — các tháng sau cũng là Rental (thu tiền thuê định kỳ).
         return invoiceRepository.findByContractIdOrderByIdDesc(contractId).stream()
                 .filter(invoice -> invoice.getType() == InvoiceType.RENTAL)
-                .findFirst()
+                .reduce((newer, older) -> older)
                 .map(HandoverOrderService::contractInvoice);
     }
 

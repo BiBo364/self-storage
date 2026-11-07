@@ -99,6 +99,15 @@ public class BackofficeController {
                 backoffice.setMaintenance(unitId, body.maintenance()));
     }
 
+    @Operation(summary = "Giữ bảo trì sau trả kho",
+            description = "Khoang `Maintenance` đang chờ cron mở lại (`maintenanceStartedAt` khác null) → xoá mốc, "
+                    + "thành bảo trì thủ công: cron không tự mở lại, FM mở lại bằng `/maintenance`. "
+                    + "400 không tìm thấy khoang; 403 ngoài phạm vi cơ sở; 409 khoang không ở bảo trì sau trả kho.")
+    @PostMapping("/api/fm/storage-units/{unitId}/maintenance-hold")
+    public ResponseEntity<ApiEnvelope<UnitRow>> holdMaintenance(@PathVariable Long unitId) {
+        return ok("Đã giữ khoang ở trạng thái bảo trì", backoffice.holdMaintenance(unitId));
+    }
+
     @GetMapping("/api/fm/facilities/{facilityId}/access-options")
     public ResponseEntity<ApiEnvelope<FacilityRow>> fmFacility(@PathVariable Long facilityId) {
         return ok("Cơ sở", backoffice.facility(facilityId));

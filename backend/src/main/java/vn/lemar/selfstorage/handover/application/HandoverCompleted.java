@@ -13,7 +13,8 @@ import vn.lemar.selfstorage.booking.application.HandoverOrderService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
 
 /** Bàn giao vừa chốt (spec 2.4) — phát trong transaction chốt, xử lý sau commit. */
-public record HandoverCompleted(Long handoverId, Long orderId, String unitCode) {
+public record HandoverCompleted(Long handoverId, Long orderId, Long contractId, String unitCode,
+                                boolean codeToCollect) {
 
     /**
      * Gửi {@code HANDOVER_COMPLETED} (in-app + email) sau commit, transaction riêng: lỗi gửi thông báo không rollback
@@ -38,7 +39,12 @@ public record HandoverCompleted(Long handoverId, Long orderId, String unitCode) 
             try {
                 orders.notifyCustomer(event.orderId(), NotificationType.HANDOVER_COMPLETED,
                         Map.of("orderCode", String.valueOf(event.orderId()), "unitCode", event.unitCode(),
-                                "handoverLink", frontendUrl + "/handovers/" + event.handoverId()));
+                                "handoverLink", frontendUrl + "/handovers/" + event.handoverId(),
+                                "contractLink", frontendUrl + "/my-storage/" + event.contractId(),
+                                "accessNote", event.codeToCollect()
+                                        ? " Mã khoá số chưa được hiển thị — lấy mã tại trang biên bản bàn giao "
+                                                + "hoặc trang kho đang thuê (mỗi lần lấy sẽ cấp mã mới)."
+                                        : ""));
             } catch (RuntimeException ex) {
                 LOG.error("Không gửi được HANDOVER_COMPLETED cho đơn {}", event.orderId(), ex);
             }

@@ -3,6 +3,7 @@ package vn.lemar.selfstorage.booking.application;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +25,7 @@ import vn.lemar.selfstorage.booking.domain.InvoiceType;
 import vn.lemar.selfstorage.booking.domain.ProposalFeedback;
 import vn.lemar.selfstorage.booking.domain.ProposalStatus;
 import vn.lemar.selfstorage.booking.domain.RentalOrder;
+import vn.lemar.selfstorage.booking.domain.RentalOrderStatus;
 import vn.lemar.selfstorage.booking.repository.InvoiceRepository;
 import vn.lemar.selfstorage.booking.repository.ProposalFeedbackRepository;
 import vn.lemar.selfstorage.booking.repository.RentalOrderRepository;
@@ -32,6 +34,7 @@ import vn.lemar.selfstorage.facility.application.StorageUnitService;
 import vn.lemar.selfstorage.facility.application.StorageUnitView;
 import vn.lemar.selfstorage.identity.application.Access;
 import vn.lemar.selfstorage.notification.application.NotificationType;
+import vn.lemar.selfstorage.payment.application.PaymentSessionCloser;
 import vn.lemar.selfstorage.pricing.application.PricingQuery;
 
 /**
@@ -64,13 +67,16 @@ public class ProposalService {
     private final RentalOrderCancellation orderCancellation;
     private final InvoiceRepository invoiceRepository;
     private final String frontendUrl;
+    private final PaymentSessionCloser sessionCloser;
 
     ProposalService(ProposalFeedbackRepository proposalRepository, RentalOrderRepository orderRepository,
                     StorageUnitQuery storageUnitQuery, StorageUnitService storageUnitService,
                     PricingQuery pricingQuery, Access access,
                     AuditRecorder auditRecorder, OrderNotifier orderNotifier,
                     DepositInvoiceIssuer depositInvoiceIssuer, RentalOrderCancellation orderCancellation,
-                    InvoiceRepository invoiceRepository, @Value("${app.frontend-url}") String frontendUrl) {
+                    InvoiceRepository invoiceRepository, PaymentSessionCloser sessionCloser,
+                    @Value("${app.frontend-url}") String frontendUrl) {
+        this.sessionCloser = sessionCloser;
         this.proposalRepository = proposalRepository;
         this.orderRepository = orderRepository;
         this.storageUnitQuery = storageUnitQuery;
@@ -147,9 +153,12 @@ public class ProposalService {
         return unit;
     }
 
-    /** Đổi khoang sau khi đã cọc: nhả khoang cũ; khoang mới chưa reserve cho tới khi thanh toán (B4). */
+    /**
+     * Đổi khoang sau khi đã cọc: nhả khoang cũ đơn đang giữ. Đơn chưa giữ khoang (chưa cọc, hoặc cọc rồi nhưng
+     * khoang đã bị đơn khác giữ trước) thì không nhả — khoang cũ lúc đó không phải của đơn này.
+     */
     private void releaseReplacedUnit(RentalOrder order, Long oldUnitId, Long newUnitId, Long actorAccountId) {
-        if (oldUnitId == null || oldUnitId.equals(newUnitId)) {
+        if (!order.holdsUnit() || oldUnitId == null || oldUnitId.equals(newUnitId)) {
             return;
         }
         if (storageUnitService.releaseIfReserved(oldUnitId)) {
@@ -165,18 +174,22 @@ public class ProposalService {
      * lệch với tiền cọc đã thu — thiếu thì hoá đơn bổ sung, dư thì báo FM hoàn thủ công, bằng thì không tạo gì.
      */
     private Invoice issueDeposit(RentalOrder order, StorageUnitView unit, Long actorAccountId) {
-        if (!order.holdsUnit()) {
-            return depositInvoiceIssuer.issue(order, unit, actorAccountId);
-        }
         BigDecimal paidDeposit = invoiceRepository.sumAmount(order.getId(),
                 List.of(InvoiceType.DEPOSIT, InvoiceType.DEPOSIT_SUPPLEMENT), InvoiceStatus.PAID);
+        if (!order.holdsUnit() && paidDeposit.signum() == 0) {
+            return depositInvoiceIssuer.issue(order, unit, actorAccountId);
+        }
+        // Đơn đã giữ khoang: đổi khoang tính thêm phí đổi khoang. Đơn đã trả cọc nhưng khoang bị đơn khác giữ
+        // trước (đơn vẫn Pending) thì không do khách — chỉ bù chênh lệch tiền cọc, không thu phí đổi khoang.
         BigDecimal required = depositInvoiceIssuer.depositAmount(unit)
-                .add(pricingQuery.decimalPolicy(POLICY_UNIT_CHANGE));
+                .add(order.holdsUnit() ? pricingQuery.decimalPolicy(POLICY_UNIT_CHANGE) : BigDecimal.ZERO);
         BigDecimal delta = required.subtract(paidDeposit).setScale(2, RoundingMode.HALF_UP);
         if (delta.signum() <= 0) {
             // Cọc đã thu đủ cho khoang mới → không có hoá đơn bổ sung để chốt; giữ khoang mới ngay (đơn đã cọc
             // phải luôn giữ khoang của mình — đặt lịch check-in và bàn giao đều cần khoang Reserved).
-            reserveReplacementUnit(order, unit, actorAccountId);
+            if (reserveReplacementUnit(order, unit, actorAccountId)) {
+                markDepositedIfPending(order, actorAccountId);
+            }
         }
         if (delta.signum() > 0) {
             Invoice supplemental = depositInvoiceIssuer.issueSupplemental(order, unit, delta, actorAccountId);
@@ -185,7 +198,7 @@ public class ProposalService {
             return supplemental;
         }
         if (delta.signum() < 0) {
-            // TODO(b4): hoàn tự động về thẻ đã liên kết; trước B4 chỉ báo FM hoàn thủ công.
+            // Cổng thanh toán không có API hoàn tiền: báo FM chuyển khoản hoàn rồi ghi nhận (ManualRefundService).
             BigDecimal refund = delta.abs();
             auditRecorder.record(new AuditEntry(AuditAction.DEPOSIT_REFUND_REQUIRED, AuditEntityType.RENTAL_ORDER,
                     String.valueOf(order.getId()), Map.of("depositPaid", paidDeposit),
@@ -198,13 +211,28 @@ public class ProposalService {
         return null;
     }
 
-    private void reserveReplacementUnit(RentalOrder order, StorageUnitView unit, Long actorAccountId) {
+    private boolean reserveReplacementUnit(RentalOrder order, StorageUnitView unit, Long actorAccountId) {
         if (storageUnitService.reserveIfAvailable(unit.id())) {
             auditRecorder.record(new AuditEntry(AuditAction.STORAGE_UNIT_RESERVED, AuditEntityType.STORAGE_UNIT,
                     String.valueOf(unit.id()), Map.of("status", "Available"),
                     Map.of("status", "Reserved", "orderId", order.getId()), "Đổi khoang sau khi đã cọc",
                     actorAccountId));
+            return true;
         }
+        return false;
+    }
+
+    /** Đơn đã trả cọc nhưng còn Pending (khoang cũ bị giữ trước) → giữ được khoang mới thì chuyển Deposited. */
+    private void markDepositedIfPending(RentalOrder order, Long actorAccountId) {
+        if (order.getStatus() != RentalOrderStatus.PENDING) {
+            return;
+        }
+        order.markDeposited();
+        auditRecorder.record(new AuditEntry(AuditAction.RENTAL_ORDER_DEPOSITED, AuditEntityType.RENTAL_ORDER,
+                String.valueOf(order.getId()), Map.of("status", RentalOrderStatus.PENDING.dbValue()),
+                Map.of("status", order.getStatus().dbValue()), "Cọc đã thu, giữ khoang thay thế", actorAccountId));
+        orderNotifier.notifyCustomer(order, NotificationType.DEPOSIT_PAYMENT_SUCCEEDED,
+                Map.of("orderCode", OrderNotifier.orderCode(order)));
     }
 
     /** Guard trạng thái đơn khi khách đồng ý (behavior-gap #165). */
@@ -319,16 +347,20 @@ public class ProposalService {
      * chuyển {@code Canceled}, tránh khách thanh toán nhầm cho khoang cũ. Proposal cũ giữ nguyên làm lịch sử.
      */
     private void cancelUnpaidDepositInvoices(RentalOrder order, Long actorAccountId) {
+        List<Long> canceled = new ArrayList<>();
         for (Invoice invoice : invoiceRepository.findByOrderIdAndStatus(order.getId(), InvoiceStatus.UNPAID)) {
             if (invoice.getType() != InvoiceType.DEPOSIT
                     && invoice.getType() != InvoiceType.DEPOSIT_SUPPLEMENT) {
                 continue;
             }
             invoice.cancel();
+            canceled.add(invoice.getId());
             auditRecorder.record(new AuditEntry(AuditAction.INVOICE_CANCELED, AuditEntityType.INVOICE,
                     String.valueOf(invoice.getId()), Map.of("status", InvoiceStatus.UNPAID.dbValue()),
                     Map.of("status", invoice.getStatus().dbValue()), "FM đề xuất lại khoang khác", actorAccountId));
         }
+        // Huỷ link ở cổng sau commit — không thì khách vẫn chuyển tiền được vào link của hoá đơn đã huỷ.
+        sessionCloser.closeAfterCommit(canceled, "FM đề xuất lại khoang khác");
     }
 
     private ProposalFeedback lockPendingProposalOf(Long proposalId, Long customerAccountId) {

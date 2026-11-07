@@ -77,7 +77,9 @@ public class SupportController {
     }
 
     @Operation(summary = "Xử lý yêu cầu hỗ trợ",
-            description = "`newKeyQuantity` > 0 → chìa cũ `Lost`, cấp chìa mới; `feeAmount` > 0 → hoá đơn `Service`.")
+            description = "`newKeyQuantity` > 0 → chìa cũ `Lost`, cấp chìa mới; `feeAmount` > 0 → hoá đơn `Service`. "
+                    + "Yêu cầu `LOST_KEY` có thay chìa mà bỏ trống `feeAmount` → phí mặc định "
+                    + "`fee.lost_key × số chìa của bộ đang dùng`; gửi `feeAmount` (kể cả 0) thì dùng đúng số đó.")
     @PostMapping("/api/staff/support-requests/{id}/resolve")
     public ResponseEntity<ApiEnvelope<SupportView>> resolve(@PathVariable Long id,
                                                             @Valid @RequestBody ResolveBody body) {

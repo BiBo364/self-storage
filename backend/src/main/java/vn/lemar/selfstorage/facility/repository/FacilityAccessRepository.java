@@ -21,6 +21,12 @@ public class FacilityAccessRepository {
                 Boolean.class, facilityId, accountId));
     }
 
+    public boolean isInactive(Long facilityId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "select exists(select 1 from facilities where id = ? and status = 'Inactive')",
+                Boolean.class, facilityId));
+    }
+
     public boolean exists(Long facilityId) {
         return Boolean.TRUE.equals(jdbc.queryForObject(
                 "select exists(select 1 from facilities where id = ?)",

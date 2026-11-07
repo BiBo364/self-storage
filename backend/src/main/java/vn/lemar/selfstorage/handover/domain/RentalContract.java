@@ -87,6 +87,14 @@ public class RentalContract {
     @Column(nullable = false, length = 20)
     private RentalContractStatus status;
 
+    /** Bản hợp đồng chốt lúc ký — in lại dùng bản này, không render lại từ dữ liệu hiện tại. */
+    @Column(name = "document_html")
+    private String documentHtml;
+
+    /** Quá hạn kéo dài: mã khoá số đã tạm khoá từ thời điểm này; {@code null} = không bị khoá. */
+    @Column(name = "access_suspended_at")
+    private Instant accessSuspendedAt;
+
     public static final String OVERRIDE_PENDING = "Pending";
     public static final String OVERRIDE_APPROVED = "Approved";
     public static final String OVERRIDE_REJECTED = "Rejected";
@@ -156,6 +164,26 @@ public class RentalContract {
         this.status = RentalContractStatus.SIGNED;
     }
 
+    /** Đã chốt bản hợp đồng lúc ký — in lại trả đúng bản này. */
+    public boolean documentFrozen() {
+        return documentHtml != null;
+    }
+
+    /**
+     * Chốt bản hợp đồng đã ký (HTML render đúng lúc ký) — gọi sau {@link #sign}, chỉ một lần; sau đó dữ liệu
+     * hiện tại (giá, hiện trạng, gia hạn…) đổi cũng không làm đổi bản đã ký.
+     */
+    public void freezeDocument(String html) {
+        requireStatus(RentalContractStatus.SIGNED);
+        if (documentFrozen()) {
+            throw new IllegalStateException("Hợp đồng " + id + " đã chốt bản ký");
+        }
+        if (html == null || html.isBlank()) {
+            throw new IllegalArgumentException("Bản hợp đồng chốt không được rỗng");
+        }
+        this.documentHtml = html;
+    }
+
     /** Spec 2.4: bàn giao hoàn tất — {@code Signed -> Active}. */
     public void activate() {
         requireStatus(RentalContractStatus.SIGNED);
@@ -163,6 +191,25 @@ public class RentalContract {
     }
 
     /** Gia hạn hợp đồng đang thuê: kỳ thuê và {@code end_date} cộng thêm {@code months}. */
+    /** Tạm khoá truy cập do quá hạn; {@code false} nếu đã khoá rồi. */
+    public boolean suspendAccess(Instant now) {
+        requireStatus(RentalContractStatus.ACTIVE);
+        if (accessSuspendedAt != null) {
+            return false;
+        }
+        this.accessSuspendedAt = now;
+        return true;
+    }
+
+    /** Bỏ tạm khoá; {@code false} nếu đang không khoá. */
+    public boolean restoreAccess() {
+        if (accessSuspendedAt == null) {
+            return false;
+        }
+        this.accessSuspendedAt = null;
+        return true;
+    }
+
     public void extend(int months) {
         requireStatus(RentalContractStatus.ACTIVE);
         if (months <= 0) {

@@ -4,8 +4,9 @@ purpose: Bản đồ tài liệu backend — backend đang có gì, quy ước c
 # Tài liệu Backend — Self Storage
 
 Tài liệu này mô tả backend đang có gì và nó hoạt động thế nào, ở mức **medium-level**:
-giải thích high-level, kèm snippet code minh họa khi cần. Data contract đầy đủ của từng
-endpoint nằm trong thư mục [`routes/`](routes.md) — file này chỉ ghi quy ước chung.
+giải thích high-level, kèm snippet code minh họa khi cần. Field / status code chi tiết của từng endpoint nằm ở
+Swagger trên controller; usage / actor / lỗi chính nằm ở file trong `routes/` hoặc doc module sở hữu route (index:
+[routes.md](routes.md)). File này chỉ ghi quy ước chung.
 
 - Ngôn ngữ: tiếng Việt, thuật ngữ kỹ thuật giữ English.
 - Phạm vi: những gì **đang có trong code**, không mô tả kế hoạch.
@@ -18,13 +19,33 @@ Kiến trúc **modular monolith**: `vn.lemar.selfstorage` là package gốc,
 mỗi package con trực tiếp là một module độc lập (`identity`, `booking`, `facility`, ...).
 `ModuleStructureTest` chặn việc gọi sai chiều giữa các module ngay lúc build.
 
-Hiện tại `identity` xử lý xác thực/RBAC; `facility` cung cấp public API kiểm tra facility tồn tại,
-catalog cơ sở public và đọc khoang theo cơ sở; `audit` ghi vết thao tác nghiệp vụ nhạy cảm; `media`
-upload file (ảnh/PDF) lên Cloudinary và dọn asset theo batch; `booking` có luồng nội bộ convert
-request đã duyệt thành đơn + proposal ([booking/conversion.md](booking/conversion.md));
-`handover` có data layer bàn giao, mở biên bản khi đặt lịch, listener set `due_at`
-([handover/records.md](handover/records.md)); thanh toán cọc → đặt lịch check-in
-([booking/deposit-payment.md](booking/deposit-payment.md), [booking/appointment-booking.md](booking/appointment-booking.md)).
+16 module:
+
+| Module | Làm gì |
+|---|---|
+| `identity` | xác thực, RBAC, tài khoản |
+| `facility` | cơ sở, khoang, catalog public, kiểm tra quyền theo cơ sở |
+| `pricing` | loại khoang, giá, policy |
+| `booking` | yêu cầu đặt kho → đơn + proposal, hoá đơn, thanh toán cọc, lịch hẹn ([booking/conversion.md](booking/conversion.md), [booking/deposit-payment.md](booking/deposit-payment.md), [booking/appointment-booking.md](booking/appointment-booking.md)) |
+| `payment` | cổng thanh toán payOS / VNPay ([payment.md](payment.md)) |
+| `handover` | biên bản bàn giao, hợp đồng, quyền truy cập ([handover/records.md](handover/records.md)) |
+| `tenancy` | kho đang thuê, gia hạn, yêu cầu trả kho ([tenancy/rentals.md](tenancy/rentals.md)) |
+| `overdue` | tiền thuê hằng tháng, nhắc sắp hết hạn, phí quá hạn, tạm khoá truy cập khi quá hạn kéo dài ([tenancy/rentals.md](tenancy/rentals.md#quá-hạn-flow-6)) |
+| `checkout` | trả kho, quyết toán cọc ([checkout/return.md](checkout/return.md)) |
+| `support` | yêu cầu hỗ trợ / sự cố ([support/requests.md](support/requests.md)) |
+| `backoffice` | màn quản trị FM / BOM / Admin ([backoffice/overview.md](backoffice/overview.md)) |
+| `chat` | chatbot tư vấn ([chat/assistant.md](chat/assistant.md)) |
+| `notification` | email + thông báo in-app |
+| `audit` | ghi vết thao tác nghiệp vụ ([audit-log.md](audit-log.md)) |
+| `media` | upload file lên Cloudinary, dọn asset theo batch; API chỉ đọc `MediaUrlLookup` cho module khác kiểm URL upload |
+| `scheduler` | module rỗng (chỉ `package-info`); cron nằm trong module nghiệp vụ, `@EnableScheduling` ở `booking/config/BookingSchedulingConfig` |
+
+Phụ thuộc giữa các module khai ở `allowedDependencies` trong `package-info.java` của từng module (`ModuleStructureTest`
+kiểm). Hai phụ thuộc cần biết khi đọc flow sau bàn giao:
+- `support` → `pricing::application` — đọc `fee.lost_key` để tính phí mặc định khi thay chìa do mất chìa
+  ([support/requests.md](support/requests.md));
+- `handover` → `media` — `MediaUrlLookup.notUploadedBy` kiểm ảnh hiện trạng / bản scan hợp đồng là file FS đã upload
+  ([handover/records.md](handover/records.md)).
 
 Layout trong một module:
 
@@ -57,7 +78,8 @@ mỗi request. Chi tiết:
 - [authorization.md](authorization.md) — authorities, ba kiểu ràng buộc quyền, 401 vs 403, điều kiện xác minh email.
 - [permission-catalog.md](permission-catalog.md) — catalog permission + mapping role mặc định.
 
-Guard RBAC cho route nghiệp vụ đi qua `Access.can(permission[, facilityId])`; quyền quản trị hệ thống
+Guard RBAC cho route nghiệp vụ đi qua `Access.can(permission[, facilityId])` (hoặc `Access.canGlobalOrAt` cho route
+mà permission là `GLOBAL` với ADMIN/BOM và `FACILITY` với FM/FS); quyền quản trị hệ thống
 (role-bound) giữ ở `SecurityConfig` (`/api/admin/**` → `ADMIN`). Chi tiết từng route: [routes.md](routes.md).
 
 ## Cấu hình
@@ -75,10 +97,17 @@ Nguồn: `backend/src/main/resources/application.yml`, override qua biến môi 
 | `LOGIN_RATE_LIMIT_EMAIL_MAX` | Số lần đăng nhập sai tối đa theo email / window | `5` |
 | `LOGIN_RATE_LIMIT_IP_MAX` | Số lần đăng nhập sai tối đa theo IP / window | `20` |
 | `LOGIN_RATE_LIMIT_WINDOW` | Cửa sổ đếm lần đăng nhập sai | `PT15M` |
-| `REDIS_HOST` | Redis host cho rate-limit auth / cache | `localhost` |
+| `DB_URL` / `DB_USER` / `DB_PASSWORD` | Kết nối Postgres (URL JDBC) | `jdbc:postgresql://localhost:5432/self_storage` / `self_storage` / `self_storage` |
+| `REDIS_HOST` / `REDIS_PORT` | Redis cho rate-limit auth / cache | `localhost` / `6379` |
+| `SERVER_PORT` | Cổng HTTP của backend | `8080` |
+| `MAIL_HOST` / `MAIL_PORT` | SMTP server | `smtp.gmail.com` / `587` |
+| `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_FROM` | Tài khoản Gmail + App Password; người gửi (trống = `MAIL_USERNAME`) | trống |
+| `MAIL_SMTP_AUTH` / `MAIL_SMTP_STARTTLS` | Bật SMTP auth / STARTTLS (bắt buộc) | `true` / `true` |
+| `MAIL_TIMEOUT_MS` | Timeout connect / read / write SMTP | `10000` |
 | `PAYMENT_PROVIDER` | Cổng thanh toán đang dùng: `payos` \| `vnpay` | `payos` |
 | `PAYOS_CLIENT_ID` / `PAYOS_API_KEY` / `PAYOS_CHECKSUM_KEY` | Credential payOS (my.payos.vn) | — (bắt buộc khi `payos`) |
 | `PAYOS_RETURN_URL` / `PAYOS_CANCEL_URL` | Trang FE nhận khách quay về từ payOS | `<FRONTEND_URL>/payments/result` |
+| `PAYOS_BASE_URL` | API merchant payOS | `https://api-merchant.payos.vn` |
 | `VNPAY_TMN_CODE` | Mã website đăng ký trên VNPay | — (bắt buộc khi `vnpay`) |
 | `VNPAY_HASH_SECRET` | Chuỗi bí mật ký/kiểm checksum VNPay | — (bắt buộc khi `vnpay`) |
 | `VNPAY_PAY_URL` | Endpoint cổng thanh toán VNPay | — (bắt buộc khi `vnpay`) |
@@ -98,29 +127,33 @@ Chạy local không cần export tay: `application.yml` có
 Credential của **cổng đang dùng** (`PAYMENT_PROVIDER`, mặc định payOS) thiếu là **app chết ngay lúc khởi động**,
 có chủ đích — thà chết lúc boot còn hơn NPE giữa luồng thu tiền; cổng không dùng thì không bắt buộc.
 payOS không có sandbox (giao dịch là tiền thật) — chi tiết ở [payment.md](payment.md). Credential sandbox mỗi người tự đăng ký riêng,
-hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
+hướng dẫn ở [docs/vnpay-testing.md](../../docs/vnpay-testing.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V21__support_and_backoffice.sql`.
-V1/V2 có mirror ở `backend/sql/`
-— sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
+Flyway chạy migration lúc khởi động, từ `V1__baseline_schema.sql` tới file mới nhất trong `db/migration/`.
+V1/V2 có mirror byte-identical ở `backend/sql/` (CI check đồng bộ) và đã đóng băng như mọi migration đã apply —
+đổi schema/seed bằng migration mới ([backend/sql/README.md](../sql/README.md)); V3+ đọc trực tiếp trong
+`db/migration/`.
 
 Seed dev có 8 account `@lemar.vn`: 6 account phủ đủ 5 role (FM có 2) + 2 ca đặc biệt `unverified`
 (chưa xác minh — login bị chặn 403) và `banned` (403), mật khẩu `Test@1234`.
 Chi tiết: `backend/sql/README.md`.
 
-Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main có V7):
+Schema Flow 1.3 đi bằng migration V8–V11:
 
-- Cột `rental_orders.needs_reproposal BOOLEAN NOT NULL DEFAULT FALSE` — Flow 2 bật/tắt; Flow 1.3 chỉ đọc:
-  FM được đề xuất lại khi đơn chưa đóng, không có proposal `Pending`, và đơn `Pending` hoặc cờ này bật.
+- Cột `rental_orders.needs_reproposal BOOLEAN NOT NULL DEFAULT FALSE` — gate đề xuất lại: FM được đề xuất lại khi
+  đơn chưa đóng, không có proposal `Pending`, và đơn `Pending` hoặc cờ này bật. Bật: khách từ chối khoang tại
+  bàn giao (Flow 2), khách từ chối / không nhận được khoang trên đơn đã cọc (Flow 1.3), hoá đơn cọc bổ sung quá hạn
+  (cron), thanh toán cọc khi khoang đã bị giữ (competing invoice). Tắt: ngay khi FM tạo proposal mới.
 - CHECK `proposal_feedbacks.status` đổi `Expired` → **`Canceled`** (khoang hết khả dụng khi khách đồng ý,
   hoặc đơn bị huỷ theo Cancellation Cascade); dòng `Expired` cũ (nếu có) được chuyển sang `Canceled`.
 - Audit action `PROPOSAL_CANCELED` (proposal bị huỷ vì khoang hết khả dụng lúc khách đồng ý).
 - Seed policy `invoice.deposit_months = 1`: tiền cọc = giá thuê hiệu lực
   (`storage_units.monthly_price`, trống thì `unit_types.monthly_price`) × số tháng này.
-- V9 seed `fee.unit_change = 0` (Flow 4 chốt giá trị) và thêm audit action `DEPOSIT_REFUND_REQUIRED`
-  cho trường hợp đổi khoang sau khi cọc dư — trước B4, FM hoàn thủ công; B4 hoàn tự động về thẻ đã liên kết.
+- V9 seed `fee.unit_change = 0` và thêm audit action `DEPOSIT_REFUND_REQUIRED` cho trường hợp đổi khoang sau khi
+  cọc dư — FM chuyển khoản hoàn ngoài hệ thống rồi ghi nhận qua `POST /api/fm/invoices/{invoiceId}/refunds`
+  ([payment.md › Hoàn tiền thủ công](payment.md#hoàn-tiền-thủ-công)).
 - V10 thêm audit action `UNIT_CHANGE_RELEASED` — nhả khoang cũ khi khách đổi khoang sau khi đã cọc;
   khoang mới được giữ khi hoá đơn bổ sung `Paid`, hoặc ngay lúc đồng ý nếu cọc đã đủ (`delta ≤ 0`).
 - V11 thêm type `DepositSupplement` cho hoá đơn chênh lệch cọc và 2 partial unique index: một `Deposit`
@@ -148,6 +181,16 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
   (`SUPPORT_REQUEST_*`, `FACILITY_*`, `STORAGE_UNIT_CREATED`/`_UPDATED`, `POLICY_UPDATED`, `UNIT_TYPE_UPDATED`,
   `ACCOUNT_CREATED`/`_UPDATED`, `ROLE_PERMISSIONS_UPDATED`) và entity type `SupportRequest`, `Facility`, `Policy`,
   `UnitType`, `Role`. Xem [support/requests.md](support/requests.md), [backoffice/overview.md](backoffice/overview.md).
+- V22 thêm cột `rental_contracts.document_html` (bản hợp đồng chốt lúc ký) và `rental_contracts.access_suspended_at`
+  (tạm khoá truy cập do quá hạn kéo dài); seed policy `rent.invoice_lead_days = 5` (hoá đơn tiền thuê hằng tháng) và
+  `overdue.escalation_days = 30`; xoá policy `order.deposit_expiry_days` (không có code đọc — hạn giữ đơn sau cọc dùng
+  `order.expiry_days`); đổi mô tả `appointment.booking_window_days` (chỉ áp cho lần đặt lịch check-in đầu tiên); thêm
+  audit action `INSPECTION_CORRECTED`, `CONTRACT_ACCESS_SUSPENDED`, `CONTRACT_ACCESS_RESTORED`. Notification type
+  `RENT_INVOICE_ISSUED`, `RENT_UNPAID`, `CONTRACT_ACCESS_SUSPENDED`, `CONTRACT_ACCESS_RESTORED`, `RETURN_DATE_SHIFTED`,
+  `CHECKOUT_SHORTFALL_UNPAID` chỉ thêm ở code. Xem [tenancy/rentals.md](tenancy/rentals.md),
+  [handover/records.md](handover/records.md), [checkout/return.md](checkout/return.md).
+- Policy `appointment.checkin_reschedule_enabled` không được seed: khách không đổi được lịch check-in `Pending`
+  ([booking/appointment-booking.md](booking/appointment-booking.md)).
 
 Các migration khác trên main: V5 seed `order.expiry_days` (luồng convert), V6 bỏ `Expired` khỏi CHECK
 `rental_orders.status` (quá hạn cũng là `Canceled` + `cancel_reason`), V7 thêm 4 action convert vào
@@ -189,10 +232,9 @@ Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev
   - Gửi best-effort, không retry/outbox. Process chết sau commit nhưng trước khi gửi xong thì
     email mất, không dấu vết. Gửi lỗi trả `false` và không thử lại.
   - Gửi đồng bộ trên thread caller, kể cả nhánh afterCommit — SMTP chậm làm chậm response.
-    Chưa có `@Async`. Muốn bền (không mất mail, retry được) phải làm outbox + worker — cần chốt và ghi vào docs trước.
+    Không dùng `@Async`, không có outbox / worker.
   - Layout HTML là mẫu cố định dùng chung; nội dung theo `(type, recipient)` do
     `NotificationTemplateCatalog` render (placeholder `{{key}}`).
-- Việc còn lại của module (caller nghiệp vụ, cron dedup, pagination): [follow-up.md](follow-up.md).
 
 ## Ghi audit (module audit)
 
@@ -202,17 +244,15 @@ Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev
   rollback theo.
 - Một thao tác đổi nhiều entity → gọi `record` một lần cho mỗi entity; ví dụ `RENTAL_ORDER_CANCELED`
   hợp lệ với 4 loại entity (`RentalOrder`, `StorageUnit`, `ProposalFeedback`, `RentalContract`).
-- `AuditAction` (50 action) / `AuditEntityType` (12 loại) khớp Audit action catalog
+- `AuditAction` / `AuditEntityType` khớp từng giá trị với CHECK `audit_logs.action` / `entity_type` của migration mới nhất
+  và Audit action catalog
   (`specs/db-table-draft.md` › AuditLog); action không khớp entity → `IllegalStateException`
   (lỗi lập trình, 500).
 - Cột `entity_id` lưu dạng chuỗi; `old_value`/`new_value` là JSONB; `actor_account_id` null =
   hệ thống/cron/IPN. Bảng `audit_logs` append-only.
 - Hợp đồng tích hợp đầy đủ cho module gọi (checklist, ví dụ, call site hiện có):
   [audit-log.md](audit-log.md).
-- Caller nghiệp vụ hiện có: đăng ký (`ACCOUNT_REGISTERED`), duyệt/từ chối request
-  (`RENTAL_REQUEST_APPROVED`/`REJECTED`), convert (`RENTAL_REQUEST_CONVERTED`, `RENTAL_ORDER_CREATED`,
-  `PROPOSAL_CREATED`), claim (`RENTAL_REQUEST_CLAIMED`) — bảng call site ở
-  [audit-log.md](audit-log.md#call-site-hiện-có).
+- Caller nghiệp vụ theo từng action: bảng call site ở [audit-log.md](audit-log.md#call-site-hiện-có).
 
 ## Upload file (module media)
 
@@ -222,11 +262,14 @@ Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev
 - Validate JPEG/PNG/WebP/PDF ≤ 10MB (khớp cap free plan Cloudinary); sai → 400 message cụ thể.
 - Storage sau interface `FileStorage` (impl Cloudinary) — đổi provider chỉ thay impl.
 - File lưu theo folder `uploads/acc-{accountId}` — upload mồ côi vẫn truy vết được chủ sở hữu.
+- Module khác kiểm URL client gửi lên có đúng là file của account đó qua `vn.lemar.selfstorage.media.MediaUrlLookup`
+  (chỉ đọc): `notUploadedBy(accountId, urls)` trả các URL **không** khớp upload `Pending`/`Attached` của account
+  (upload đã huỷ/xoá không tính). Handover dùng cho ảnh hiện trạng và bản scan hợp đồng.
 - Mỗi upload ghi row `media_uploads` (`Uploading` → `Pending`). `DELETE /batch/{batchId}` dọn asset
   chưa attach; `POST /batch/{batchId}/attach` đánh dấu `Attached` để không xoá nữa.
 - **Xoá media:** chỉ khi người dùng bấm X trên file đã upload **trong phase hiện tại**. Hủy/rời trang
   không xoá; batch `Pending` được giữ để quay lại. Sau khi phase submit, file `Attached` — delete batch
-  bỏ qua. Order `Canceled` không xoá media (giữ evidence); order hard-delete/retention xử lý riêng.
+  bỏ qua. Order `Canceled` không xoá media (giữ evidence); hệ thống không hard-delete order và không có retention job.
 - Creds `CLOUDINARY_NAME/KEY/SECRET` để `@NotBlank` — thiếu là app chết lúc boot; test/CI dùng
   giá trị giả, không gọi mạng.
 - Chi tiết route: [routes/media/upload.md](routes/media/upload.md),
@@ -239,7 +282,12 @@ Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev
 |---|---|---|
 | `AppointmentNoShowJob` | `booking.appointment-no-show.fixed-delay-ms` (5') | huỷ lịch check-in no-show — [booking/appointment-no-show.md](booking/appointment-no-show.md) |
 | `BookingExpiryJob` | `booking.expiry.fixed-delay-ms` (5') | request hết hạn, hoá đơn quá hạn, catch-all đơn, nhắc sắp hết hạn — [booking/deposit-payment.md](booking/deposit-payment.md#cron-flow-1) |
-| `PaymentReconcileJob` | `payment.reconcile.fixed-delay-ms` (5') | đối soát giao dịch `Pending` quá 20' bằng `querydr` — [payment.md](payment.md#đối-soát-querydr) |
+| `PaymentReconcileJob` | `payment.reconcile.fixed-delay-ms` (5') | đối soát giao dịch `Pending` với cổng (payOS tra cứu, VNPay `querydr`) — [payment.md](payment.md#đối-soát-querydr) |
+| `HandoverFlowListeners.closeOverdue` | `handover.expiry.fixed-delay-ms` (5') | đóng phiên bàn giao quá `due_at` / quá hạn trả tháng đầu — [handover/records.md](handover/records.md) |
+| `CheckoutJobs.reopenUnits` | `checkout.maintenance.fixed-delay-ms` (10') | mở lại khoang hết hạn bảo trì sau trả kho — [checkout/return.md](checkout/return.md#bảo-trì--mở-lại) |
+| `OverdueJob` | `overdue.job.fixed-delay-ms` (1 giờ) | nhắc sắp hết hạn, nhắc + cộng phí quá hạn, tạm khoá / mở lại truy cập khi quá hạn kéo dài — [tenancy/rentals.md](tenancy/rentals.md#quá-hạn-flow-6); lập hoá đơn tiền thuê tháng kế tiếp (`RentBillingService`) — [tenancy/rentals.md](tenancy/rentals.md#thu-tiền-thuê-hằng-tháng) |
+
+Mỗi job có `…initial-delay-ms` riêng (mặc định 60–150 giây) để không chạy cùng lúc ngay sau khi app khởi động.
 
 ## Chạy & kiểm thử
 
@@ -252,8 +300,9 @@ cd backend && ./mvnw spring-boot:run  # chạy app
 
 > Test không bao giờ gửi mail thật: `src/test/resources/application.properties` ghim SMTP về `localhost:2`
 > (connection refused) vì `application.yml` đọc `../.env` của dev — nơi có thể có Gmail App Password thật. Test cần
-> kiểm nội dung mail thì `@MockBean JavaMailSender`. Hai cron mới để initial delay 1 giờ trong test để không chạy
-> chen giữa test.
+> kiểm nội dung mail thì `@MockBean JavaMailSender`. Cũng trong file đó, năm cron (`booking.expiry`,
+> `payment.reconcile`, `handover.expiry`, `checkout.maintenance`, `overdue.job`) để initial delay 1 giờ để không chạy
+> chen giữa test; `AppointmentNoShowJob` giữ mặc định (60 giây).
 
 > Lưu ý: `MigrationTest` và `SchemaValidationTest` tự skip khi máy không có Docker/Testcontainers,
 > nên `verify` local có thể xanh mà chưa validate Flyway/schema — CI mới chạy đủ hai test này.

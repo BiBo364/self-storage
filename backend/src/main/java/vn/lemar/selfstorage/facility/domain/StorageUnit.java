@@ -89,6 +89,20 @@ public class StorageUnit {
         return true;
     }
 
+    /**
+     * Trả kho hoàn tất nhưng khách mất chìa → {@code Rented -> Maintenance} không ghi {@code maintenance_started_at}
+     * (bảo trì thủ công): khoang chờ thay khoá, cron không tự mở lại — FM mở lại tay.
+     */
+    public boolean startManualMaintenanceAfterReturn(Instant now) {
+        if (status != StorageUnitStatus.RENTED) {
+            return false;
+        }
+        this.status = StorageUnitStatus.MAINTENANCE;
+        this.maintenanceStartedAt = null;
+        this.updatedAt = now;
+        return true;
+    }
+
     /** Hết thời gian bảo trì sau trả kho → {@code Maintenance -> Available}. Bảo trì bật tay không đổi. */
     public boolean finishMaintenanceIfDue(Instant cutoff) {
         if (status != StorageUnitStatus.MAINTENANCE || maintenanceStartedAt == null

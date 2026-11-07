@@ -3,7 +3,8 @@ purpose: Index toàn bộ HTTP route đang cung cấp — method, path, quyền,
 ---
 # Route Index
 
-Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route nằm trong `routes/`.
+Toàn bộ HTTP route backend đang cung cấp. Cột "Chi tiết" trỏ tới file route trong `routes/` hoặc tới doc module sở
+hữu route (xem quy ước ở cuối trang).
 
 | Method | Path | Quyền | Mô tả | Chi tiết |
 |---|---|---|---|---|
@@ -30,12 +31,13 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | GET | `/api/fm/facilities/{facilityId}/staff` | Bearer + role `FM`; `appointment.assign` + facility scope | FS đang hoạt động của cơ sở | [routes/booking/fm-facility-staff.md](routes/booking/fm-facility-staff.md) |
 | POST | `/api/fm/appointments/{appointmentId}/staff` | Bearer + role `FM`; `appointment.assign` + facility scope | Phân công FS cho lịch check-in, đơn `Scheduled → InProgress` | [routes/booking/fm-appointment-assign-staff.md](routes/booking/fm-appointment-assign-staff.md) |
 | GET | `/api/staff/appointments` | Bearer + role `FS`; `appointment.read` + đúng FS | Lịch làm việc của FS theo ngày | [routes/booking/staff-appointment-day-list.md](routes/booking/staff-appointment-day-list.md) |
-| POST | `/api/staff/appointments/{appointmentId}/arrive` | Bearer + role `FS`; `appointment.checkin` + đúng FS | FS xác nhận khách đến, lịch `Pending → Done` | [routes/booking/staff-appointment-arrive.md](routes/booking/staff-appointment-arrive.md) |
-| POST | `/api/staff/appointments/{appointmentId}/cancel` | Bearer + role `FS`; `appointment.checkin` + đúng FS | FS chủ động huỷ lịch `Pending` chưa quá giờ | [routes/booking/staff-appointment-cancel.md](routes/booking/staff-appointment-cancel.md) |
+| POST | `/api/staff/appointments/{appointmentId}/arrive` | Bearer + role `FS`; `appointment.checkin` + đúng FS | FS xác nhận khách đến, lịch `Pending → Done` (check-in: đơn đủ điều kiện bàn giao, chưa quá giờ; trả kho: nhận cả khi trễ) | [routes/booking/staff-appointment-arrive.md](routes/booking/staff-appointment-arrive.md) |
+| POST | `/api/staff/appointments/{appointmentId}/cancel` | Bearer + role `FS`; `appointment.checkin` + đúng FS | FS chủ động huỷ lịch check-in `Pending` chưa quá giờ (lịch trả kho → 409) | [routes/booking/staff-appointment-cancel.md](routes/booking/staff-appointment-cancel.md) |
 | GET | `/api/staff/handovers` | Bearer + role `FS` | Đơn đang bàn giao của FS (phiên mở, khách đã đến) | [routes/handover/staff-handovers.md](routes/handover/staff-handovers.md) |
 | GET | `/api/staff/handovers/{id}` | Bearer + role `FS`; `rental_order.read` + facility scope | Chi tiết phiên bàn giao | [routes/handover/staff-handovers.md](routes/handover/staff-handovers.md) |
 | POST | `/api/staff/handovers/{id}/identity` | Bearer + role `FS`; `handover_record.verify_identity` + đúng FS | Xác minh danh tính (2.2) | [routes/handover/staff-handovers.md](routes/handover/staff-handovers.md) |
 | PUT | `/api/staff/handovers/{id}/inspection` | Bearer + role `FS`; `handover_record.inspect` + đúng FS | Ghi hiện trạng khoang (2.2) | [routes/handover/staff-handovers.md](routes/handover/staff-handovers.md) |
+| POST | `/api/staff/handovers/{id}/inspection-correction` | Bearer + role `FS`; `handover_record.inspect` + đúng FS | Sửa hiện trạng sau khi khách đã đồng ý (lý do bắt buộc, audit `INSPECTION_CORRECTED`) | [routes/handover/staff-handovers.md](routes/handover/staff-handovers.md) |
 | POST | `/api/staff/contracts/{contractId}/start-date-override` | Bearer + role `FS`; `rental_contract.start_date_override.request` + đúng FS | Đề nghị đổi mốc tính tiền (2.3) | [routes/handover/staff-handovers.md](routes/handover/staff-handovers.md) |
 | POST | `/api/staff/contracts/{contractId}/sign` | Bearer + role `FS`; `rental_contract.sign` + đúng FS | Upload hợp đồng đã ký, tạo hoá đơn tháng đầu (2.3) | [routes/handover/staff-handovers.md](routes/handover/staff-handovers.md) |
 | POST | `/api/staff/handovers/{id}/not-signed` | Bearer + role `FS`; `rental_contract.sign` + đúng FS | Khách không ký hợp đồng → Cascade (2.5) | [routes/handover/staff-handovers.md](routes/handover/staff-handovers.md) |
@@ -46,7 +48,7 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | POST | `/api/customer/handovers/{id}/reject` | Bearer + role `CUSTOMER`; chủ tài nguyên | Từ chối khoang (2.5) | [routes/handover/customer-handovers.md](routes/handover/customer-handovers.md) |
 | POST | `/api/customer/handovers/{id}/confirm` | Bearer + role `CUSTOMER`; chủ tài nguyên | Xác nhận biên bản + chọn hình thức truy cập (2.4) | [routes/handover/customer-handovers.md](routes/handover/customer-handovers.md) |
 | POST | `/api/customer/contracts/{contractId}/access-code` | Bearer + role `CUSTOMER`; chủ tài nguyên | Cấp lại mã khóa số (hiện một lần) | [routes/handover/customer-handovers.md](routes/handover/customer-handovers.md) |
-| GET | `/api/contracts/{contractId}/document` | Bearer; khách của hợp đồng hoặc `rental_order.read` + facility scope | Bản hợp đồng HTML để in | [routes/handover/contracts.md](routes/handover/contracts.md) |
+| GET | `/api/contracts/{contractId}/document` | Bearer; khách của hợp đồng hoặc `rental_order.read` (ADMIN/BOM mọi cơ sở, FM/FS theo facility scope) | Bản hợp đồng HTML để in (đã ký → bản chốt lúc ký) | [routes/handover/contracts.md](routes/handover/contracts.md) |
 | GET | `/api/fm/contracts/start-date-overrides` | Bearer + role `FM` | Đề nghị đổi mốc tính tiền đang chờ | [routes/handover/contracts.md](routes/handover/contracts.md) |
 | POST | `/api/fm/contracts/{contractId}/start-date-override/approve` | Bearer + role `FM`; `rental_contract.start_date_override.review` + facility scope | Duyệt mốc tính tiền mới | [routes/handover/contracts.md](routes/handover/contracts.md) |
 | POST | `/api/fm/contracts/{contractId}/start-date-override/reject` | Bearer + role `FM`; `rental_contract.start_date_override.review` + facility scope | Từ chối đổi mốc | [routes/handover/contracts.md](routes/handover/contracts.md) |
@@ -73,6 +75,9 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | POST | `/api/staff/support-requests/{id}/resolve` | Bearer + role `FS`; `unit_access_key.issue` + đúng FS | Xử lý (thay chìa, thu phí) | [support/requests.md](support/requests.md) |
 | GET | `/api/fm/invoices`, `/api/fm/contracts`, `/api/fm/reports` | Bearer + role `FM`; `facility.access` + facility scope | Hoá đơn / hợp đồng / báo cáo của cơ sở | [backoffice/overview.md](backoffice/overview.md) |
 | POST / PATCH | `/api/fm/storage-units`, `/api/fm/storage-units/{id}`, `/api/fm/storage-units/{id}/maintenance` | Bearer + role `FM`; `facility.access` + facility scope | Thêm / sửa khoang, bảo trì tay | [backoffice/overview.md](backoffice/overview.md) |
+| POST | `/api/fm/storage-units/{unitId}/maintenance-hold` | Bearer + role `FM`; `facility.access` + facility scope (cơ sở của khoang) | "Giữ bảo trì": khoang bảo trì sau trả kho thành bảo trì thủ công (cron không tự mở lại) | [backoffice/overview.md](backoffice/overview.md) |
+| GET / POST | `/api/fm/invoices/{invoiceId}/refunds` | Bearer + role `FM`; `payment_transaction.refund` + facility scope (cơ sở của hoá đơn) | Lịch sử hoàn tiền / ghi nhận hoàn tiền thủ công | [routes/booking/fm-invoice-refunds.md](routes/booking/fm-invoice-refunds.md) |
+| GET | `/api/fm/facilities/{id}/access-options` | Bearer + role `FM`; `facility.access` + facility scope | Cơ sở + hình thức truy cập đang bật | [backoffice/overview.md](backoffice/overview.md) |
 | PUT | `/api/fm/facilities/{id}/access-options` | Bearer + role `FM`; `facility.access` + facility scope | Bật / tắt khóa cơ, mã số | [backoffice/overview.md](backoffice/overview.md) |
 | GET / POST / PATCH / PUT | `/api/bom/facilities…`, `/api/bom/policies…`, `/api/bom/unit-types…`, `/api/bom/storage-units/{id}`, `/api/bom/reports`, `/api/bom/invoices`, `/api/bom/managers` | Bearer + role `BOM` | Quản lý cơ sở, FM, policy, giá; báo cáo toàn chuỗi | [backoffice/overview.md](backoffice/overview.md) |
 | GET / POST / PATCH / PUT | `/api/admin/accounts…`, `/api/admin/login-events`, `/api/admin/audit-logs`, `/api/admin/permissions`, `/api/admin/roles/{role}/permissions` | Bearer + role `ADMIN` | Tài khoản, phân quyền, lịch sử đăng nhập, nhật ký | [backoffice/overview.md](backoffice/overview.md) |
@@ -84,8 +89,8 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | POST | `/api/proposals/{proposalId}/reject` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Từ chối đề xuất; lần thứ `max_rejection_count` huỷ đơn | [routes/booking/proposal-reject.md](routes/booking/proposal-reject.md) |
 | GET | `/api/fm/rental-orders/{orderId}` | `FM`; `rental_order.read` + facility scope | Chi tiết đơn để đề xuất lại | [routes/booking/fm-rental-order-detail.md](routes/booking/fm-rental-order-detail.md) |
 | POST | `/api/rental-orders/{orderId}/proposals` | Bearer + `ACCOUNT_ACTIVE`; `proposal_feedback.repropose` (+ `.override`) + facility scope | Đề xuất lại khoang cho đơn | [routes/booking/rental-order-proposals-create.md](routes/booking/rental-order-proposals-create.md) |
-| POST | `/api/invoices/{invoiceId}/pay` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Thanh toán hoá đơn — kiểm 5 nhánh spec 1.4, trả URL VNPay | [routes/booking/invoice-pay.md](routes/booking/invoice-pay.md) |
-| POST | `/api/invoices/{invoiceId}/payment-check` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Đối soát giao dịch mới nhất bằng `querydr`, trả trạng thái | [routes/booking/invoice-payment-check.md](routes/booking/invoice-payment-check.md) |
+| POST | `/api/invoices/{invoiceId}/pay` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Thanh toán hoá đơn — kiểm 5 nhánh spec 1.4, trả URL thanh toán của cổng đang dùng (payOS mặc định, VNPay tuỳ chọn) | [routes/booking/invoice-pay.md](routes/booking/invoice-pay.md) |
+| POST | `/api/invoices/{invoiceId}/payment-check` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Đối soát giao dịch mới nhất với cổng (payOS tra cứu `payment-requests`, VNPay `querydr`), trả trạng thái | [routes/booking/invoice-payment-check.md](routes/booking/invoice-payment-check.md) |
 | GET | `/api/rental-orders` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Đơn thuê của tôi + `availableActions` | [routes/booking/rental-orders-mine.md](routes/booking/rental-orders-mine.md) |
 | GET | `/api/rental-orders/{orderId}` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Chi tiết đơn thuê của tôi | [routes/booking/rental-orders-mine.md](routes/booking/rental-orders-mine.md) |
 | POST | `/api/rental-orders/{orderId}/cancel` | Bearer + `ACCOUNT_ACTIVE`; chủ tài nguyên | Khách huỷ đơn (Cancellation Cascade) | [routes/booking/rental-order-cancel.md](routes/booking/rental-order-cancel.md) |
@@ -95,15 +100,22 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | POST | `/api/fm/rental-orders/{orderId}/cancel` | Bearer + role `FM`; `rental_order.cancel` + facility scope | FM huỷ đơn thuê | [routes/booking/fm-rental-order-cancel.md](routes/booking/fm-rental-order-cancel.md) |
 | POST | `/api/chat` | Public | Chatbot tư vấn (Google Gemini) — trả lời về cơ sở, loại khoang, giá, quy trình | [chat/assistant.md](chat/assistant.md) |
 | POST | `/api/payments/payos/webhook` | Public (chữ ký payOS) | payOS báo kết quả chuyển khoản — nguồn xác nhận chính khi dùng payOS | [routes/payment/payos-webhook.md](routes/payment/payos-webhook.md) |
-| GET | `/api/payments/vnpay/ipn` | Public (chữ ký VNPay) | VNPay xác nhận thanh toán — nguồn xác nhận duy nhất | [routes/payment/vnpay-ipn.md](routes/payment/vnpay-ipn.md) |
-| GET | `/api/payments/vnpay/return` | Public (redirect VNPay) | Trang kết quả cho khách — không ghi dữ liệu | [routes/payment/vnpay-return.md](routes/payment/vnpay-return.md) |
+| GET | `/api/payments/vnpay/ipn` | Public (chữ ký VNPay) | VNPay xác nhận thanh toán — nguồn xác nhận chính khi `payment.provider=vnpay` | [routes/payment/vnpay-ipn.md](routes/payment/vnpay-ipn.md) |
+| GET | `/api/payments/vnpay/return` | Public (redirect VNPay) | Trang kết quả cho khách khi dùng VNPay — không ghi dữ liệu | [routes/payment/vnpay-return.md](routes/payment/vnpay-return.md) |
 | POST | `/api/media/uploads` | Bearer + `ACCOUNT_ACTIVE` | Upload file (ảnh/PDF ≤ 10MB), trả URL + batchId dùng lại trong flow | [routes/media/upload.md](routes/media/upload.md) |
 | DELETE | `/api/media/uploads/batch/{batchId}` | Bearer + `ACCOUNT_ACTIVE`; chủ batch | Xoá batch upload khi user bấm X trên file trong phase hiện tại | [routes/media/delete-batch.md](routes/media/delete-batch.md) |
 | POST | `/api/media/uploads/batch/{batchId}/attach` | Bearer + `ACCOUNT_ACTIVE`; chủ batch | Gắn batch upload, chặn Hủy xoá asset đã dùng | [routes/media/attach-batch.md](routes/media/attach-batch.md) |
 
 Ghi chú:
 
-- Thêm route mới → bắt đầu từ template [templates/route.md](templates/route.md),
-  thêm một dòng vào bảng này **và** tạo file chi tiết trong `routes/`.
+- Mọi route đều có một dòng trong bảng này. Nơi giữ phần usage / actor / luồng / lỗi chính của route:
+  - **file riêng trong `routes/<module>/`** (bắt đầu từ template [templates/route.md](templates/route.md)) cho route
+    của `booking`, `auth`/`identity`, `media`, `payment`, `pricing`, `facility`, `notification`, `handover` và
+    `/api/health`;
+  - **doc module** cho route của `tenancy` + `overdue` ([tenancy/rentals.md](tenancy/rentals.md)), `checkout`
+    ([checkout/return.md](checkout/return.md)), `support` ([support/requests.md](support/requests.md)),
+    `backoffice` ([backoffice/overview.md](backoffice/overview.md)) và `chat` ([chat/assistant.md](chat/assistant.md)).
+    Doc module liệt kê từng route nó sở hữu với method + path + ai gọi được + lỗi chính.
+- Thêm route mới → thêm một dòng vào bảng này và mô tả route ở đúng nơi theo module như trên.
 - Quy ước chung (base URL, error body, 401 vs 403): xem
   [index.md › Quy ước data contract](index.md#quy-ước-data-contract).

@@ -42,4 +42,4 @@ và trang khách hàng).
 ## Test
 
 `chat/application/ChatServiceTest.java`, `chat/application/GeminiChatModelClientTest.java`,
-`chat/controller/ChatControllerTest.java`. Chưa có test gọi API thật.
+`chat/controller/ChatControllerTest.java`. Các test dùng client giả, không gọi API Gemini thật.

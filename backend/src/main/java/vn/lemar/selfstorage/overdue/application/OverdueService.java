@@ -42,6 +42,7 @@ public class OverdueService {
     static final String POLICY_GRACE = "overdue.grace_days";
     static final String POLICY_FEE = "overdue.fee_per_day";
     static final String POLICY_REMINDER = "contract.expiry_reminder_days";
+    static final String POLICY_ESCALATION = "overdue.escalation_days";
     static final String PERM_READ = "rental_order.read";
     static final int INVOICE_DUE_DAYS = 7;
 
@@ -126,10 +127,54 @@ public class OverdueService {
             notifications.notifyCustomer(c.orderId(), NotificationType.CONTRACT_OVERDUE, values);
             notifications.notifyFacilityManager(c.orderId(), NotificationType.CONTRACT_OVERDUE, values);
         }
+        escalate(c, calc);
         BigDecimal accrued = c.active() ? calc.accrued() : BigDecimal.ZERO;
         invoices.syncOverdueFee(c.orderId(), c.id(), c.customerId(), accrued, calc.chargedDays(),
                 Instant.now().plus(Duration.ofDays(INVOICE_DUE_DAYS)));
         return calc.daysOverdue() > 0;
+    }
+
+    /** Hợp đồng đang thuê bị tạm khoá truy cập — cron kiểm tra để mở lại khi hết quá hạn. */
+    @Transactional(readOnly = true)
+    public List<Long> suspendedIds() {
+        return contracts.activeIds().stream().filter(contracts::accessSuspended).toList();
+    }
+
+    /** Hết quá hạn (gia hạn phủ kỳ quá hạn) và không còn phí quá hạn chưa trả → mở lại truy cập. */
+    @Transactional
+    public boolean restoreIfCleared(Long contractId) {
+        ContractSnapshot peek = contracts.find(contractId).orElse(null);
+        if (peek == null) {
+            return false;
+        }
+        orders.lock(peek.orderId());
+        ContractSnapshot c = contracts.lock(contractId).orElseThrow();
+        boolean overdue = c.endDate().isBefore(LocalDate.now(ZONE));
+        boolean feeOpen = invoices.bills(c.id()).stream()
+                .anyMatch(b -> b.unpaid() && b.code().startsWith("INV-" + ContractInvoiceService.OVERDUE_KIND));
+        if (overdue || feeOpen || !contracts.restoreAccess(c.id(), null)) {
+            return false;
+        }
+        notifications.notifyCustomer(c.orderId(), NotificationType.CONTRACT_ACCESS_RESTORED,
+                Map.of("contractCode", c.code(), "unitCode", unitCode(c)));
+        return true;
+    }
+
+    /**
+     * Quá hạn kéo dài ({@code overdue.escalation_days} ngày sau {@code end_date}) mà khách chưa gửi yêu cầu trả kho →
+     * tạm khoá mã khoá số, báo khách + FM một lần (khi vừa khoá).
+     */
+    private void escalate(ContractSnapshot c, Calc calc) {
+        if (!c.active() || calc.returnRequested()
+                || calc.daysOverdue() < pricingQuery.intPolicy(POLICY_ESCALATION)) {
+            return;
+        }
+        if (contracts.suspendAccess(c.id(), calc.daysOverdue(), null)) {
+            Map<String, String> values = Map.of("contractCode", c.code(), "unitCode", unitCode(c),
+                    "days", String.valueOf(calc.daysOverdue()));
+            notifications.notifyCustomer(c.orderId(), NotificationType.CONTRACT_ACCESS_SUSPENDED, values);
+            notifications.notifyFacilityManager(c.orderId(), NotificationType.CONTRACT_ACCESS_SUSPENDED, values);
+        }
     }
 
     // ------------------------------------------------------------------ FM
@@ -157,11 +202,18 @@ public class OverdueService {
     private record Calc(long daysOverdue, long chargedDays, BigDecimal accrued, boolean returnRequested) {
     }
 
-    /** Ngày tính phí dừng ở ngày khách gửi yêu cầu trả kho (nếu có). */
+    /**
+     * Phí tính tới hôm nay chừng nào trả kho chưa xong; khách đã đến buổi trả kho (FS xác nhận đến) thì dừng ở ngày
+     * của buổi đó ({@code start_at}) — kể cả khi biên bản còn chờ (khoang còn đồ / chờ trả phần thiếu). Lịch hẹn
+     * chưa tới hoặc khách không đến thì vẫn tính tới hôm nay, không bao giờ vượt hôm nay.
+     */
     private Calc calc(ContractSnapshot c) {
         LocalDate today = LocalDate.now(ZONE);
         var open = tenancy.openReturnOf(c.id());
-        LocalDate stop = open.map(r -> r.createdAt().atZone(ZONE).toLocalDate()).orElse(today);
+        LocalDate stop = open.filter(r -> r.appointmentArrivedAt() != null && r.appointmentStart() != null)
+                .map(r -> r.appointmentStart().atZone(ZONE).toLocalDate())
+                .filter(attended -> attended.isBefore(today))
+                .orElse(today);
         long daysOverdue = Math.max(0, ChronoUnit.DAYS.between(c.endDate(), today));
         long charged = Math.max(0, ChronoUnit.DAYS.between(c.endDate(), stop) - pricingQuery.intPolicy(POLICY_GRACE));
         BigDecimal accrued = pricingQuery.decimalPolicy(POLICY_FEE).multiply(BigDecimal.valueOf(charged));

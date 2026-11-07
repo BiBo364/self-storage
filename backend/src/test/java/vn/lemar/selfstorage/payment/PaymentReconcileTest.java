@@ -128,6 +128,19 @@ class PaymentReconcileTest {
     }
 
     @Test
+    void openSessionIgnoresPendingOlderThanLimit() {
+        Instant before = Instant.now().minus(java.time.Duration.ofHours(24));
+        service.invoicesWithOpenSession(List.of(7L));
+
+        org.mockito.ArgumentCaptor<Instant> since = org.mockito.ArgumentCaptor.forClass(Instant.class);
+        org.mockito.Mockito.verify(repository)
+                .findInvoiceIdsWithStatusSince(any(), org.mockito.ArgumentMatchers.eq(PaymentStatus.PENDING),
+                        since.capture());
+        assertThat(since.getValue()).isBetween(before.minusSeconds(5), Instant.now().minus(
+                java.time.Duration.ofHours(24)).plusSeconds(5));
+    }
+
+    @Test
     void openSessionAndPaidAtDelegateToRepository() {
         when(repository.findInvoiceIdsWithStatusSince(any(), any(), any())).thenReturn(List.of(7L));
         when(repository.findFirstPaidAt(7L, PaymentStatus.SUCCESS)).thenReturn(Optional.of(Instant.EPOCH));

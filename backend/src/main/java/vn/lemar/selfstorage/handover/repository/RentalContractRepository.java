@@ -40,6 +40,8 @@ public interface RentalContractRepository extends JpaRepository<RentalContract, 
 
     List<RentalContract> findByStatusAndEndDateBefore(RentalContractStatus status, java.time.LocalDate date);
 
+    List<RentalContract> findByStatusAndEndDateAfter(RentalContractStatus status, java.time.LocalDate date);
+
     List<RentalContract> findByStatusAndEndDateBetween(RentalContractStatus status, java.time.LocalDate from,
                                                        java.time.LocalDate to);
 }

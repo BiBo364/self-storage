@@ -230,6 +230,24 @@ public class AppointmentBookingService {
     private record Window(LocalDate min, LocalDate max) {
     }
 
+    /**
+     * Đơn đặt được lịch check-in ngay bây giờ không — cùng luật với lúc đặt; dùng để quyết định hiện nút "Đặt lịch"
+     * cho khách (không hiện nút cho thao tác chắc chắn bị 409).
+     */
+    @Transactional(readOnly = true)
+    public boolean bookable(Long orderId) {
+        RentalOrder order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) {
+            return false;
+        }
+        try {
+            window(order);
+            return true;
+        } catch (BookingConflictException e) {
+            return false;
+        }
+    }
+
     /** Cửa sổ ngày đặt lịch; đơn không đặt được (sai trạng thái, quá hạn) → 409. */
     private Window window(RentalOrder order) {
         if (order.getStatus() != RentalOrderStatus.DEPOSITED) {
@@ -248,12 +266,18 @@ public class AppointmentBookingService {
                 .flatMap(invoice -> paymentService.firstPaidAt(invoice.getId()))
                 .orElseThrow(() -> new BookingConflictException(MSG_NO_DEPOSIT_TIME));
         Instant now = Instant.now();
-        if (now.isAfter(depositPaidAt.plus(Duration.ofDays(pricingQuery.intPolicy(POLICY_WINDOW_DAYS))))) {
+        // Đặt lại sau khi lịch check-in trước bị huỷ (no-show, FS huỷ, quá hạn bàn giao): không áp cửa sổ đặt lịch
+        // tính từ lúc cọc — khách được đặt lại trong thời hạn giữ đơn (expires_at).
+        boolean rebooking = appointmentRepository.existsCanceledCheckinByOrderId(order.getId());
+        if (!rebooking
+                && now.isAfter(depositPaidAt.plus(Duration.ofDays(pricingQuery.intPolicy(POLICY_WINDOW_DAYS))))) {
             throw new BookingConflictException(MSG_WINDOW_PASSED);
         }
         LocalDate min = LocalDate.now(ZONE);
-        LocalDate max = depositPaidAt.plus(Duration.ofDays(pricingQuery.intPolicy(POLICY_MAX_DAYS)))
-                .atZone(ZONE).toLocalDate();
+        LocalDate max = rebooking && order.getExpiresAt() != null
+                ? order.getExpiresAt().atZone(ZONE).toLocalDate()
+                : depositPaidAt.plus(Duration.ofDays(pricingQuery.intPolicy(POLICY_MAX_DAYS)))
+                        .atZone(ZONE).toLocalDate();
         if (order.getExpiresAt() != null) {
             LocalDate expiry = order.getExpiresAt().atZone(ZONE).toLocalDate();
             if (expiry.isBefore(max)) {

@@ -100,10 +100,15 @@ public class TenancyService {
                              ReturnRequestView returnRequest, boolean canExtend, boolean canRequestReturn) {
     }
 
-    /** Yêu cầu trả kho. */
+    /**
+     * Yêu cầu trả kho.
+     *
+     * @param appointmentArrivedAt mốc FS xác nhận khách đến buổi trả kho; {@code null} = chưa đến / chưa có lịch
+     */
     public record ReturnRequestView(Long id, Long contractId, String unitCode, Long facilityId, LocalDate preferredDate,
                                     String note, String status, Long assignedStaffId, Long appointmentId,
-                                    Instant appointmentStart, String cancelReason, Instant createdAt) {
+                                    Instant appointmentStart, String cancelReason, Instant createdAt,
+                                    Instant appointmentArrivedAt) {
     }
 
     // ------------------------------------------------------------------ Customer
@@ -275,7 +280,7 @@ public class TenancyService {
 
     // ------------------------------------------------------------------ public API cho checkout / overdue
 
-    /** Yêu cầu trả kho đang mở của hợp đồng (overdue: ngừng tính phí từ {@code createdAt}). */
+    /** Yêu cầu trả kho đang mở của hợp đồng (overdue: ngừng tính phí ở ngày buổi trả kho khách đã đến). */
     @Transactional(readOnly = true)
     public java.util.Optional<ReturnRequestView> openReturnOf(Long contractId) {
         return returnRequests.findOpenByContractId(contractId).map(this::returnView);
@@ -338,11 +343,12 @@ public class TenancyService {
     }
 
     private ReturnRequestView returnView(ReturnRequest r, ContractSnapshot contract) {
-        Instant start = r.getAppointmentId() == null ? null
-                : returnAppointments.state(r.getAppointmentId()).map(AppointmentState::startAt).orElse(null);
+        AppointmentState state = r.getAppointmentId() == null ? null
+                : returnAppointments.state(r.getAppointmentId()).orElse(null);
         return new ReturnRequestView(r.getId(), r.getContractId(), contract == null ? null : unitCode(contract),
                 r.getFacilityId(), r.getPreferredDate(), r.getNote(), r.getStatus(), r.getAssignedStaffId(),
-                r.getAppointmentId(), start, r.getCancelReason(), r.getCreatedAt());
+                r.getAppointmentId(), state == null ? null : state.startAt(), r.getCancelReason(), r.getCreatedAt(),
+                state == null ? null : state.arrivedAt());
     }
 
     private String unitCode(ContractSnapshot contract) {

@@ -7,13 +7,14 @@ Bản đọc được của SQL — **mirror byte-identical** với Flyway migra
 | `schema.sql` | `src/main/resources/db/migration/V1__baseline_schema.sql` |
 | `seed.sql` | `src/main/resources/db/migration/V2__baseline_seed.sql` |
 
-**Sửa SQL thì sửa cả hai nơi** (CI sẽ fail nếu lệch). Thiết kế as-built nằm ở `backend/docs/`;
+Mirror và migration phải khớp từng byte (CI fail nếu lệch). Thiết kế as-built nằm ở `backend/docs/`;
 `specs/` chỉ còn là tham chiếu flow, không sửa.
 
-## Vòng đời baseline (V1)
+## Vòng đời baseline (V1/V2)
 
-- **Khi mọi DB đã apply migration còn disposable** (chưa có prod/staging/sandbox dùng dữ liệu thật): được sửa trực tiếp `V1__baseline_schema.sql` + mirror `schema.sql`, không cần migration mới. Đổi lại, đồng đội phải `docker compose down -v && docker compose up -d` một lần vì Flyway báo checksum mismatch.
-- **Khi có bất kỳ DB không thể xoá trắng** (prod, staging, sandbox có người dùng): V1 và mọi migration đã apply **đóng băng**. Thay đổi schema chỉ được thêm bằng migration mới (`V3__…`, `V4__…`, theo số kế tiếp), không sửa file đã apply.
+V1/V2 và mọi migration đã apply đều **đóng băng**: không sửa file đã apply (Flyway báo checksum mismatch). Thay đổi
+schema hoặc seed chỉ đi bằng migration mới theo số kế tiếp sau file mới nhất trong `db/migration/`. `schema.sql`/`seed.sql` vì vậy không đổi
+theo migration mới.
 
 **Lưu ý:** chỉ **baseline V1/V2** có mirror trong `sql/`. Các migration mới hơn (V3+…) đọc trực tiếp trong `db/migration/` (mỗi file tự mô tả trong header).
 
@@ -31,10 +32,16 @@ cd backend && ./mvnw spring-boot:run
 
 ## Chạy tay bằng psql (khi cần)
 
+`DB_URL` trong `.env` là URL JDBC (`jdbc:postgresql://…`), `psql` không đọc được — dùng URL libpq (giá trị
+`docker-compose.yml`):
+
 ```bash
-psql "$DB_URL" -f sql/schema.sql
-psql "$DB_URL" -f sql/seed.sql
+psql "postgresql://self_storage:self_storage@localhost:5432/self_storage" -f sql/schema.sql
+psql "postgresql://self_storage:self_storage@localhost:5432/self_storage" -f sql/seed.sql
 ```
+
+Chỉ chạy tay trên một DB thử riêng, không phải DB app dùng: Flyway không biết các lần chạy tay, và DB đã có schema
+từ Flyway sẽ lỗi trùng bảng. DB của app luôn để Flyway tự dựng.
 
 ## Seed (V2) — mật khẩu dev
 

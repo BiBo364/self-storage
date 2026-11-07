@@ -7,5 +7,5 @@
         displayName = "Handover (F2)",
         allowedDependencies = {"booking::application", "facility::application", "pricing::application",
                 "identity::application", "payment", "payment::application", "payment::event", "payment::dto",
-                "notification::application", "audit::application"})
+                "notification::application", "audit::application", "media"})
 package vn.lemar.selfstorage.handover;

@@ -107,12 +107,19 @@ class HandoverCompletion {
                 Map.of("result", record.getResult().name(), "requestedAccess", choice.dbValue()), actorAccountId);
 
         orders.complete(record.getOrderId(), actorAccountId);
-        events.publishEvent(new HandoverCompleted(record.getId(), record.getOrderId(), unitCode));
+        // Mã khoá số cấp ở bước FS giao chìa (kiểu Both) không trả về cho khách → nhắc khách tự lấy mã trong app.
+        boolean codeToCollect = choice.needsCode() && keyQuantity != null;
+        events.publishEvent(new HandoverCompleted(record.getId(), record.getOrderId(), contract.getId(), unitCode,
+                codeToCollect));
         return plainCode;
     }
 
     /** Khách lấy lại mã: thu hồi mã đang Active (nếu có) rồi cấp mã mới — chỉ mã mới hiện một lần. */
     String rotateCode(RentalContract contract, Long actorAccountId) {
+        if (contract.getAccessSuspendedAt() != null) {
+            throw new HandoverConflictException("Quyền truy cập đang tạm khoá do hợp đồng quá hạn — gia hạn hoặc trả "
+                    + "kho và thanh toán phí quá hạn để mở lại");
+        }
         Instant now = Instant.now();
         accessKeys.findActiveForUpdate(contract.getId(), UnitAccessKey.ACCESS_CODE).ifPresent(old -> {
             old.revoke(now);

@@ -132,6 +132,29 @@ class HandoverControllerTest {
     }
 
     @Test
+    void staffInspectionCorrection() throws Exception {
+        login(FS, "FS", 3L);
+        when(queryService.view(1L)).thenReturn(view(1L, "SIGN_CONTRACT"));
+
+        mockMvc.perform(json(post("/api/staff/handovers/1/inspection-correction"), FS,
+                        "{\"notes\":\"Có vết xước\",\"photos\":[\"https://img/2.jpg\"],\"reason\":\"Bổ sung\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã sửa hiện trạng khoang"))
+                .andExpect(jsonPath("$.data.step").value("SIGN_CONTRACT"));
+        verify(workflow).correctInspection(1L, "Có vết xước", List.of("https://img/2.jpg"), "Bổ sung");
+
+        mockMvc.perform(json(post("/api/staff/handovers/1/inspection-correction"), FS,
+                        "{\"notes\":\"x\",\"reason\":\" \"}"))
+                .andExpect(status().isBadRequest());
+        doThrow(new HandoverConflictException("Phiên bàn giao đã đóng")).when(workflow)
+                .correctInspection(2L, "x", null, "Lý do");
+        mockMvc.perform(json(post("/api/staff/handovers/2/inspection-correction"), FS,
+                        "{\"notes\":\"x\",\"reason\":\"Lý do\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Phiên bàn giao đã đóng"));
+    }
+
+    @Test
     void staffContractActions() throws Exception {
         login(FS, "FS", 3L);
         when(workflow.signContract(7L, "https://img/s.pdf")).thenReturn(new ContractInvoice(9L, "INV-RNT-Q7-1",
