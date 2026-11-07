@@ -1,6 +1,8 @@
 package vn.lemar.selfstorage.booking.repository;
 
 import jakarta.persistence.LockModeType;
+import java.util.List;
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -25,4 +27,29 @@ public interface RentalOrderRepository extends JpaRepository<RentalOrder, Long> 
     @Query(value = "select r.facility_id from rental_orders o join rental_requests r on r.id = o.request_id "
             + "where o.id = :orderId", nativeQuery = true)
     Optional<Long> findFacilityId(@Param("orderId") Long orderId);
+
+    /** Cron catch-all: đơn chưa đóng đã quá {@code expires_at}. */
+    @Query("select o.id from RentalOrder o where o.expiresAt < :now "
+            + "and o.status not in (vn.lemar.selfstorage.booking.domain.RentalOrderStatus.CANCELED, "
+            + "vn.lemar.selfstorage.booking.domain.RentalOrderStatus.DONE) order by o.id")
+    List<Long> findExpiredOpenIds(@Param("now") Instant now);
+
+    /** Cron nhắc: đơn chưa đóng sẽ hết hạn trong khoảng {@code (now, until]}. */
+    @Query("select o.id from RentalOrder o where o.expiresAt > :now and o.expiresAt <= :until "
+            + "and o.status not in (vn.lemar.selfstorage.booking.domain.RentalOrderStatus.CANCELED, "
+            + "vn.lemar.selfstorage.booking.domain.RentalOrderStatus.DONE) order by o.id")
+    List<Long> findExpiringOpenIds(@Param("now") Instant now, @Param("until") Instant until);
+
+    /** Khách đã đến nhận lịch check-in nào của đơn chưa (phân biệt lý do huỷ catch-all). */
+    @Query(value = """
+            select count(*) > 0 from appointments a
+            join rental_appointments ra on ra.appointment_id = a.id
+            where ra.order_id = :orderId and a.arrived_at is not null
+            """, nativeQuery = true)
+    boolean hasArrivedAppointment(@Param("orderId") Long orderId);
+
+    /** Trạng thái proposal mới nhất của đơn. */
+    @Query(value = "select status from proposal_feedbacks where order_id = :orderId order by id desc limit 1",
+            nativeQuery = true)
+    Optional<String> findLatestProposalStatus(@Param("orderId") Long orderId);
 }

@@ -31,6 +31,12 @@ public class FacilityAccess {
         return facilityAccessRepository.findCode(facilityId);
     }
 
+    /** Loại quyền truy cập cơ sở đang bật; rỗng nếu cơ sở không tồn tại. */
+    @Transactional(readOnly = true)
+    public Optional<FacilityAccessOptions> accessOptions(Long facilityId) {
+        return facilityAccessRepository.findAccessOptions(facilityId);
+    }
+
     /** FM phụ trách cơ sở ({@code facilities.fm_account_id}); rỗng nếu chưa gán FM. */
     @Transactional(readOnly = true)
     public Optional<Long> managerAccountId(Long facilityId) {

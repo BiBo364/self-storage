@@ -45,6 +45,10 @@ class AuthServiceTest {
     @Mock
     private LoginAttemptLimiter loginAttemptLimiter;
 
+    /** Lịch sử đăng nhập (V21) — AuthService ghi mọi lần thử. */
+    @Mock
+    private AccountAdminService loginHistory;
+
     @InjectMocks
     private AuthService authService;
 
@@ -68,6 +72,7 @@ class AuthServiceTest {
         verify(jwtService).issueAccessToken(account);
         verify(loginAttemptLimiter).reset("customer@example.com");
         verify(loginAttemptLimiter, never()).recordFailure("customer@example.com", IP);
+        verify(loginHistory).recordLogin("customer@example.com", true, null, IP);
     }
 
     @Test

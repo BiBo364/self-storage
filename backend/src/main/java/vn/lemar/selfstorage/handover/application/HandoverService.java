@@ -14,6 +14,7 @@ import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.audit.domain.AuditAction;
 import vn.lemar.selfstorage.audit.domain.AuditEntityType;
+import vn.lemar.selfstorage.booking.application.HandoverOrderService;
 import vn.lemar.selfstorage.booking.application.RentalOrderQuery;
 import vn.lemar.selfstorage.handover.domain.HandoverRecord;
 import vn.lemar.selfstorage.handover.domain.HandoverResult;
@@ -31,7 +32,8 @@ import vn.lemar.selfstorage.pricing.application.PricingQuery;
  *       hợp đồng chưa bàn giao của đơn. Hai entry point chỉ khác khoá tra cứu; luật huỷ giống nhau.</li>
  * </ul>
  *
- * <p>Chưa có HTTP/cron gọi hai hàm huỷ — cron quá hạn và no-show thuộc issue riêng.
+ * <p>Gọi từ Cancellation Cascade ({@code RentalOrderCanceled}), lịch check-in bị huỷ/no-show
+ * ({@code CheckinAppointmentClosed}), cron quá hạn bàn giao và quá hạn thanh toán tháng đầu.
  */
 @Service
 public class HandoverService {
@@ -49,9 +51,12 @@ public class HandoverService {
     private final RentalOrderQuery orderQuery;
     private final PricingQuery pricingQuery;
     private final AuditRecorder auditRecorder;
+    private final HandoverOrderService orders;
 
     HandoverService(HandoverRecordRepository handoverRecords, RentalContractRepository contracts,
-                    RentalOrderQuery orderQuery, PricingQuery pricingQuery, AuditRecorder auditRecorder) {
+                    RentalOrderQuery orderQuery, PricingQuery pricingQuery, AuditRecorder auditRecorder,
+                    HandoverOrderService orders) {
+        this.orders = orders;
         this.handoverRecords = handoverRecords;
         this.contracts = contracts;
         this.orderQuery = orderQuery;
@@ -112,7 +117,12 @@ public class HandoverService {
         });
         for (RentalContract contract : contracts.findByOrderIdAndStatusInForUpdate(orderId, CANCELABLE_CONTRACTS)) {
             String previous = contract.getStatus().dbValue();
+            boolean signed = contract.getStatus() == RentalContractStatus.SIGNED;
             contract.cancel();
+            if (signed) {
+                // Hoá đơn tháng đầu: Unpaid → Canceled; đã Paid → FM hoàn thủ công.
+                orders.closeContractInvoices(orderId, contract.getId(), reason);
+            }
             auditRecorder.record(new AuditEntry(AuditAction.CONTRACT_CANCELED,
                     AuditEntityType.RENTAL_CONTRACT, String.valueOf(contract.getId()),
                     Map.of("status", previous),

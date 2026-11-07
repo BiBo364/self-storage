@@ -2,6 +2,8 @@ package vn.lemar.selfstorage.booking.application;
 
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.ApplicationEventPublisher;
+import vn.lemar.selfstorage.payment.application.PaymentSessionCloser;
 import org.springframework.stereotype.Component;
 import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
@@ -24,9 +26,8 @@ import vn.lemar.selfstorage.notification.application.NotificationType;
  * RentalOrder Cancellation Cascade ({@code specs/db-table-draft.md} › Cancellation Cascade), phần thuộc
  * booking. Chạy trong transaction của caller, đơn đã được caller khoá.
  *
- * <p>Chưa xử lý (chưa có code ở module tương ứng, booking cũng không được gọi sang handover/tenancy):
- * {@code RentalContract Draft/Signed -> Canceled}, {@code HandoverRecord IN_PROGRESS -> CANCELED},
- * xử lý tiền cọc theo Flow 4.
+ * <p>{@code RentalContract Draft/Signed -> Canceled} và {@code HandoverRecord IN_PROGRESS -> CANCELED} do module
+ * handover làm khi nghe {@link RentalOrderCanceled} (cùng transaction). Tiền cọc: hoàn thủ công theo Flow 4.
  *
  * <p>Khoá: caller đã khoá đơn; cascade khoá lịch {@code Pending} sau đó, giữ thứ tự đơn → lịch.
  */
@@ -34,6 +35,7 @@ import vn.lemar.selfstorage.notification.application.NotificationType;
 class RentalOrderCancellation {
 
     static final String OUTCOME_CANCELED = "đã bị hủy";
+    static final String CANCEL_SESSION_REASON = "Don thue da bi huy";
 
     private final ProposalFeedbackRepository proposalRepository;
     private final InvoiceRepository invoiceRepository;
@@ -41,10 +43,15 @@ class RentalOrderCancellation {
     private final StorageUnitService storageUnitService;
     private final AuditRecorder auditRecorder;
     private final OrderNotifier orderNotifier;
+    private final ApplicationEventPublisher events;
+    private final PaymentSessionCloser sessionCloser;
 
     RentalOrderCancellation(ProposalFeedbackRepository proposalRepository, InvoiceRepository invoiceRepository,
                             AppointmentRepository appointmentRepository, StorageUnitService storageUnitService,
-                            AuditRecorder auditRecorder, OrderNotifier orderNotifier) {
+                            AuditRecorder auditRecorder, OrderNotifier orderNotifier,
+                            ApplicationEventPublisher events, PaymentSessionCloser sessionCloser) {
+        this.events = events;
+        this.sessionCloser = sessionCloser;
         this.proposalRepository = proposalRepository;
         this.invoiceRepository = invoiceRepository;
         this.appointmentRepository = appointmentRepository;
@@ -74,12 +81,17 @@ class RentalOrderCancellation {
                     actorAccountId);
         }
 
+        List<Long> canceledInvoiceIds = new java.util.ArrayList<>();
         for (Invoice invoice : invoiceRepository.findByOrderIdAndStatus(order.getId(), InvoiceStatus.UNPAID)) {
+            canceledInvoiceIds.add(invoice.getId());
             invoice.cancel();
             record(AuditAction.INVOICE_CANCELED, AuditEntityType.INVOICE, invoice.getId(),
                     Map.of("status", InvoiceStatus.UNPAID.dbValue()), Map.of("status", invoice.getStatus().dbValue()),
                     reason, actorAccountId);
         }
+
+        // Huỷ phiên thanh toán còn mở ở cổng (payOS: huỷ link) sau commit, best-effort — không rollback việc huỷ.
+        sessionCloser.closeAfterCommit(canceledInvoiceIds, CANCEL_SESSION_REASON);
 
         // Lịch Pending chưa diễn ra bị huỷ theo đơn; actor = System theo catalog audit.
         for (Long appointmentId : appointmentRepository.findPendingIdsByOrderId(order.getId())) {
@@ -95,6 +107,9 @@ class RentalOrderCancellation {
             record(AuditAction.RENTAL_ORDER_CANCELED, AuditEntityType.STORAGE_UNIT, order.getUnitId(),
                     Map.of("status", "Reserved"), Map.of("status", "Available"), reason, actorAccountId);
         }
+
+        // Phần của handover (HandoverRecord đang mở, RentalContract Draft/Signed) — booking không gọi chéo module.
+        events.publishEvent(new RentalOrderCanceled(order.getId(), order.getUnitId(), reason));
 
         // Khách tự chịu rủi ro mất cọc khi huỷ do quá ngưỡng từ chối (behavior-gap #172).
         String notifyReason = ProposalService.CANCEL_REASON_TOO_MANY_REJECTIONS.equals(reason)

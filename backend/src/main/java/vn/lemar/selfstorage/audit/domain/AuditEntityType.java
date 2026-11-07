@@ -22,7 +22,13 @@ public enum AuditEntityType {
     RENTAL_CONTRACT("RentalContract"),
     UNIT_ACCESS_KEY("UnitAccessKey"),
     CHECKOUT_RECORD("CheckoutRecord"),
-    ACCOUNT("Account");
+    ACCOUNT("Account"),
+    RETURN_REQUEST("ReturnRequest"),
+    SUPPORT_REQUEST("SupportRequest"),
+    FACILITY("Facility"),
+    POLICY("Policy"),
+    UNIT_TYPE("UnitType"),
+    ROLE("Role");
 
     private final String dbValue;
 

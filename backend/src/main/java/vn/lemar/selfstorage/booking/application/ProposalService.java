@@ -173,6 +173,11 @@ public class ProposalService {
         BigDecimal required = depositInvoiceIssuer.depositAmount(unit)
                 .add(pricingQuery.decimalPolicy(POLICY_UNIT_CHANGE));
         BigDecimal delta = required.subtract(paidDeposit).setScale(2, RoundingMode.HALF_UP);
+        if (delta.signum() <= 0) {
+            // Cọc đã thu đủ cho khoang mới → không có hoá đơn bổ sung để chốt; giữ khoang mới ngay (đơn đã cọc
+            // phải luôn giữ khoang của mình — đặt lịch check-in và bàn giao đều cần khoang Reserved).
+            reserveReplacementUnit(order, unit, actorAccountId);
+        }
         if (delta.signum() > 0) {
             Invoice supplemental = depositInvoiceIssuer.issueSupplemental(order, unit, delta, actorAccountId);
             orderNotifier.notifyCustomer(order, NotificationType.UNIT_CHANGE_PAYMENT_REQUIRED,
@@ -191,6 +196,15 @@ public class ProposalService {
                     Map.of("orderCode", OrderNotifier.orderCode(order), "refundAmount", refund.toPlainString()));
         }
         return null;
+    }
+
+    private void reserveReplacementUnit(RentalOrder order, StorageUnitView unit, Long actorAccountId) {
+        if (storageUnitService.reserveIfAvailable(unit.id())) {
+            auditRecorder.record(new AuditEntry(AuditAction.STORAGE_UNIT_RESERVED, AuditEntityType.STORAGE_UNIT,
+                    String.valueOf(unit.id()), Map.of("status", "Available"),
+                    Map.of("status", "Reserved", "orderId", order.getId()), "Đổi khoang sau khi đã cọc",
+                    actorAccountId));
+        }
     }
 
     /** Guard trạng thái đơn khi khách đồng ý (behavior-gap #165). */

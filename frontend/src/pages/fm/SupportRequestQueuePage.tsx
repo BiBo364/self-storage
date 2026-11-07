@@ -1,197 +1,368 @@
-import { Check } from "lucide-react";
+import { Check, ChevronRight, ImageIcon, User } from "lucide-react";
 import { useState } from "react";
+import { formatDateTime, formatMoney } from "../../app/format";
+import { fetchFacilityStaff, type FmStaff } from "../../app/fmStaff";
 import {
-  fsStaff,
-  supportRequests as initialRequests,
-  type SupportIssueType,
+  assignSupportRequest,
+  fetchSupportRequests,
+  INVOICE_STATUS_LABEL,
+  labelOf,
+  loadErrorState,
+  resolveSupportRequest,
+  toneOf,
+  useFmAction,
+  useFmLoad,
   type SupportRequest,
-  type SupportRequestStatus,
-} from "../../mocks/fm";
+} from "../../app/services/fm";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
+import { FIELD_LABEL, INPUT_ELEMENT, INPUT_WRAP, SelectField } from "../../components/ui/FormField";
+import { SectionTitle } from "../../components/ui/SectionTitle";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
-const TAB_LABEL: Record<SupportRequestStatus, string> = {
+type Tone = "success" | "warning" | "danger" | "info" | "neutral";
+
+const STATUS_LABEL: Record<string, string> = {
   Open: "Đang mở",
-  Assigned: "Đã phân công",
+  Assigned: "Đã giao FS",
+  Resolved: "Đã xử lý",
+  Canceled: "Khách đã huỷ",
 };
 
-const ISSUE_LABEL: Record<SupportIssueType, string> = {
-  LostKey: "Mất chìa khoá",
-  AccessCode: "Lỗi mã ra vào",
-  UnitDamage: "Hư hỏng khoang",
-  Other: "Khác",
+const STATUS_TONE: Record<string, Tone> = {
+  Open: "warning",
+  Assigned: "info",
+  Resolved: "success",
+  Canceled: "neutral",
 };
 
-const ISSUE_TONE: Record<SupportIssueType, "warning" | "info" | "danger" | "neutral"> = {
-  LostKey: "warning",
-  AccessCode: "info",
-  UnitDamage: "danger",
-  Other: "neutral",
+const CATEGORY_LABEL: Record<string, string> = {
+  LOST_KEY: "Mất chìa khoá",
+  ACCESS_CODE: "Mã ra vào",
+  UNIT_ISSUE: "Sự cố khoang",
+  BILLING: "Hoá đơn",
+  OTHER: "Khác",
 };
 
-function staffName(staffId: string | null) {
-  return fsStaff.find((staff) => staff.id === staffId)?.name ?? null;
+const OPEN_STATUSES = ["Open", "Assigned"];
+
+function staffLabel(staff: FmStaff) {
+  return staff.name ? `${staff.name} · ${staff.email}` : staff.email;
 }
 
 export function SupportRequestQueuePage() {
-  const [items, setItems] = useState<SupportRequest[]>(initialRequests);
-  const [tab, setTab] = useState<SupportRequestStatus>("Open");
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [selectedStaffId, setSelectedStaffId] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [includeClosed, setIncludeClosed] = useState(false);
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const list = items.filter((request) => request.status === tab);
-  const openCount = items.filter((request) => request.status === "Open").length;
-  const assignedCount = items.filter((request) => request.status === "Assigned").length;
-  const openRequest = items.find((request) => request.id === openId) ?? null;
+  const requests = useFmLoad(`support:${includeClosed}`, (facility) =>
+    fetchSupportRequests(facility.id, includeClosed),
+  );
+  const staff = useFmLoad("staff", (facility) => fetchFacilityStaff(facility.id));
 
-  function openDetails(request: SupportRequest) {
-    setOpenId(request.id);
-    setSelectedStaffId("");
-  }
-
-  function assign(request: SupportRequest) {
-    if (!selectedStaffId) return;
-    setBusyId(request.id);
-    window.setTimeout(() => {
-      setBusyId(null);
-      setItems((current) =>
-        current.map((item) =>
-          item.id === request.id ? { ...item, status: "Assigned", staffId: selectedStaffId } : item,
-        ),
-      );
-      setOpenId(null);
-    }, 700);
-  }
-
-  const counts: Record<SupportRequestStatus, number> = {
-    Open: openCount,
-    Assigned: assignedCount,
-  };
+  const list = requests.data ?? [];
+  const openRequest = list.find((request) => request.id === openId) ?? null;
+  const openCount = list.filter((request) => OPEN_STATUSES.includes(request.status)).length;
 
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="m-0 text-title text-ink">Hàng chờ yêu cầu hỗ trợ</h1>
+        <h1 className="m-0 text-title text-ink">Yêu cầu hỗ trợ</h1>
         <p className="mt-1.5 text-small text-muted">
-          Sự cố khách báo hoặc FS tự ghi nhận tại kho — phân công FS xử lý.
+          {requests.data ? `${openCount} yêu cầu đang mở · ` : ""}Giao FS xử lý tại chỗ, hoặc ghi
+          nhận kết quả trực tiếp.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {(["Open", "Assigned"] as const).map((status) => (
-          <button
-            key={status}
-            className={`inline-flex items-center gap-2 border-0 px-2.5 py-1.5 text-small font-semibold ${
-              tab === status
-                ? "bg-brand text-signal-ink"
-                : "bg-transparent text-muted hover:bg-surface-subtle hover:text-ink"
-            }`}
-            onClick={() => setTab(status)}
-          >
-            {TAB_LABEL[status]}
-            <span
-              className={`px-1.5 text-label ${
-                tab === status ? "bg-signal-ink text-brand" : "bg-surface text-muted"
-              }`}
-            >
-              {counts[status]}
-            </span>
-          </button>
-        ))}
-      </div>
+      <label className="flex items-center gap-2 text-small text-ink">
+        <input
+          type="checkbox"
+          checked={includeClosed}
+          onChange={(event) => {
+            setIncludeClosed(event.target.checked);
+            setNotice(null);
+          }}
+        />
+        Hiện cả yêu cầu đã xử lý / đã huỷ
+      </label>
 
-      {list.length === 0 ? (
-        <SurfaceState variant="empty" title="Không có yêu cầu nào trong mục này" />
+      {notice && <DemoNotice tone="success">{notice}</DemoNotice>}
+
+      {requests.error ? (
+        <SurfaceState
+          {...loadErrorState(requests.error, "yêu cầu hỗ trợ")}
+          action={{ label: "Thử lại", onClick: requests.reload }}
+        />
+      ) : !requests.data ? (
+        <SurfaceState variant="loading" title="Đang tải yêu cầu hỗ trợ…" />
+      ) : list.length === 0 ? (
+        <SurfaceState
+          variant="empty"
+          title="Không có yêu cầu hỗ trợ"
+          description={includeClosed ? undefined : "Bật “Hiện cả yêu cầu đã xử lý” để xem lịch sử."}
+        />
       ) : (
-        <div className="grid gap-2">
+        <div className={`grid gap-2 ${requests.loading ? "opacity-60" : ""}`}>
           {list.map((request) => (
             <button
               key={request.id}
               className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
-              onClick={() => openDetails(request)}
+              onClick={() => {
+                setNotice(null);
+                setOpenId(request.id);
+              }}
             >
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusTag tone={ISSUE_TONE[request.issueType]}>
-                    {ISSUE_LABEL[request.issueType]}
+                  <StatusTag tone={toneOf(STATUS_TONE, request.status)}>
+                    {labelOf(STATUS_LABEL, request.status)}
                   </StatusTag>
-                  <strong className="text-small font-semibold text-ink">
-                    Khoang {request.unitCode}
-                  </strong>
+                  <span className="text-label text-muted">
+                    {labelOf(CATEGORY_LABEL, request.category)}
+                  </span>
                 </div>
-                <span className="mt-1.5 block text-label text-muted">
-                  {request.reporterName} ·{" "}
-                  {request.reporterRole === "Customer" ? "Khách thuê" : "Nhân viên FS"}
+                <strong className="mt-2 block text-small font-semibold text-ink">
+                  {request.title}
+                </strong>
+                <span className="mt-0.5 block text-label text-muted">
+                  {request.customerName ?? request.customerEmail ?? "—"}
+                  {request.unitCode ? ` · Khoang ${request.unitCode}` : ""} · gửi{" "}
+                  {formatDateTime(request.createdAt)}
                 </span>
+                {request.assignedStaffName && (
+                  <span className="mt-1 flex items-center gap-1.5 text-label text-muted">
+                    <User size={12} /> {request.assignedStaffName}
+                  </span>
+                )}
               </div>
-              <StatusTag tone={request.status === "Assigned" ? "success" : "warning"}>
-                {request.status === "Assigned"
-                  ? `FS: ${staffName(request.staffId)}`
-                  : "Chưa phân công"}
-              </StatusTag>
+              <ChevronRight size={16} className="mt-1 text-muted" />
             </button>
           ))}
         </div>
       )}
 
       {openRequest && (
-        <DetailPanel
-          title={`Khoang ${openRequest.unitCode}`}
-          eyebrow={ISSUE_LABEL[openRequest.issueType]}
+        <SupportPanel
+          request={openRequest}
+          staff={staff.data ?? []}
+          staffError={staff.error?.message ?? null}
           onClose={() => setOpenId(null)}
-        >
-          <div className="grid gap-2 text-small text-muted">
-            <span>
-              Người báo: {openRequest.reporterName} (
-              {openRequest.reporterRole === "Customer" ? "Khách thuê" : "Nhân viên FS"})
-            </span>
-            <span>
-              Hợp đồng liên quan: {openRequest.contractId ?? "Không có hợp đồng liên quan"}
-            </span>
-          </div>
-          <p className="mt-4 text-small leading-relaxed text-ink">{openRequest.description}</p>
+          onChanged={(message) => {
+            setOpenId(null);
+            setNotice(message);
+            requests.reload();
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
-          {openRequest.status === "Assigned" ? (
-            <div className="mt-6">
-              <DemoNotice tone="success">
-                Đã phân công {staffName(openRequest.staffId)} xử lý sự cố này.
-              </DemoNotice>
-            </div>
-          ) : (
-            <>
-              <label className="mt-6 grid gap-1.5 text-label text-muted">
-                Chọn nhân viên FS
-                <select
-                  className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
-                  value={selectedStaffId}
-                  onChange={(event) => setSelectedStaffId(event.target.value)}
-                >
-                  <option value="">— Chọn nhân viên —</option>
-                  {fsStaff.map((staff) => (
-                    <option key={staff.id} value={staff.id}>
-                      {staff.name} · {staff.phone}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="mt-5">
+function SupportPanel({
+  request,
+  staff,
+  staffError,
+  onClose,
+  onChanged,
+}: {
+  request: SupportRequest;
+  staff: FmStaff[];
+  staffError: string | null;
+  onClose: () => void;
+  onChanged: (message: string) => void;
+}) {
+  const [staffId, setStaffId] = useState("");
+  const [resolution, setResolution] = useState("");
+  const [keyQuantity, setKeyQuantity] = useState("");
+  const [feeAmount, setFeeAmount] = useState("");
+  const action = useFmAction();
+  const isOpen = OPEN_STATUSES.includes(request.status);
+
+  async function assign() {
+    const outcome = await action.run("assign", () =>
+      assignSupportRequest(request.id, Number(staffId)),
+    );
+    if (outcome.ok) {
+      onChanged(
+        `Đã giao yêu cầu “${request.title}” cho ${outcome.value.assignedStaffName ?? "FS"}.`,
+      );
+    }
+  }
+
+  async function resolve() {
+    const outcome = await action.run("resolve", () =>
+      resolveSupportRequest(request.id, {
+        resolution: resolution.trim(),
+        newKeyQuantity: keyQuantity ? Number(keyQuantity) : undefined,
+        feeAmount: feeAmount ? Number(feeAmount) : undefined,
+      }),
+    );
+    if (outcome.ok) onChanged(`Đã xử lý yêu cầu “${request.title}”.`);
+  }
+
+  return (
+    <DetailPanel
+      title={request.title}
+      eyebrow={`${labelOf(CATEGORY_LABEL, request.category)} · ${labelOf(STATUS_LABEL, request.status)}`}
+      onClose={onClose}
+    >
+      <div className="grid gap-5">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-small">
+          <Field label="Khách hàng" value={request.customerName} />
+          <Field label="Email" value={request.customerEmail} />
+          <Field label="Hợp đồng" value={request.contractCode} />
+          <Field label="Khoang" value={request.unitCode} />
+          <Field label="Gửi lúc" value={formatDateTime(request.createdAt)} />
+          <Field label="FS phụ trách" value={request.assignedStaffName} />
+        </dl>
+
+        <p className="m-0 whitespace-pre-line text-small leading-relaxed text-ink">
+          {request.description}
+        </p>
+
+        {request.photos && request.photos.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {request.photos.map((url, index) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 bg-surface-subtle px-2.5 py-1.5 text-label text-accent hover:text-ink"
+              >
+                <ImageIcon size={13} /> Ảnh {index + 1}
+              </a>
+            ))}
+          </div>
+        )}
+
+        {request.resolution && (
+          <section>
+            <SectionTitle>Kết quả xử lý</SectionTitle>
+            <p className="mt-2 whitespace-pre-line text-small text-ink">{request.resolution}</p>
+            <p className="mt-1 text-label text-muted">{formatDateTime(request.resolvedAt)}</p>
+          </section>
+        )}
+
+        {request.feeInvoice && (
+          <DemoNotice tone="info">
+            Hoá đơn phí {request.feeInvoice.code} · {formatMoney(request.feeInvoice.amount)} ·{" "}
+            {labelOf(INVOICE_STATUS_LABEL, request.feeInvoice.status)}
+          </DemoNotice>
+        )}
+
+        {action.error && <DemoNotice tone="error">{action.error}</DemoNotice>}
+
+        {isOpen && (
+          <section className="bg-surface-subtle p-4">
+            <SectionTitle>{request.assignedStaffId ? "Giao lại FS" : "Giao FS xử lý"}</SectionTitle>
+            {staffError ? (
+              <DemoNotice tone="error">Không tải được danh sách FS: {staffError}</DemoNotice>
+            ) : staff.length === 0 ? (
+              <p className="mt-2 text-label text-muted">Cơ sở chưa có FS để giao.</p>
+            ) : (
+              <div className="mt-3">
+                <SelectField
+                  label="Nhân viên FS"
+                  name={`support-staff-${request.id}`}
+                  value={staffId}
+                  onChange={setStaffId}
+                  placeholder="— Chọn FS —"
+                  options={staff.map((member) => ({
+                    value: String(member.id),
+                    label: staffLabel(member),
+                  }))}
+                />
                 <Button
-                  pending={busyId === openRequest.id}
-                  disabled={!selectedStaffId}
-                  onClick={() => assign(openRequest)}
+                  variant="secondary"
+                  pending={action.pending === "assign"}
+                  disabled={!staffId}
+                  onClick={assign}
                 >
-                  {busyId !== openRequest.id && <Check size={16} />}
-                  Phân công
+                  {action.pending !== "assign" && <User size={16} />} Giao FS
                 </Button>
               </div>
-            </>
-          )}
-        </DetailPanel>
-      )}
+            )}
+          </section>
+        )}
+
+        {isOpen && (
+          <section className="bg-surface-subtle p-4">
+            <SectionTitle>Ghi nhận kết quả</SectionTitle>
+            <label className={`${FIELD_LABEL} mt-3`} htmlFor={`resolution-${request.id}`}>
+              Kết quả xử lý <span className="text-danger">*</span>
+            </label>
+            <div className={INPUT_WRAP}>
+              <textarea
+                id={`resolution-${request.id}`}
+                className={`${INPUT_ELEMENT} min-h-[80px] py-2`}
+                value={resolution}
+                maxLength={2000}
+                onChange={(event) => setResolution(event.target.value)}
+              />
+            </div>
+            {request.contractId !== null && (
+              <div className="mt-3 grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                <div>
+                  <label className={FIELD_LABEL} htmlFor={`keys-${request.id}`}>
+                    Cấp bộ chìa mới (số chìa)
+                  </label>
+                  <div className={INPUT_WRAP}>
+                    <input
+                      id={`keys-${request.id}`}
+                      type="number"
+                      min={1}
+                      max={10}
+                      className={INPUT_ELEMENT}
+                      value={keyQuantity}
+                      onChange={(event) => setKeyQuantity(event.target.value)}
+                      placeholder="Để trống nếu không thay"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={FIELD_LABEL} htmlFor={`fee-${request.id}`}>
+                    Phí dịch vụ
+                  </label>
+                  <div className={INPUT_WRAP}>
+                    <input
+                      id={`fee-${request.id}`}
+                      type="number"
+                      min={0}
+                      step={1000}
+                      className={INPUT_ELEMENT}
+                      value={feeAmount}
+                      onChange={(event) => setFeeAmount(event.target.value)}
+                      placeholder="Để trống nếu không thu"
+                    />
+                    <span className="shrink-0 text-label text-muted">đ</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="mt-3">
+              <Button
+                pending={action.pending === "resolve"}
+                disabled={!resolution.trim()}
+                onClick={resolve}
+              >
+                {action.pending !== "resolve" && <Check size={16} />} Đánh dấu đã xử lý
+              </Button>
+            </div>
+          </section>
+        )}
+      </div>
+    </DetailPanel>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-label text-muted">{label}</dt>
+      <dd className="m-0 break-words text-ink">{value || "—"}</dd>
     </div>
   );
 }

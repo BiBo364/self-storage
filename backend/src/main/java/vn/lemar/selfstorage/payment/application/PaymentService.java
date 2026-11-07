@@ -7,18 +7,24 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.lemar.selfstorage.payment.application.dto.GatewayNotification;
+import vn.lemar.selfstorage.payment.application.dto.GatewayQueryResult;
 import vn.lemar.selfstorage.payment.application.dto.IpnResponse;
 import vn.lemar.selfstorage.payment.application.dto.PaymentRequest;
 import vn.lemar.selfstorage.payment.application.event.PaymentFailed;
 import vn.lemar.selfstorage.payment.application.event.PaymentSucceeded;
 import vn.lemar.selfstorage.payment.config.VnPayProperties;
+import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
 import vn.lemar.selfstorage.payment.repository.PaymentTransactionRepository;
 
@@ -37,6 +43,12 @@ public class PaymentService {
     private static final String SUCCESS_CODE = "00";
     private static final ZoneId VNPAY_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter PAY_DATE = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+    /** Cửa sổ phiên VNPay (15') + đệm 5' — quá mốc này cổng chắc chắn không nhận thanh toán nữa. */
+    static final java.time.Duration SESSION_EXPIRY = java.time.Duration.ofMinutes(20);
+
+    /** Cửa sổ phiên VNPay — khớp {@code vnp_ExpireDate} của {@link VnPayGateway}. */
+    public static final java.time.Duration PAYMENT_WINDOW = java.time.Duration.ofMinutes(15);
 
     private final PaymentGateway gateway;
     private final PaymentTransactionRepository repository;
@@ -67,7 +79,189 @@ public class PaymentService {
                 invoiceId, request.txnRef(), request.amount(), request.orderInfo());
         repository.save(transaction);
 
-        return gateway.buildPaymentUrl(request);
+        // vnp_CreateDate = created_at của giao dịch: querydr cần đúng mốc này để tìm lại phiên.
+        return gateway.buildPaymentUrl(request.withCreatedAt(transaction.getCreatedAt()));
+    }
+
+    /**
+     * Thanh toán một hoá đơn bằng cổng đang dùng: cổng sinh mã giao dịch (payOS cần mã số) rồi tạo phiên như
+     * {@link #startPayment}.
+     */
+    @Transactional
+    public String startInvoicePayment(Long invoiceId, BigDecimal amount, String orderInfo, String ipAddr) {
+        return startPayment(invoiceId, new PaymentRequest(gateway.newTxnRef(invoiceId), amount, orderInfo, ipAddr));
+    }
+
+    /** Kết quả xử lý thông báo thanh toán dạng body (webhook). */
+    public enum NotificationResult { ACCEPTED, ALREADY_SETTLED, NOT_FOUND, INVALID_SIGNATURE, INVALID_AMOUNT }
+
+    /**
+     * Webhook của cổng (payOS): kiểm chữ ký → tìm giao dịch (khoá row) → số tiền → còn {@code Pending} → ghi
+     * {@code Success}/{@code Failed} + event. Idempotent theo mã giao dịch như IPN VNPay.
+     */
+    @Transactional
+    public NotificationResult handleNotification(String rawBody) {
+        GatewayNotification notification = gateway.parseNotification(rawBody).orElse(null);
+        if (notification == null) {
+            LOG.warn("Webhook bị từ chối vì sai chữ ký / không đọc được");
+            return NotificationResult.INVALID_SIGNATURE;
+        }
+        PaymentTransaction transaction = repository.findByVnpTxnRef(notification.txnRef()).orElse(null);
+        if (transaction == null) {
+            return NotificationResult.NOT_FOUND;
+        }
+        if (notification.amount() == null || notification.amount().compareTo(transaction.getAmount()) != 0) {
+            LOG.warn("Webhook {} số tiền {} lệch giao dịch {}", notification.txnRef(), notification.amount(),
+                    transaction.getAmount());
+            return NotificationResult.INVALID_AMOUNT;
+        }
+        if (!transaction.isPending()) {
+            if (notification.success() && transaction.getStatus() == PaymentStatus.FAILED) {
+                // Phiên đã bị huỷ/đóng phía mình nhưng khách vẫn chuyển khoản (vd quét QR cũ) — tiền đã vào.
+                LOG.error("Thanh toán muộn: giao dịch {} đã đóng ({}) nhưng cổng báo đã thu {} — cần hoàn tiền thủ "
+                        + "công", notification.txnRef(), transaction.getFailureReason(), notification.amount());
+            }
+            return NotificationResult.ALREADY_SETTLED;
+        }
+        if (notification.success()) {
+            transaction.markSucceeded(notification.transactionNo(),
+                    notification.paidAt() == null ? Instant.now() : notification.paidAt(), notification.payload());
+            events.publishEvent(new PaymentSucceeded(transaction.getInvoiceId(), transaction.getVnpTxnRef(),
+                    transaction.getAmount(), transaction.getPaidAt(), transaction.getId()));
+        } else {
+            String reason = "Cổng báo thanh toán không thành công";
+            transaction.markFailed(reason, notification.payload());
+            events.publishEvent(new PaymentFailed(transaction.getInvoiceId(), transaction.getVnpTxnRef(),
+                    transaction.getAmount(), reason, transaction.getId()));
+        }
+        return NotificationResult.ACCEPTED;
+    }
+
+    /** Ảnh chụp trạng thái giao dịch cho caller (không lộ entity ra ngoài module). */
+    public record PaymentSnapshot(Long invoiceId, String txnRef, String status, String failureReason,
+                                  Instant createdAt) {
+    }
+
+    /** Giao dịch mới nhất của hoá đơn, không gọi cổng. */
+    @Transactional(readOnly = true)
+    public Optional<PaymentSnapshot> latest(Long invoiceId) {
+        return repository.findFirstByInvoiceIdOrderByCreatedAtDescIdDesc(invoiceId).map(PaymentService::snapshot);
+    }
+
+    /**
+     * Đối soát giao dịch mới nhất của hoá đơn bằng {@code querydr} — dùng khi khách quay về từ cổng mà IPN chưa
+     * tới (vd chạy local không có URL public). Giao dịch đã chốt thì trả nguyên trạng, không gọi cổng.
+     */
+    @Transactional
+    public Optional<PaymentSnapshot> reconcileLatest(Long invoiceId, String ipAddr) {
+        return repository.findFirstByInvoiceIdOrderByCreatedAtDescIdDesc(invoiceId)
+                .map(t -> reconcile(t.getVnpTxnRef(), ipAddr));
+    }
+
+    /**
+     * Đối soát một giao dịch {@code Pending} với cổng ({@code querydr}) — nguồn dự phòng duy nhất ngoài IPN.
+     * Cổng xác nhận đã trả → {@code Success} + {@link PaymentSucceeded}; cổng báo lỗi → {@code Failed} +
+     * {@link PaymentFailed}; cổng không có giao dịch và đã quá cửa sổ phiên → {@code Failed} (phiên hết hạn).
+     * {@code querydr} lỗi mạng / sai chữ ký → giữ {@code Pending}, lần sau đối soát tiếp.
+     */
+    @Transactional
+    public PaymentSnapshot reconcile(String txnRef, String ipAddr) {
+        PaymentTransaction transaction = repository.findByVnpTxnRef(txnRef)
+                .orElseThrow(() -> new IllegalArgumentException("Không có giao dịch " + txnRef));
+        if (!transaction.isPending()) {
+            return snapshot(transaction);
+        }
+        GatewayQueryResult result;
+        try {
+            result = gateway.query(txnRef, transaction.getCreatedAt(), transaction.getTransactionContent(), ipAddr);
+        } catch (RuntimeException e) {
+            LOG.warn("querydr {} lỗi, giữ Pending: {}", txnRef, e.getMessage());
+            return snapshot(transaction);
+        }
+        if (result == null) {
+            return snapshot(transaction);
+        }
+        String payload = toJson(result.payload());
+        if (result.paid()) {
+            if (result.amount() == null || result.amount().compareTo(transaction.getAmount()) != 0) {
+                LOG.error("querydr {}: số tiền cổng ({}) lệch giao dịch ({}) — giữ Pending để xử lý thủ công",
+                        txnRef, result.amount(), transaction.getAmount());
+                return snapshot(transaction);
+            }
+            transaction.markSucceeded(result.transactionNo(), parsePayDate(result.payDate()), payload);
+            events.publishEvent(new PaymentSucceeded(transaction.getInvoiceId(), txnRef,
+                    transaction.getAmount(), transaction.getPaidAt(), transaction.getId()));
+        } else if (result.failed()) {
+            String reason = "querydr: vnp_TransactionStatus=" + result.transactionStatus();
+            transaction.markFailed(reason, payload);
+            events.publishEvent(new PaymentFailed(transaction.getInvoiceId(), txnRef, transaction.getAmount(), reason,
+                    transaction.getId()));
+        } else if (result.notFound() && Instant.now().isAfter(transaction.getCreatedAt().plus(SESSION_EXPIRY))) {
+            String reason = "Phiên thanh toán hết hạn, cổng không ghi nhận giao dịch";
+            transaction.markFailed(reason, payload);
+            events.publishEvent(new PaymentFailed(transaction.getInvoiceId(), txnRef, transaction.getAmount(), reason,
+                    transaction.getId()));
+        }
+        return snapshot(transaction);
+    }
+
+    /**
+     * Hoá đơn nào trong danh sách đang có phiên thanh toán mở: còn giao dịch {@code Pending} — **cho tới khi cổng
+     * xác nhận phiên đã đóng** (đã trả / huỷ / hết hạn, qua webhook hoặc đối soát), không tự hết theo đồng hồ của
+     * mình. Nhờ vậy không thể mở phiên thứ hai cho cùng khoang trong lúc phiên đầu còn trả được tiền.
+     */
+    @Transactional(readOnly = true)
+    public List<Long> invoicesWithOpenSession(Collection<Long> invoiceIds) {
+        if (invoiceIds == null || invoiceIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findInvoiceIdsWithStatusSince(invoiceIds, PaymentStatus.PENDING, Instant.EPOCH);
+    }
+
+    /** Mã các giao dịch {@code Pending} của các hoá đơn — đầu vào huỷ phiên ở cổng. */
+    @Transactional(readOnly = true)
+    public List<String> pendingTxnRefs(Collection<Long> invoiceIds) {
+        if (invoiceIds == null || invoiceIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findPendingTxnRefsByInvoiceIds(invoiceIds);
+    }
+
+    /**
+     * Huỷ phiên ở cổng rồi đóng giao dịch phía mình. Cổng xác nhận đã huỷ → khoá row, còn {@code Pending} thì
+     * {@code Failed} + {@link PaymentFailed}. Cổng không huỷ được (đã trả, lỗi mạng, cổng không hỗ trợ) → giữ
+     * nguyên, webhook / đối soát quyết. Trả trạng thái sau cùng.
+     */
+    @Transactional
+    public PaymentSnapshot cancelSession(String txnRef, String reason) {
+        PaymentTransaction transaction = repository.findByVnpTxnRef(txnRef)
+                .orElseThrow(() -> new IllegalArgumentException("Không có giao dịch " + txnRef));
+        if (!transaction.isPending()) {
+            return snapshot(transaction);
+        }
+        if (gateway.cancel(txnRef, reason)) {
+            transaction.markFailed("Đã huỷ phiên: " + reason, null);
+            events.publishEvent(new PaymentFailed(transaction.getInvoiceId(), txnRef, transaction.getAmount(),
+                    transaction.getFailureReason(), transaction.getId()));
+        }
+        return snapshot(transaction);
+    }
+
+    /** Mốc cổng xác nhận thu tiền sớm nhất của hoá đơn ({@code paid_at} của giao dịch {@code Success}). */
+    @Transactional(readOnly = true)
+    public Optional<Instant> firstPaidAt(Long invoiceId) {
+        return repository.findFirstPaidAt(invoiceId, PaymentStatus.SUCCESS);
+    }
+
+    /** Mã các giao dịch {@code Pending} đã quá cửa sổ phiên — đầu vào job đối soát. */
+    @Transactional(readOnly = true)
+    public List<String> stalePendingTxnRefs() {
+        return repository.findTxnRefsByStatusCreatedBefore(PaymentStatus.PENDING, Instant.now().minus(SESSION_EXPIRY));
+    }
+
+    private static PaymentSnapshot snapshot(PaymentTransaction t) {
+        return new PaymentSnapshot(t.getInvoiceId(), t.getVnpTxnRef(), t.getStatus().dbValue(), t.getFailureReason(),
+                t.getCreatedAt());
     }
 
     /**
@@ -112,13 +306,13 @@ public class PaymentService {
             transaction.markSucceeded(
                     params.get("vnp_TransactionNo"), parsePayDate(params.get("vnp_PayDate")), responsePayload);
             events.publishEvent(new PaymentSucceeded(transaction.getInvoiceId(), txnRef,
-                    transaction.getAmount(), transaction.getPaidAt()));
+                    transaction.getAmount(), transaction.getPaidAt(), transaction.getId()));
         } else {
             String reason = "vnp_ResponseCode=" + params.get("vnp_ResponseCode")
                     + ", vnp_TransactionStatus=" + params.get("vnp_TransactionStatus");
             transaction.markFailed(reason, responsePayload);
             events.publishEvent(new PaymentFailed(transaction.getInvoiceId(), txnRef,
-                    transaction.getAmount(), reason));
+                    transaction.getAmount(), reason, transaction.getId()));
         }
         return IpnResponse.success();
     }

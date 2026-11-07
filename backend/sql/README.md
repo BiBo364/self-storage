@@ -22,7 +22,7 @@ Bản đọc được của SQL — **mirror byte-identical** với Flyway migra
 Migrations tự chạy khi app khởi động (Flyway + `spring.datasource`). Máy dev:
 
 ```bash
-docker compose up -d          # Postgres + Redis + MailHog
+docker compose up -d          # Postgres + Redis
 cd backend && ./mvnw spring-boot:run
 ```
 

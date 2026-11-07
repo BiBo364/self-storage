@@ -65,6 +65,30 @@ public class Appointment {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Spec 1.5: khách chọn khung giờ → lịch {@code CHECKIN}/{@code Pending}, chưa có FS. */
+    public static Appointment checkin(Long customerId, Long facilityId, LocalDate date, Instant startedAt,
+                                      Instant endAt) {
+        Appointment appointment = new Appointment();
+        appointment.customerId = customerId;
+        appointment.facilityId = facilityId;
+        appointment.type = AppointmentType.CHECKIN;
+        appointment.date = date;
+        appointment.startedAt = startedAt;
+        appointment.endAt = endAt;
+        appointment.status = AppointmentStatus.Pending;
+        appointment.updatedAt = Instant.now();
+        return appointment;
+    }
+
+    /** Trả kho: FM đã phân công FS nên lịch {@code RETURN} tạo kèm {@code staff_id}. */
+    public static Appointment returnVisit(Long customerId, Long facilityId, Long staffId, LocalDate date,
+                                          Instant startedAt, Instant endAt) {
+        Appointment appointment = checkin(customerId, facilityId, date, startedAt, endAt);
+        appointment.type = AppointmentType.RETURN;
+        appointment.staffId = staffId;
+        return appointment;
+    }
+
     /** Đã có FS phụ trách. */
     public boolean hasStaff() {
         return staffId != null;

@@ -204,7 +204,7 @@ class ProposalServiceIntegrationTest {
     }
 
     @Test
-    void unitChangeReleasesOldUnitAndLeavesNewUnitAvailable() {
+    void unitChangeReleasesOldUnitAndReservesNewUnitWhenDepositCovers() {
         depositedOrder();
         jdbc.update("update rental_orders set unit_id = ? where id = ?", unitId("A-01"), orderId);
         jdbc.update("update storage_units set status = 'Reserved' where id = ?", unitId("A-01"));
@@ -217,9 +217,11 @@ class ProposalServiceIntegrationTest {
         assertThat(orderUnitId()).isEqualTo(unitId("A-02"));
         assertThat(jdbc.queryForObject("select status from storage_units where id = ?", String.class,
                 unitId("A-01"))).isEqualTo("Available");
+        // Cọc đã đủ, không có hoá đơn bổ sung để chốt → khoang mới được giữ ngay (đơn đã cọc luôn giữ khoang).
         assertThat(jdbc.queryForObject("select status from storage_units where id = ?", String.class,
-                unitId("A-02"))).isEqualTo("Available");
+                unitId("A-02"))).isEqualTo("Reserved");
         assertThat(auditActions("StorageUnit", unitId("A-01"))).containsExactly("UNIT_CHANGE_RELEASED");
+        assertThat(auditActions("StorageUnit", unitId("A-02"))).containsExactly("STORAGE_UNIT_RESERVED");
     }
 
     @Test

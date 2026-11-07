@@ -2,6 +2,7 @@ package vn.lemar.selfstorage.booking.repository;
 
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -48,6 +49,20 @@ public interface RentalRequestRepository extends JpaRepository<RentalRequest, Lo
             + "and r.status = vn.lemar.selfstorage.booking.domain.RentalRequestStatus.Approved "
             + "and r.expiresAt > :now")
     int convertIfApproved(@Param("id") Long id, @Param("now") Instant now);
+
+    /** Cron: request {@code Pending}/{@code Approved} đã quá {@code expires_at}. */
+    @Query("select r.id from RentalRequest r where r.status in :statuses and r.expiresAt < :now order by r.id")
+    List<Long> findExpiredIds(@Param("statuses") Collection<RentalRequestStatus> statuses, @Param("now") Instant now);
+
+    /** Cron: {@code -> Expired} có điều kiện trạng thái — FM duyệt đúng lúc đó thì 0 row, không ghi đè. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update RentalRequest r set r.status = vn.lemar.selfstorage.booking.domain.RentalRequestStatus.Expired "
+            + "where r.id = :id and r.status in :statuses and r.expiresAt < :now")
+    int expireIfOpen(@Param("id") Long id, @Param("statuses") Collection<RentalRequestStatus> statuses,
+                     @Param("now") Instant now);
+
+    @Query("select r.status from RentalRequest r where r.id = :id")
+    Optional<RentalRequestStatus> findStatusById(@Param("id") Long id);
 
     @Query("select r.normalizedCustomerEmail from RentalRequest r where r.id = :id")
     Optional<String> findEmailById(@Param("id") Long id);

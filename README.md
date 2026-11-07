@@ -12,7 +12,7 @@ Hệ thống cho thuê kho self-storage. Modular monolith: **Spring Boot 3.3 · 
 ## Chạy nhanh (dev)
 
 ```bash
-# 1) Hạ tầng: Postgres + Redis + MailHog (xem mail tại http://localhost:8025)
+# 1) Hạ tầng: Postgres + Redis (mail gửi thật qua Gmail SMTP — điền MAIL_* trong .env)
 docker compose up -d
 
 # 2) Backend (Java 17)

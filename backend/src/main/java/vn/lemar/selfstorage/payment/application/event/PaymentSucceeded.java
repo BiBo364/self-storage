@@ -14,4 +14,10 @@ import java.time.Instant;
  * (hoặc {@code REQUIRES_NEW}) — listener đồng bộ mặc định sẽ thấy state chưa commit, và exception
  * từ listener sẽ rollback giao dịch IPN khiến VNPay retry đủ 10 lần.
  */
-public record PaymentSucceeded(Long invoiceId, String vnpTxnRef, BigDecimal amount, Instant paidAt) {}
+public record PaymentSucceeded(Long invoiceId, String vnpTxnRef, BigDecimal amount, Instant paidAt,
+                               Long transactionId) {
+
+    public PaymentSucceeded(Long invoiceId, String vnpTxnRef, BigDecimal amount, Instant paidAt) {
+        this(invoiceId, vnpTxnRef, amount, paidAt, null);
+    }
+}

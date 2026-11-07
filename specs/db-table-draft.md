@@ -46,6 +46,8 @@
 - operating_hours
 - status (Active/Inactive)
 - fm_account_id (N - 1: Account, nullable, unique) - FM phụ trách cơ sở; quan hệ 1–1
+- enabled_key_access (Boolean, default true) - cơ sở giao khóa cơ (Flow 2.4)
+- enabled_code_access (Boolean, default true) - cơ sở cấp mã khóa số (Flow 2.4)
 
 **NOTES:**
 - `fm_account_id` là nguồn duy nhất lưu quan hệ FM–Facility (1–1): mỗi facility có tối đa một FM; mỗi FM phụ trách tối đa một facility. Account không lưu `facility_id` cho FM — cần biết FM phụ trách facility nào thì truy vấn ngược từ `Facility`.
@@ -364,6 +366,8 @@ Các bước:
 - created_at
 - updated_at
 - due_at - hạn khách phải hoàn tất bàn giao, set khi ghi nhận khách đến
+- requested_access (nullable: AccessCode/PhysicalKey/Both) - hình thức nhận quyền truy cập khách chọn khi xác nhận biên bản
+- customer_confirmed_at (nullable) - lúc khách xác nhận biên bản trong tài khoản
 
 **NOTES:**
 - `HandoverRecord` là checklist tiến trình bàn giao theo **thứ tự bắt buộc**: xác minh danh tính → kiểm tra hiện trạng khoang → ký hợp đồng → thanh toán tháng đầu → bàn giao.
@@ -389,6 +393,13 @@ Các bước:
 # CheckoutRecord
 **Overview:** biên bản trả kho (Flow 2.a). Tách riêng khỏi `HandoverRecord` vì `HandoverRecord` chỉ chịu trách nhiệm tới khâu bàn giao.
 **Trạng thái baseline:** chưa đưa vào migration — Flow 2.a chưa review; thêm khi 2.a được duyệt.
+**As-built (V20, nhánh full-demo, bản rút gọn):** `checkout_records` có `return_request_id` (unique), `contract_id`,
+`unit_id`, `appointment_id`, `is_unit_emptied`/`unit_emptied_at`, `cleaning_required`, `damage_amount`, `damages`,
+`returned_key_quantity`, `photos`, `note`, `deposit_amount`, `total_charges`, `refund_amount`, `shortfall_invoice_id`,
+`result` (`IN_PROGRESS`/`PENDING_ITEMS`/`AWAITING_PAYMENT`/`COMPLETED`), `inspected_at`, `access_revoked_at`,
+`completed_at`, `created_at`, `updated_at`. Bảng `return_requests`: `contract_id`, `customer_id`, `facility_id`,
+`preferred_date`, `note`, `status` (`Pending`/`Assigned`/`Completed`/`Canceled`, tối đa một yêu cầu mở mỗi hợp đồng),
+`assigned_staff_id`, `appointment_id`, `cancel_reason`, `created_at`, `assigned_at`, `completed_at`, `updated_at`.
 - order_id (1 - 1: RentalOrder)
 - appointment_id (1 - 1: Appointment) - lịch hẹn trả kho **đang xử lý**; cập nhật sang lịch mới khi khách phải quay lại dọn nốt
 - unit_id (N - 1: StorageUnit)
@@ -467,6 +478,8 @@ Các bước:
 | `PROPOSAL_CANCELED` | Proposal bị huỷ do khoang hết khả dụng lúc khách đồng ý hoặc đơn bị huỷ | `ProposalFeedback` | Customer/System |
 | `INVOICE_CREATED` | Hệ thống tạo hóa đơn cọc | `Invoice` | Customer/FM |
 | `INVOICE_CANCELED` | Hóa đơn bị vô hiệu hóa | `Invoice` | Customer/FM |
+| `INVOICE_PAID` | Hóa đơn được cổng xác nhận đã thanh toán | `Invoice` | System |
+| `INVOICE_EXPIRED` | Hóa đơn quá `due_date` chưa thanh toán (cron) | `Invoice` | System |
 | `PAYMENT_SUCCEEDED` | Thanh toán được xác nhận | `PaymentTransaction` | System/IPN |
 | `PAYMENT_FAILED` | Thanh toán thất bại | `PaymentTransaction` | System/IPN |
 | `RENTAL_ORDER_DEPOSITED` | Đơn chuyển sang đã đặt cọc | `RentalOrder` | System |

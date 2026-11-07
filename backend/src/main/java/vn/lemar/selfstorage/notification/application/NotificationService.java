@@ -115,6 +115,12 @@ public class NotificationService {
         return notificationRepository.countByAccountIdAndReadAtIsNull(accountId);
     }
 
+    /** Đơn đã nhận notification loại này chưa (dedup cron nhắc qua liên kết {@code OrderNotification}). */
+    @Transactional(readOnly = true)
+    public boolean hasOrderNotification(Long orderId, NotificationType type) {
+        return orderNotificationRepository.existsForOrderAndType(orderId, type.name());
+    }
+
     /** Map notificationId → orderId cho các notification có liên kết đơn. */
     @Transactional(readOnly = true)
     public Map<Long, Long> orderIdsOf(Collection<Long> notificationIds) {

@@ -44,12 +44,59 @@ public class StorageUnit {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Bảo trì sau trả kho (V20); bảo trì FM bật tay để null — cron không tự mở lại. */
+    @Column(name = "maintenance_started_at")
+    private Instant maintenanceStartedAt;
+
     /** Cancellation Cascade: khoang đang giữ cho đơn bị huỷ được giải phóng {@code Reserved -> Available}. */
+    /** Spec 1.4: cọc thành công → {@code Available -> Reserved}; khoang ở trạng thái khác giữ nguyên. */
+    public boolean reserveIfAvailable() {
+        if (status != StorageUnitStatus.AVAILABLE) {
+            return false;
+        }
+        this.status = StorageUnitStatus.RESERVED;
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
+    /** Spec 2.4: bàn giao hoàn tất → {@code Reserved -> Rented}. */
+    public boolean rentIfReserved() {
+        if (status != StorageUnitStatus.RESERVED) {
+            return false;
+        }
+        this.status = StorageUnitStatus.RENTED;
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
     public boolean releaseIfReserved() {
         if (status != StorageUnitStatus.RESERVED) {
             return false;
         }
         this.status = StorageUnitStatus.AVAILABLE;
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
+    /** Trả kho hoàn tất → {@code Rented -> Maintenance}, ghi mốc để cron mở lại sau {@code unit.maintenance_days}. */
+    public boolean startMaintenanceAfterReturn(Instant now) {
+        if (status != StorageUnitStatus.RENTED) {
+            return false;
+        }
+        this.status = StorageUnitStatus.MAINTENANCE;
+        this.maintenanceStartedAt = now;
+        this.updatedAt = now;
+        return true;
+    }
+
+    /** Hết thời gian bảo trì sau trả kho → {@code Maintenance -> Available}. Bảo trì bật tay không đổi. */
+    public boolean finishMaintenanceIfDue(Instant cutoff) {
+        if (status != StorageUnitStatus.MAINTENANCE || maintenanceStartedAt == null
+                || maintenanceStartedAt.isAfter(cutoff)) {
+            return false;
+        }
+        this.status = StorageUnitStatus.AVAILABLE;
+        this.maintenanceStartedAt = null;
         this.updatedAt = Instant.now();
         return true;
     }

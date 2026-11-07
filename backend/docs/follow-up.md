@@ -11,22 +11,33 @@ thì mở issue theo workflow; file này không thay thế issue.
 - Guard hiện gọi trực tiếp `Access.can(...)` ở controller. Cân nhắc chuyển sang annotation
   (`@PreAuthorize` gọi bean, hoặc annotation riêng + interceptor) khi số endpoint tăng — lý do chưa
   làm ghi ở `TODO(flow-5)` trong `identity/application/Access.java`.
-- Quản trị hệ thống (`/api/admin/**`) chưa có endpoint nào; permission catalog mở rộng dần theo
-  Flow 3–7 — xem [permission-catalog.md](permission-catalog.md).
+- Quản trị hệ thống (`/api/admin/**`) có tài khoản / phân quyền / nhật ký ([backoffice/overview.md](backoffice/overview.md));
+  các route Flow 3–7 dùng lại permission có sẵn (`rental_order.read`, `appointment.assign`, `unit_access_key.issue`,
+  `facility.access`) — chưa có permission riêng cho trả kho / hỗ trợ / back-office.
 
-## Booking
+## Kho đang thuê / trả kho
 
-- No-show `RentalOrder`/`HandoverRecord` chưa xử lý — issue #222 (ngoài scope PR cron `Appointment`).
+- Nhắc `CONTRACT_EXPIRING_SOON` / `CONTRACT_OVERDUE` dedup theo đơn + type (`order_notifications`) — sau khi gia hạn
+  rồi lại sắp hết hạn, khách không được nhắc lần hai.
+- Khoang còn đồ (`PENDING_ITEMS`) không tự tạo lịch `RETURN` mới; FS kiểm lại khi khách quay lại.
+- Lịch `RETURN` quá giờ mà khách không đến không có cron xử lý; FM phân công lại.
+- Hoá đơn đối trừ cọc ghi `Paid` → báo cáo doanh thu cần tách theo `audit new_value.settledBy` nếu muốn phân biệt.
+
+## Handover
+
+- Cấu hình loại khóa của cơ sở (`facilities.enabled_key_access` / `enabled_code_access`) chưa có màn hình — đổi
+  bằng SQL cho tới khi Flow 5 có quản lý cơ sở.
+- Mẫu hợp đồng là mẫu dựng sẵn `builtin-v1` trong code; bảng mẫu có version + danh sách biến thuộc Flow 4.
+- Ảnh hiện trạng và bản scan hợp đồng chỉ lưu URL; luồng bàn giao chưa gọi `attach` batch media nên FE cần tự gắn
+  batch sau khi lưu thành công.
 
 ## Notification
 
 - Caller nghiệp vụ đầu tiên: luồng convert gửi `RENTAL_REQUEST_APPROVED` (có `orderId`) —
   [booking/conversion.md](booking/conversion.md). Handover/payment nối sau; khi nối flow, truyền
   `orderId` để FE deep-link mở đơn.
-- `RENTAL_ORDER_CANCELED`: template dùng `{{outcome}}` — caller của Cancellation Cascade phải map
-  `cancel_reason` → `"đã bị hủy"` / `"đã hết hạn"`; nên có một helper dùng chung khi làm cascade.
-- Nhắc `RENTAL_ORDER_EXPIRING_SOON` mỗi đơn một lần: cron tương lai phải tự dedup qua liên kết
-  `OrderNotification` (repository hiện chỉ có `findByOrderId`, chưa có query theo order + type).
+- `RENTAL_ORDER_CANCELED`: template dùng `{{outcome}}` — cascade hiện luôn truyền `"đã bị hủy"`, kể cả các lý do
+  quá hạn của cron; muốn hiển thị `"đã hết hạn"` thì cần map `cancel_reason` → outcome.
 - Phân trang list trả mảng không kèm `total` — FE tải thêm tới khi trang rỗng; nếu cần
   `total`/`hasMore` phải mở issue đổi contract.
 

@@ -86,7 +86,9 @@ flowchart TB
 - Cọc = giá hiệu lực × `invoice.deposit_months`; hạn = `min(now + deposit_due_days, expires_at)`.
 - Delta = cọc khoang mới + `fee.unit_change` − tổng `Paid` của `Deposit` + `DepositSupplement`.
 - Chỉ nhả khoang khi đơn bị huỷ thực sự giữ khoang (`Deposited`/`Scheduled`/`InProgress`).
-- Khoang mới **chưa reserve** ở luồng này — thanh toán cọc/follow-up reserve sau khi thu đủ.
+- Khoang mới: còn thiếu cọc → giữ khoang khi hoá đơn bổ sung `Paid`; cọc đã đủ (`delta ≤ 0`, không có hoá đơn
+  bổ sung) → `Available → Reserved` ngay trong bước đồng ý, audit `STORAGE_UNIT_RESERVED` (lý do "Đổi khoang sau
+  khi đã cọc"). Đơn đã cọc luôn giữ khoang của mình — đặt lịch check-in và bàn giao đều cần khoang `Reserved`.
 - Audit một bản ghi mỗi entity thay đổi.
 
 ## Ranh giới

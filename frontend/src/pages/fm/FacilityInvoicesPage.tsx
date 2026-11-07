@@ -1,168 +1,170 @@
-import { CircleDollarSign, UserRound, Wallet } from "lucide-react";
+import { Search } from "lucide-react";
 import { useState } from "react";
-import { formatPrice } from "../../mocks/catalog";
-import { fmInvoices, type InvoiceStatus, type InvoiceType } from "../../mocks/fm";
-import { DetailPanel } from "../../components/ui/DetailPanel";
+import { formatDate, formatDateTime, formatMoney } from "../../app/format";
+import {
+  fetchFacilityInvoices,
+  INVOICE_STATUS_LABEL,
+  INVOICE_STATUS_TONE,
+  INVOICE_TYPE_LABEL,
+  labelOf,
+  loadErrorState,
+  toneOf,
+  useFmLoad,
+} from "../../app/services/fm";
 import { FilterSelect } from "../../components/ui/FilterSelect";
+import { INPUT_ELEMENT, INPUT_WRAP } from "../../components/ui/FormField";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
-type TypeFilter = "all" | InvoiceType;
-type StatusFilter = "all" | InvoiceStatus;
-
-const TYPE_LABEL: Record<InvoiceType, string> = {
-  Deposit: "Đặt cọc",
-  Rental: "Thuê kho",
-  Extension: "Gia hạn",
-  Penalty: "Phạt",
-  Service: "Dịch vụ",
-};
-
-const STATUS_LABEL: Record<InvoiceStatus, string> = {
-  Unpaid: "Chưa thanh toán",
-  Paid: "Đã thanh toán",
-  Canceled: "Đã huỷ",
-};
-
-const STATUS_TONE: Record<InvoiceStatus, "warning" | "success" | "neutral"> = {
-  Unpaid: "warning",
-  Paid: "success",
-  Canceled: "neutral",
-};
+const TABLE_COLUMNS = "grid-cols-[1.3fr_0.8fr_1.2fr_0.9fr_0.8fr_0.9fr]";
 
 export function FacilityInvoicesPage() {
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [status, setStatus] = useState("");
+  const [type, setType] = useState("");
+  const [search, setSearch] = useState("");
 
-  const list = fmInvoices.filter(
-    (invoice) =>
-      (typeFilter === "all" || invoice.type === typeFilter) &&
-      (statusFilter === "all" || invoice.status === statusFilter),
+  const invoices = useFmLoad(`invoices:${status}:${type}`, (facility) =>
+    fetchFacilityInvoices(facility.id, { status, type }),
   );
-  const openInvoice = fmInvoices.find((invoice) => invoice.id === openId) ?? null;
 
-  const totalUnpaid = fmInvoices
+  const term = search.trim().toLowerCase();
+  const list = (invoices.data ?? []).filter((invoice) => {
+    if (!term) return true;
+    return [
+      invoice.code,
+      invoice.customerName,
+      invoice.customerEmail,
+      invoice.unitCode,
+      invoice.contractCode,
+    ]
+      .map((value) => String(value ?? "").toLowerCase())
+      .some((value) => value.includes(term));
+  });
+  const unpaidTotal = list
     .filter((invoice) => invoice.status === "Unpaid")
-    .reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPaid = fmInvoices
-    .filter((invoice) => invoice.status === "Paid")
-    .reduce((sum, invoice) => sum + invoice.amount, 0);
+    .reduce((sum, invoice) => sum + Number(invoice.amount), 0);
 
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="m-0 text-title text-ink">Quản lý hoá đơn cơ sở</h1>
+        <h1 className="m-0 text-title text-ink">Hoá đơn cơ sở</h1>
         <p className="mt-1.5 text-small text-muted">
-          Hoá đơn phát sinh từ khách hàng thuộc cơ sở của bạn — chỉ xem, hệ thống tự tạo hoá đơn
-          theo từng flow (đặt cọc, gia hạn, trả kho, sự cố).
+          Hoá đơn của {invoices.facility ? `cơ sở ${invoices.facility.name}` : "cơ sở"} — 500 hoá
+          đơn mới nhất. Chỉ xem; khách thanh toán trên ứng dụng.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 max-[520px]:grid-cols-1">
-        <div className="bg-surface p-5">
-          <span className="flex items-center gap-1.5 text-label text-muted">
-            <Wallet size={13} /> Tổng công nợ chưa thu
-          </span>
-          <strong className="mt-2 block text-stat text-warning">
-            {formatPrice(totalUnpaid)} đ
-          </strong>
-        </div>
-        <div className="bg-surface p-5">
-          <span className="flex items-center gap-1.5 text-label text-muted">
-            <CircleDollarSign size={13} /> Tổng đã thu
-          </span>
-          <strong className="mt-2 block text-stat text-success">{formatPrice(totalPaid)} đ</strong>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 items-end gap-3 max-[760px]:grid-cols-1">
-        <FilterSelect
-          label="Loại hoá đơn"
-          value={typeFilter}
-          onChange={(value) => setTypeFilter(value as TypeFilter)}
-        >
-          <option value="all">Tất cả loại hoá đơn</option>
-          {(Object.keys(TYPE_LABEL) as InvoiceType[]).map((type) => (
-            <option key={type} value={type}>
-              {TYPE_LABEL[type]}
+      <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)] items-end gap-3 max-[900px]:grid-cols-2 max-[760px]:grid-cols-1">
+        <label className="grid gap-1.5">
+          <span className="text-label text-muted">Tìm kiếm</span>
+          <div className={INPUT_WRAP}>
+            <Search size={15} />
+            <input
+              className={INPUT_ELEMENT}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Mã hoá đơn, khách, khoang, hợp đồng…"
+            />
+          </div>
+        </label>
+        <FilterSelect label="Trạng thái" value={status} onChange={setStatus}>
+          <option value="">Tất cả trạng thái</option>
+          {Object.keys(INVOICE_STATUS_LABEL).map((value) => (
+            <option key={value} value={value}>
+              {INVOICE_STATUS_LABEL[value]}
             </option>
           ))}
         </FilterSelect>
-        <FilterSelect
-          label="Trạng thái"
-          value={statusFilter}
-          onChange={(value) => setStatusFilter(value as StatusFilter)}
-        >
-          <option value="all">Tất cả trạng thái</option>
-          {(Object.keys(STATUS_LABEL) as InvoiceStatus[]).map((status) => (
-            <option key={status} value={status}>
-              {STATUS_LABEL[status]}
+        <FilterSelect label="Loại hoá đơn" value={type} onChange={setType}>
+          <option value="">Tất cả loại</option>
+          {Object.keys(INVOICE_TYPE_LABEL).map((value) => (
+            <option key={value} value={value}>
+              {INVOICE_TYPE_LABEL[value]}
             </option>
           ))}
         </FilterSelect>
       </div>
 
-      {list.length === 0 ? (
-        <SurfaceState variant="empty" title="Không có hoá đơn nào phù hợp bộ lọc" />
+      {invoices.error ? (
+        <SurfaceState
+          {...loadErrorState(invoices.error, "hoá đơn cơ sở")}
+          action={{ label: "Thử lại", onClick: invoices.reload }}
+        />
+      ) : !invoices.data ? (
+        <SurfaceState variant="loading" title="Đang tải hoá đơn…" />
+      ) : list.length === 0 ? (
+        <SurfaceState
+          variant="empty"
+          title="Không có hoá đơn phù hợp"
+          description="Thử đổi trạng thái, loại hoặc từ khoá tìm kiếm."
+        />
       ) : (
-        <div className="grid gap-2">
-          {list.map((invoice) => (
-            <button
-              key={invoice.id}
-              className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,0.7fr)_auto] items-center gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle max-[900px]:grid-cols-1 max-[900px]:gap-2"
-              onClick={() => setOpenId(invoice.id)}
+        <div className="overflow-x-auto" aria-busy={invoices.loading}>
+          <div className={`min-w-[920px] ${invoices.loading ? "opacity-60" : ""}`}>
+            <div
+              className={`grid ${TABLE_COLUMNS} gap-4 bg-[var(--dark)] px-3.5 py-2.5 text-label text-[rgba(233,234,230,.62)]`}
             >
-              <div>
-                <span className="text-label text-muted">
-                  {TYPE_LABEL[invoice.type]} · {invoice.code}
-                </span>
-                <strong className="mt-1 block text-small font-semibold text-ink">
-                  {invoice.customerName} · Khoang {invoice.unitCode}
-                </strong>
-              </div>
-              <span className="flex items-center gap-1.5 text-label text-muted">
-                <UserRound size={13} /> Hạn {invoice.dueDate}
-              </span>
-              <strong className="text-[18px] font-semibold text-ink">
-                {formatPrice(invoice.amount)} đ
-              </strong>
-              <StatusTag tone={STATUS_TONE[invoice.status]}>
-                {STATUS_LABEL[invoice.status]}
-              </StatusTag>
-            </button>
-          ))}
+              <span>Hoá đơn</span>
+              <span>Loại</span>
+              <span>Khách hàng</span>
+              <span className="text-right">Số tiền</span>
+              <span>Trạng thái</span>
+              <span>Hạn / thanh toán</span>
+            </div>
+            <div className="mt-1.5 grid gap-1.5">
+              {list.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className={`grid ${TABLE_COLUMNS} items-center gap-4 bg-surface px-3.5 py-3`}
+                >
+                  <div className="min-w-0">
+                    <strong className="block truncate text-small font-semibold text-ink">
+                      {invoice.code}
+                    </strong>
+                    <span className="mt-0.5 block truncate text-label text-muted">
+                      {invoice.title ?? "—"}
+                    </span>
+                  </div>
+                  <span className="text-label text-ink">
+                    {labelOf(INVOICE_TYPE_LABEL, invoice.type)}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="block truncate text-small text-ink">
+                      {invoice.customerName ?? invoice.customerEmail ?? "—"}
+                    </span>
+                    <span className="mt-0.5 block truncate text-label text-muted">
+                      {[
+                        invoice.unitCode && `Khoang ${invoice.unitCode}`,
+                        invoice.contractCode ??
+                          (invoice.orderId ? `Đơn #${invoice.orderId}` : null),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </span>
+                  </div>
+                  <span className="text-right text-small font-semibold text-ink tabular-nums">
+                    {formatMoney(invoice.amount)}
+                  </span>
+                  <StatusTag tone={toneOf(INVOICE_STATUS_TONE, invoice.status)}>
+                    {labelOf(INVOICE_STATUS_LABEL, invoice.status)}
+                  </StatusTag>
+                  <span className="text-label text-ink tabular-nums">
+                    {invoice.paidAt
+                      ? `Đã trả ${formatDateTime(invoice.paidAt)}`
+                      : `Hạn ${formatDateTime(invoice.dueDate)}`}
+                    <span className="mt-0.5 block text-muted">
+                      Tạo {formatDate(invoice.createdAt)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap justify-between gap-3 text-label text-muted">
+              <span>{list.length} hoá đơn</span>
+              <span>Chưa thanh toán trong danh sách: {formatMoney(unpaidTotal)}</span>
+            </div>
+          </div>
         </div>
-      )}
-
-      {openInvoice && (
-        <DetailPanel
-          title={openInvoice.code}
-          eyebrow={TYPE_LABEL[openInvoice.type]}
-          onClose={() => setOpenId(null)}
-        >
-          <div className="grid gap-2 text-small text-muted">
-            <span className="flex items-center gap-2">
-              <UserRound size={14} /> {openInvoice.customerName}
-            </span>
-            <span>Khoang: {openInvoice.unitCode}</span>
-            <span>Hạn thanh toán: {openInvoice.dueDate}</span>
-          </div>
-          <div className="mt-4 bg-surface-subtle p-3.5">
-            <div className="flex items-center justify-between gap-4 text-small">
-              <span className="text-muted">Số tiền</span>
-              <strong className="text-[18px] font-semibold text-ink">
-                {formatPrice(openInvoice.amount)} đ
-              </strong>
-            </div>
-            <div className="mt-2 flex items-center justify-between gap-4 text-small">
-              <span className="text-muted">Trạng thái</span>
-              <StatusTag tone={STATUS_TONE[openInvoice.status]}>
-                {STATUS_LABEL[openInvoice.status]}
-              </StatusTag>
-            </div>
-          </div>
-        </DetailPanel>
       )}
     </div>
   );

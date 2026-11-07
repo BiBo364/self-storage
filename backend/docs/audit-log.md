@@ -67,7 +67,36 @@ auditRecorder.record(new AuditEntry(AuditAction.RENTAL_ORDER_CANCELED, AuditEnti
 | `booking` | `APPOINTMENT_CANCELED` | `Appointment` | `booking/application/StaffAppointmentActionService.cancel` — FS chủ động huỷ lịch `Pending`; actor = FS |
 | `booking` | `APPOINTMENT_CANCELED_NO_SHOW` | `Appointment` | `booking/application/AppointmentNoShowService.cancelIfDue` — cron no-show (check-in Pending quá `end_at`); actor = System |
 | `booking` | `APPOINTMENT_ARRIVED` | `Appointment` | `booking/application/StaffAppointmentActionService.arrive` — FS xác nhận khách đến, `Pending → Done`; actor = FS |
+| `booking` | `PAYMENT_SUCCEEDED`, `INVOICE_PAID`, `RENTAL_ORDER_DEPOSITED`, `STORAGE_UNIT_RESERVED` | `PaymentTransaction`, `Invoice`, `RentalOrder`, `StorageUnit` | `booking/application/InvoicePaymentSettlement.onPaymentSucceeded` — cổng xác nhận thu tiền (IPN/querydr); cọc bổ sung không ghi `RENTAL_ORDER_DEPOSITED`; actor = System |
+| `booking` | `INVOICE_CANCELED` | `Invoice` | `booking/application/InvoicePaymentService.start` — khoang đã có người cọc / bảo trì lúc bấm thanh toán; actor = customer |
+| `booking` | `PAYMENT_FAILED` | `PaymentTransaction` | `booking/application/PaymentFailureAudit` — giao dịch đóng `Failed` (cổng báo lỗi, phiên hết hạn, phiên bị huỷ); actor = System |
+| `booking` | `INVOICE_CANCELED` | `Invoice` | `booking/application/CompetingInvoiceCanceller` — khoang vừa có người trả cọc, hoá đơn cọc khác của khoang bị chặn; actor = System |
+| `booking` | `INVOICE_EXPIRED`, `RENTAL_REQUEST_EXPIRED` | `Invoice`, `RentalRequest` | `booking/application/BookingExpiryService` — cron Flow 1; actor = System |
+| `booking` | `APPOINTMENT_CREATED` | `Appointment`, `RentalOrder` | `booking/application/AppointmentBookingService.book` — hai bản ghi (lịch mới + đơn `Deposited → Scheduled`); actor = customer |
+| `handover` | `HANDOVER_RECORD_CREATED` | `HandoverRecord` | `handover/application/CheckinAppointmentCreatedListener` — mở biên bản khi khách đặt lịch; actor = System |
 | `handover` | `HANDOVER_CANCELED`, `CONTRACT_CANCELED` | `HandoverRecord`, `RentalContract` | `handover/application/HandoverService.cancelByAppointmentId`/`cancelByOrderId` — một bản ghi mỗi entity; actor = System |
+| `handover` | `IDENTITY_VERIFIED`, `START_DATE_OVERRIDE_REQUESTED`, `CONTRACT_SIGNED` | `HandoverRecord`, `RentalContract` | `handover/application/HandoverWorkflowService` — FS xác minh danh tính (cả `Failed`), đề nghị đổi mốc, ký hợp đồng; actor = FS |
+| `handover` | `UNIT_INSPECTED`, `HANDOVER_REJECTED` | `HandoverRecord` | `HandoverWorkflowService.agreeInspection` / `reject` — khách đồng ý / từ chối khoang; actor = customer |
+| `handover` | `START_DATE_OVERRIDE_APPROVED`, `START_DATE_OVERRIDE_REJECTED` | `RentalContract` | `HandoverWorkflowService.reviewStartDateOverride`; actor = FM |
+| `handover` | `ACCESS_KEY_ISSUED`, `STORAGE_UNIT_RENTED`, `CONTRACT_ACTIVATED`, `HANDOVER_COMPLETED` | `UnitAccessKey`, `StorageUnit`, `RentalContract`, `HandoverRecord` | `handover/application/HandoverCompletion.complete` — chốt bàn giao; actor = khách (mã số) hoặc FS (giao chìa) |
+| `handover` | `ACCESS_KEY_REVOKED`, `ACCESS_KEY_ISSUED` | `UnitAccessKey` | `HandoverCompletion.rotateCode` — khách lấy mã khóa số mới; actor = customer |
+| `booking` | `RENTAL_ORDER_DONE` | `RentalOrder` | `booking/application/HandoverOrderService.complete` — gọi từ chốt bàn giao, cùng actor |
+| `booking` | `INVOICE_CREATED` | `Invoice` | `DepositInvoiceIssuer.issueFirstMonth` — hoá đơn tháng đầu `INV-RNT` khi FS ký hợp đồng; actor = FS |
+| `booking` | `INVOICE_CANCELED` | `Invoice` | `HandoverOrderService.closeContractInvoices` — hợp đồng `Signed` bị huỷ, hoá đơn tháng đầu `Unpaid`; actor = System |
+| `booking` | `STORAGE_UNIT_RESERVED` | `StorageUnit` | `ProposalService.agree` — đổi khoang sau khi cọc, cọc đã đủ; actor = customer |
+| `handover` | `CONTRACT_EXTENDED` | `RentalContract` | `RentalContractService.extend` — hoá đơn gia hạn `Paid`; actor = System |
+| `handover` | `CONTRACT_ENDED`, `ACCESS_KEY_REVOKED` | `RentalContract`, `UnitAccessKey` | `RentalContractService.end` / `revokeAll` — trả kho; thiếu chìa ghi `status = Lost` trong `new_value`; actor = FS |
+| `tenancy` | `RETURN_REQUESTED`, `RETURN_CANCELED` | `ReturnRequest` | `tenancy/application/TenancyService` — khách gửi / huỷ; actor = customer |
+| `tenancy` | `RETURN_ASSIGNED`, `RETURN_COMPLETED` | `ReturnRequest` | `TenancyService.assign` (actor = FM) / `completeReturn` (actor = System) |
+| `booking` | `APPOINTMENT_CREATED`, `APPOINTMENT_CANCELED` | `Appointment` | `ReturnAppointmentService` — lịch `RETURN` khi FM phân công / huỷ khi khách huỷ hoặc phân công lại |
+| `booking` | `INVOICE_CREATED`, `INVOICE_CANCELED`, `INVOICE_PAID`, `OVERDUE_FEE_ACCRUED` | `Invoice` | `ContractInvoiceService` — hoá đơn gia hạn / phí quá hạn / quyết toán trả kho (`INVOICE_PAID` với `settledBy = deposit` khi đối trừ cọc) |
+| `checkout` | `CHECKOUT_INSPECTED`, `CHECKOUT_COMPLETED` | `CheckoutRecord` | `checkout/application/CheckoutService` — FS kiểm tra / hoàn tất trả kho |
+| `checkout` | `STORAGE_UNIT_MAINTENANCE`, `STORAGE_UNIT_AVAILABLE` | `StorageUnit` | `CheckoutService` (trả kho xong) / `CheckoutJobs.reopenUnits` (hết bảo trì); actor = FS / System |
+| `support` | `SUPPORT_REQUEST_CREATED`, `_ASSIGNED`, `_RESOLVED`, `_CANCELED` | `SupportRequest` | `support/application/SupportService` — actor = khách / FM / FS |
+| `backoffice` | `FACILITY_CREATED`, `FACILITY_UPDATED` | `Facility` | `BackofficeService` — BOM tạo / sửa / gán FM, FM/BOM đổi hình thức truy cập |
+| `backoffice` | `STORAGE_UNIT_CREATED`, `STORAGE_UNIT_UPDATED`, `STORAGE_UNIT_MAINTENANCE`, `STORAGE_UNIT_AVAILABLE` | `StorageUnit` | `BackofficeService` — FM/BOM thêm / sửa khoang, bảo trì tay |
+| `backoffice` | `POLICY_UPDATED`, `UNIT_TYPE_UPDATED` | `Policy`, `UnitType` | `BackofficeService` — BOM đổi policy / giá loại khoang |
+| `identity` | `ACCOUNT_CREATED`, `ACCOUNT_UPDATED`, `ROLE_PERMISSIONS_UPDATED` | `Account`, `Role` | `identity/application/AccountAdminService` — Admin |
 
 ## Xem thêm
 

@@ -113,6 +113,47 @@ public class RentalOrder {
         this.status = RentalOrderStatus.IN_PROGRESS;
     }
 
+    /** Spec 1.4: cổng xác nhận tiền cọc → {@code Pending -> Deposited}. */
+    public void markDeposited() {
+        if (status != RentalOrderStatus.PENDING) {
+            throw new IllegalStateException("Đơn " + id + " không ở Pending: " + status);
+        }
+        this.status = RentalOrderStatus.DEPOSITED;
+    }
+
+    /** Spec 1.5: khách đặt lịch check-in → {@code Deposited -> Scheduled}. */
+    public void schedule() {
+        if (status != RentalOrderStatus.DEPOSITED) {
+            throw new IllegalStateException("Đơn " + id + " không ở Deposited: " + status);
+        }
+        this.status = RentalOrderStatus.SCHEDULED;
+    }
+
+    /**
+     * Cron Flow 1/2: lịch check-in no-show, phiên bàn giao quá hạn hoặc quá hạn thanh toán tháng đầu khi đơn còn
+     * trong hạn giữ kho → đơn quay về {@code Deposited} để khách đặt lịch mới (khoang vẫn {@code Reserved}).
+     */
+    public void returnToDeposited() {
+        if (status != RentalOrderStatus.SCHEDULED && status != RentalOrderStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Đơn " + id + " không ở Scheduled/InProgress: " + status);
+        }
+        this.status = RentalOrderStatus.DEPOSITED;
+    }
+
+    /** Spec 2.4: bàn giao hoàn tất — Flow 2 là nơi duy nhất set {@code Done}. */
+    public void complete() {
+        if (status != RentalOrderStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Đơn " + id + " không ở InProgress: " + status);
+        }
+        this.status = RentalOrderStatus.DONE;
+        this.needsReproposal = false;
+    }
+
+    /** Đơn đã quá {@code expires_at}. */
+    public boolean isExpiredAt(Instant now) {
+        return expiresAt != null && expiresAt.isBefore(now);
+    }
+
     /** Cancellation Cascade bước 1: {@code status -> Canceled}, ghi {@code cancel_reason}. */
     public void cancel(String reason) {
         if (status.isClosed()) {

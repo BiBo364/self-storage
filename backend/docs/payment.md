@@ -1,7 +1,29 @@
 ---
-purpose: Module payment — luồng thanh toán VNPay: tạo giao dịch, IPN/return, đối soát phiên và xử lý hết hạn.
+purpose: Module payment — cổng thanh toán (payOS mặc định, VNPay tuỳ chọn): tạo phiên, webhook/IPN, đối soát, huỷ phiên.
 ---
-# Payment — luồng thanh toán VNPay
+# Payment — cổng thanh toán
+
+## Cổng đang dùng
+
+`payment.provider` (`PAYMENT_PROVIDER`): **`payos` (mặc định)** | `vnpay`. Chỉ một `PaymentGateway` được dựng
+(`@ConditionalOnProperty`); chỉ cổng đang dùng bắt buộc đủ credential — thiếu là app chết lúc khởi động.
+
+| | payOS (`PayOsGateway`) | VNPay (`VnPayGateway`) |
+|---|---|---|
+| Phương thức | chuyển khoản VietQR | thẻ / QR qua cổng VNPay |
+| Mã giao dịch | `orderCode` số: `epochMillis × 100 + 2 số ngẫu nhiên` | `INV{id}T{yyMMddHHmmss}{4 ký tự}` |
+| Tạo phiên | `POST /v2/payment-requests`, ký HMAC-SHA256 `amount&cancelUrl&description&orderCode&returnUrl`, `expiredAt` = tạo + 15' | URL ký HMAC-SHA512, `vnp_ExpireDate` = tạo + 15' |
+| Xác nhận chính | webhook `POST /api/payments/payos/webhook` (chữ ký trên `data`) | IPN `GET /api/payments/vnpay/ipn` |
+| Đối soát dự phòng | `GET /v2/payment-requests/{orderCode}` | `querydr` |
+| Huỷ phiên | `POST /v2/payment-requests/{orderCode}/cancel` | không hỗ trợ (phiên tự hết hạn) |
+| Sandbox | **không có** — giao dịch là tiền thật | có |
+| Hoàn tiền | không có API — hoàn thủ công | thủ công |
+
+Nội dung chuyển khoản payOS: ASCII, tối đa 25 ký tự (`TT hoa don {invoiceId}`). `returnUrl`/`cancelUrl` = trang
+`<FRONTEND_URL>/payments/result` của FE; FE gọi `POST /api/invoices/{id}/payment-check` để đối soát, không tin query
+trên URL.
+
+## Luồng VNPay (khi `payment.provider=vnpay`)
 
 Module `payment` (`backend/src/main/java/vn/lemar/selfstorage/payment/`): cổng thanh toán VNPay
 dùng chung cho Flow 1 (thu cọc), Flow 2 (thu tháng đầu), Flow 3 (thu gia hạn). Cả ba flow gọi cùng
@@ -29,7 +51,7 @@ Khách trả tiền trên cổng VNPay
          kiểm chữ ký để hiển thị validSignature — không ghi DB, không bắn event
    ▼
 Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
-   (chưa nối — chờ các luồng đơn hàng tương ứng)
+   (booking/application/InvoicePaymentSettlement — AFTER_COMMIT + REQUIRES_NEW)
 ```
 
 ## Hành vi
@@ -71,16 +93,63 @@ Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
 - **Không dùng `ApiEnvelope` cho IPN.** VNPay đọc phản hồi theo đúng hai key `RspCode`/`Message` ở
   mức gốc — đây là contract của bên thứ ba.
 
+## Webhook payOS
+
+- `PaymentService.handleNotification(body)`: `PayOsGateway.parseNotification` kiểm chữ ký (`data` sắp key alphabet,
+  `key=value` nối `&`, `null` → rỗng, HMAC-SHA256 bằng checksum key) → tìm giao dịch theo `orderCode` (khoá row) →
+  số tiền khớp → còn `Pending` thì `Success` + `PaymentSucceeded` (hoặc `Failed` + `PaymentFailed`).
+- Kết quả: `ACCEPTED` / `ALREADY_SETTLED` (gọi lặp) / `NOT_FOUND` → HTTP 200; `INVALID_SIGNATURE` /
+  `INVALID_AMOUNT` → 400. Request thử của payOS khi khai báo webhook (mã không tồn tại) vẫn 200.
+- Giao dịch đã đóng `Failed` (phiên đã huỷ) mà cổng vẫn báo đã thu → log ERROR "Thanh toán muộn…", trả
+  `ALREADY_SETTLED`, hoàn tiền thủ công (khách chuyển khoản tay theo QR cũ sau khi link đã huỷ).
+- Khai URL webhook (https công khai) ở my.payos.vn → Kênh thanh toán. Chạy local không có URL public thì
+  `payment-check` + job đối soát vẫn chốt được giao dịch.
+
+## Khoá phiên & huỷ phiên
+
+- **Phiên đang mở = còn giao dịch `Pending`**, cho tới khi cổng xác nhận phiên đóng (đã trả / huỷ / hết hạn — qua
+  webhook, `payment-check` hoặc job đối soát). Không tự hết theo đồng hồ của mình → khoang không thể có hai phiên trả
+  được tiền cùng lúc (`PaymentService.invoicesWithOpenSession`).
+- `PaymentService.cancelSession(txnRef, reason)`: cổng xác nhận đã huỷ → khoá row, còn `Pending` thì `Failed`
+  "Đã huỷ phiên: …" + `PaymentFailed` (booking ghi audit `PAYMENT_FAILED`). Cổng không huỷ được → giữ `Pending`,
+  webhook / đối soát quyết.
+- `PaymentSessionCloser`:
+  - `closeAfterCommit(invoiceIds, reason)` — hoá đơn/đơn bị huỷ: gọi cổng **sau commit**, best-effort, mỗi giao dịch
+    một transaction `REQUIRES_NEW`. Lỗi gọi cổng không rollback việc huỷ (huỷ phía mình là nguồn sự thật).
+  - `closeNow(invoiceId, reason)` — khách bấm thanh toán lại: đối soát trước (đã trả thì chốt luôn), chưa trả thì huỷ
+    phiên cũ rồi mới mở phiên mới.
+
 ## Cấu hình
 
-Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`,
-`VNPAY_PAY_URL`, `VNPAY_RETURN_URL`. Hướng dẫn sandbox: `docs/vnpay-sandbox.md`.
+- `PAYMENT_PROVIDER` — `payos` (mặc định) | `vnpay`.
+- payOS (bắt buộc khi `payos`): `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`; tuỳ chọn `PAYOS_BASE_URL`
+  (mặc định `https://api-merchant.payos.vn`), `PAYOS_RETURN_URL` / `PAYOS_CANCEL_URL` (mặc định
+  `<FRONTEND_URL>/payments/result`).
+- VNPay (bắt buộc khi `vnpay`): `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAY_URL`, `VNPAY_RETURN_URL`;
+  `VNPAY_API_URL` tuỳ chọn (API `querydr`, mặc định sandbox). Hướng dẫn sandbox: `docs/vnpay-sandbox.md`.
+
+## Đối soát `querydr`
+
+- `VnPayGateway.query(txnRef, createdAt, orderInfo, ip)` gọi API merchant (`vnpay.api-url`, mặc định
+  `https://sandbox.vnpayment.vn/merchant_webapi/api/transaction`), ký chuỗi `|` theo thứ tự cố định của VNPay
+  (`requestId|version|command|tmnCode|txnRef|transactionDate|createDate|ipAddr|orderInfo`) và kiểm chữ ký response.
+- `vnp_TransactionDate` = `PaymentTransaction.created_at` — `startPayment` truyền đúng mốc này làm `vnp_CreateDate`
+  (cắt về giây) nên cổng tìm lại được phiên.
+- `PaymentService.reconcile(txnRef)` (khoá row như IPN): cổng báo đã trả + số tiền khớp → `Success` +
+  `PaymentSucceeded`; số tiền lệch → giữ `Pending` + log ERROR; cổng báo lỗi → `Failed` + `PaymentFailed`; cổng
+  không có giao dịch (`91`) và đã quá 20' (cửa sổ 15' + đệm 5') → `Failed` "Phiên thanh toán hết hạn…"; lỗi mạng /
+  sai chữ ký → giữ `Pending`.
+- Hai caller: `POST /api/invoices/{id}/payment-check` (khách quay về) và `PaymentReconcileJob` (5', giao dịch
+  `Pending` quá 20').
+- Module payment mở named interface `payment::application`, `payment::event`, `payment::dto` cho booking/handover;
+  `PaymentSnapshot.status` là chuỗi DB (`Pending`/`Success`/`Failed`), không lộ enum domain.
 
 ## Trạng thái hiện tại
 
-- Gateway + IPN + Return + entity: có (VNPay).
-- **Endpoint khởi tạo thanh toán `POST /api/invoices/{invoiceId}/pay`: chưa có** — FE nút thanh toán
-  đang chạy chế độ demo khi chưa cấu hình `VITE_API_BASE_URL`; endpoint thật thuộc luồng đặt cọc.
-- **Chưa có ai nghe `PaymentSucceeded`/`PaymentFailed`** — invoice/booking chưa có code (các luồng đơn hàng).
-- **Job đối soát phiên (`querydr`) + xử lý xác nhận muộn: chưa có trong code** — thuộc luồng đặt cọc.
-- **Chặn hủy đơn khi phiên thanh toán còn mở: chưa có trong code** — cần chốt và ghi vào docs trước.
+- Khởi tạo thanh toán `POST /api/invoices/{invoiceId}/pay` và chốt hoá đơn sau khi cổng xác nhận: xem
+  [booking/deposit-payment.md](booking/deposit-payment.md).
+- Cron chờ phiên thanh toán đang mở đóng xong mới hết hạn hoá đơn / huỷ đơn.
+- `PaymentFailed` chưa có listener: hoá đơn giữ `Unpaid`, phiên đóng làm khoá ngắn hạn tự hết.
+- payOS: đã chạy thật tạo link / tra cứu / huỷ link; chưa có giao dịch chuyển khoản thật và chưa nhận webhook thật
+  (cần URL public).
+- VNPay: chưa kiểm chứng `querydr` với terminal sandbox thật (cần credential VNPay sandbox hợp lệ).

@@ -4,6 +4,7 @@ import jakarta.mail.internet.MimeMessage;
 import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -23,12 +24,32 @@ class SmtpEmailSender implements EmailSender {
 
     private static final Logger LOG = LoggerFactory.getLogger(SmtpEmailSender.class);
 
+    static final String DEFAULT_FROM = "noreply@lemar.vn";
+
     private final JavaMailSender mailSender;
     private final String from;
 
-    SmtpEmailSender(JavaMailSender mailSender, @Value("${app.mail.from}") String from) {
+    @Autowired
+    SmtpEmailSender(JavaMailSender mailSender,
+                    @Value("${app.mail.from:}") String from,
+                    @Value("${spring.mail.username:}") String smtpUsername) {
         this.mailSender = mailSender;
-        this.from = from;
+        // Gmail SMTP chỉ cho gửi từ chính tài khoản đăng nhập: MAIL_FROM để trống thì dùng username;
+        // cả hai trống (chưa cấu hình) thì giữ địa chỉ mặc định để message vẫn hợp lệ.
+        this.from = firstNonBlank(from, smtpUsername, DEFAULT_FROM);
+    }
+
+    SmtpEmailSender(JavaMailSender mailSender, String from) {
+        this(mailSender, from, "");
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) {
+                return v;
+            }
+        }
+        return DEFAULT_FROM;
     }
 
     @Override

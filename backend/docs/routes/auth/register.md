@@ -50,8 +50,8 @@ curl -s -X POST http://localhost:8080/api/auth/register \
 # {"message":"Dữ liệu không hợp lệ","timestamp":"2026-10-15T10:07:56.947684468Z"}
 ```
 
-Email xác minh (render qua `NotificationEmailLayout` — HTML chuẩn; xem tại MailHog dev
-`http://localhost:8025` hoặc hộp thư thật theo `MAIL_*`):
+Email xác minh (render qua `NotificationEmailLayout` — HTML chuẩn; gửi thật qua Gmail SMTP
+theo `MAIL_*`, xem ở hộp thư của email đăng ký):
 
 ```text
 Subject: Mã xác minh email đăng ký Kho Mộc

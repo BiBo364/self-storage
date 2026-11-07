@@ -3,6 +3,7 @@ package vn.lemar.selfstorage.handover.repository;
 import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -24,4 +25,21 @@ public interface RentalContractRepository extends JpaRepository<RentalContract, 
     List<RentalContract> findByOrderIdAndStatusInForUpdate(
             @Param("orderId") Long orderId,
             @Param("statuses") Collection<RentalContractStatus> statuses);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from RentalContract c where c.id = :id")
+    Optional<RentalContract> findByIdForUpdate(@Param("id") Long id);
+
+    /** Hợp đồng đang xử lý của đơn (Draft/Signed/Active) — partial unique index V1: tối đa một. */
+    default Optional<RentalContract> findCurrentByOrderId(Long orderId) {
+        return findByOrderIdAndStatusIn(orderId, List.of(RentalContractStatus.DRAFT, RentalContractStatus.SIGNED,
+                RentalContractStatus.ACTIVE)).stream().findFirst();
+    }
+
+    List<RentalContract> findByCustomerIdAndStatusOrderByEndDateAsc(Long customerId, RentalContractStatus status);
+
+    List<RentalContract> findByStatusAndEndDateBefore(RentalContractStatus status, java.time.LocalDate date);
+
+    List<RentalContract> findByStatusAndEndDateBetween(RentalContractStatus status, java.time.LocalDate from,
+                                                       java.time.LocalDate to);
 }

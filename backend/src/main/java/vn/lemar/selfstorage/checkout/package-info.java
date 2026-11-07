@@ -1,10 +1,11 @@
 /**
- * Flow 2.5 - trả kho và bảo trì.
+ * Trả kho rút gọn (bản nháp Flow 2.a) — biên bản trả kho, quyết toán tiền cọc, bảo trì rồi mở lại khoang.
  *
- * <p>Chiều phụ thuộc theo issue #15: checkout -> handover, tenancy. Phần đọc hiện trạng
- * khoang lúc bàn giao lấy qua interface truy vấn của handover, không đụng thẳng repository.
+ * <p>Chiều phụ thuộc: checkout -> tenancy, handover, booking. Không module nào phụ thuộc ngược checkout.
  */
 @org.springframework.modulith.ApplicationModule(
-        displayName = "Checkout (F2.5)",
-        allowedDependencies = {"handover", "tenancy", "facility", "pricing", "identity", "payment", "notification"})
+        displayName = "Checkout (F2.a)",
+        allowedDependencies = {"tenancy::application", "handover::application", "booking::application",
+                "facility::application", "pricing::application", "identity::application",
+                "notification::application", "audit::application"})
 package vn.lemar.selfstorage.checkout;

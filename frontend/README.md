@@ -1,10 +1,18 @@
-# Frontend prototype
+# Frontend
 
-Presentational React prototype for the self-storage flows. The first slice covers:
+React app for the self-storage flows, wired to the backend API (dev server proxies `/api` to
+`VITE_API_PROXY_TARGET`, default `http://localhost:8080`).
 
-- `/` and `/units`: public landing and unit browsing.
-- `/rental-requests/new`: mock rental request form.
-- `/login`, `/register`, `/verify-email`: auth screens with demo-only states.
+| Role     | Home                  | Screens                                                                                                                                                                                                                     |
+| -------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public   | `/`                   | landing, `/units` catalog, `/rental-requests/new`, login / register / verify, chat assistant widget                                                                                                                         |
+| CUSTOMER | `/my-storage`         | orders + active rentals + handovers, `/my-storage/{contractId}` (extend, return, access code), `/proposals`, `/invoices` + `/payments/result` (payOS), `/appointments/new`, `/handovers/{id}`, `/support`, `/notifications` |
+| FM       | `/fm/rental-requests` | requests, orders, re-propose, appointments, return requests, overdue contracts, support, storage units, staff, report, invoices, contracts + start-date overrides                                                           |
+| FS       | `/staff/schedule`     | schedule, handover queue + checklist, returns + checkout, support                                                                                                                                                           |
+| BOM      | `/bom/dashboard`      | revenue dashboard, facilities & FM, policies & prices, chain invoices                                                                                                                                                       |
+| ADMIN    | `/admin/accounts`     | accounts, permission matrix, login history, audit log                                                                                                                                                                       |
+
+API calls live in `src/app/services/*.ts` (DTO types next to the calls) and `src/app/http.ts` (`authed`).
 
 ## Run
 
@@ -53,4 +61,5 @@ Components are styled with Tailwind utilities directly in the markup. Wall-to-wa
 
 ## Boundary
 
-Catalog data lives in `src/mocks/catalog.ts`. Form submissions, login, email verification, JWT handling, API calls, persistence, and role-based redirects are intentionally mocked and marked in the UI as TODO work for the backend integration phase.
+Every screen reads and writes through the backend API; business rules (allowed actions, steps, prices) come from the
+API responses. `src/mocks/**` is no longer imported by any screen.

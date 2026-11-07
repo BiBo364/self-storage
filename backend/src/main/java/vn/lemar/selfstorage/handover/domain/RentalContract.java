@@ -87,6 +87,115 @@ public class RentalContract {
     @Column(nullable = false, length = 20)
     private RentalContractStatus status;
 
+    public static final String OVERRIDE_PENDING = "Pending";
+    public static final String OVERRIDE_APPROVED = "Approved";
+    public static final String OVERRIDE_REJECTED = "Rejected";
+
+    /**
+     * Spec 2.3 giai đoạn 1: hợp đồng {@code Draft} sinh từ mẫu đang hiệu lực khi khách đồng ý hiện trạng.
+     * {@code end_date} = ngày cuối của kỳ thuê ({@code start_date + period tháng - 1 ngày}).
+     */
+    public static RentalContract draft(Long orderId, Long customerId, Long unitId, String code, String termsVersion,
+                                       BigDecimal monthlyPrice, BigDecimal depositAmount, int period,
+                                       LocalDate startDate) {
+        RentalContract contract = new RentalContract();
+        contract.orderId = orderId;
+        contract.customerId = customerId;
+        contract.unitId = unitId;
+        contract.code = code;
+        contract.termsVersion = termsVersion;
+        contract.monthlyPrice = monthlyPrice;
+        contract.depositAmount = depositAmount;
+        contract.period = period;
+        contract.setStartDate(startDate);
+        contract.status = RentalContractStatus.DRAFT;
+        return contract;
+    }
+
+    /** Link bản hợp đồng render từ mẫu (chưa ký). */
+    public void attachDocument(String documentUrl) {
+        this.documentUrl = documentUrl;
+    }
+
+    public boolean hasPendingOverride() {
+        return OVERRIDE_PENDING.equals(startDateOverrideStatus);
+    }
+
+    /** Spec 2.3: FS gửi đề nghị đổi mốc tính tiền trên hợp đồng {@code Draft}; khoá bước ký tới khi FM xử lý. */
+    public void requestStartDateOverride(LocalDate requested, String reason) {
+        requireStatus(RentalContractStatus.DRAFT);
+        if (hasPendingOverride()) {
+            throw new IllegalStateException("Hợp đồng " + id + " đang có đề nghị đổi mốc chờ duyệt");
+        }
+        this.startDateOverrideRequested = requested;
+        this.startDateOverrideReason = reason;
+        this.startDateOverrideStatus = OVERRIDE_PENDING;
+    }
+
+    /** FM duyệt: dùng ngày đề nghị cho {@code start_date}, mở lại bước ký. */
+    public void approveStartDateOverride() {
+        requirePendingOverride();
+        setStartDate(startDateOverrideRequested);
+        this.startDateOverrideStatus = OVERRIDE_APPROVED;
+    }
+
+    /** FM từ chối: giữ ngày theo chính sách, mở lại bước ký. */
+    public void rejectStartDateOverride() {
+        requirePendingOverride();
+        this.startDateOverrideStatus = OVERRIDE_REJECTED;
+    }
+
+    /** Spec 2.3: FS upload bản scan đã ký — {@code Draft -> Signed}. */
+    public void sign(String pdfUrl, Instant now) {
+        requireStatus(RentalContractStatus.DRAFT);
+        if (hasPendingOverride()) {
+            throw new IllegalStateException("Hợp đồng " + id + " còn đề nghị đổi mốc chưa duyệt");
+        }
+        this.pdfUrl = pdfUrl;
+        this.signedAt = now;
+        this.status = RentalContractStatus.SIGNED;
+    }
+
+    /** Spec 2.4: bàn giao hoàn tất — {@code Signed -> Active}. */
+    public void activate() {
+        requireStatus(RentalContractStatus.SIGNED);
+        this.status = RentalContractStatus.ACTIVE;
+    }
+
+    /** Gia hạn hợp đồng đang thuê: kỳ thuê và {@code end_date} cộng thêm {@code months}. */
+    public void extend(int months) {
+        requireStatus(RentalContractStatus.ACTIVE);
+        if (months <= 0) {
+            throw new IllegalArgumentException("Số tháng gia hạn phải > 0");
+        }
+        this.period = period + months;
+        this.endDate = endDate.plusMonths(months);
+    }
+
+    /** Trả kho hoàn tất: {@code Active -> Ended}. */
+    public void end() {
+        requireStatus(RentalContractStatus.ACTIVE);
+        this.status = RentalContractStatus.ENDED;
+    }
+
+    private void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
+        this.endDate = startDate.plusMonths(period).minusDays(1);
+    }
+
+    private void requireStatus(RentalContractStatus expected) {
+        if (status != expected) {
+            throw new IllegalStateException("Hợp đồng " + id + " không ở " + expected.dbValue() + ": "
+                    + status.dbValue());
+        }
+    }
+
+    private void requirePendingOverride() {
+        if (!hasPendingOverride()) {
+            throw new IllegalStateException("Hợp đồng " + id + " không có đề nghị đổi mốc chờ duyệt");
+        }
+    }
+
     /** Huỷ hợp đồng chưa bàn giao ({@code Draft}/{@code Signed}); {@code Active}/{@code Ended} giữ nguyên. */
     public void cancel() {
         if (!status.isCancelable()) {

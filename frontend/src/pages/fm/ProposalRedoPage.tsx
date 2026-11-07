@@ -1,214 +1,244 @@
-import { AlertTriangle, ArrowLeft, Check, History } from "lucide-react";
+import { ArrowLeft, Check, History } from "lucide-react";
 import { useState } from "react";
-import type { Navigate } from "../../app/types";
-import { formatPrice, unitTypes } from "../../mocks/catalog";
+import { formatDate, formatDateTime, formatMoney } from "../../app/format";
+import { pathId } from "../../app/routes";
 import {
-  fmUnits,
-  MAX_ORDER_REJECTIONS,
-  rentalOrders,
-  type ProposalFeedbackEntry,
-} from "../../mocks/fm";
+  fetchRentalOrder,
+  labelOf,
+  loadErrorState,
+  ORDER_STATUS_LABEL,
+  ORDER_STATUS_TONE,
+  PROPOSAL_STATUS_LABEL,
+  PROPOSAL_STATUS_TONE,
+  reproposeUnit,
+  toneOf,
+  useFmAction,
+  useFmLoad,
+} from "../../app/services/fm";
+import type { Navigate } from "../../app/types";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
+import { INPUT_ELEMENT, INPUT_WRAP } from "../../components/ui/FormField";
 import { SectionTitle } from "../../components/ui/SectionTitle";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
-const SOURCE_LABEL: Record<ProposalFeedbackEntry["source"], string> = {
-  customer: "Khách từ chối",
-  checkin: "Từ chối tại chỗ lúc check-in",
-};
-
-function getOrderId() {
-  const segments = window.location.pathname.split("/").filter(Boolean);
-  return segments[segments.length - 2] ?? "";
-}
-
-function unitTypeName(unitTypeId: string) {
-  return unitTypes.find((type) => type.id === unitTypeId)?.name ?? unitTypeId;
-}
-
 export function ProposalRedoPage({ navigate }: { navigate: Navigate }) {
-  const orderId = getOrderId();
-  const order = rentalOrders.find((item) => item.id === orderId);
+  // /fm/rental-orders/{orderId}/re-propose
+  const orderId = pathId(2);
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
+  const [sentUnitCode, setSentUnitCode] = useState<string | null>(null);
+  const action = useFmAction();
 
-  const [selectedUnitId, setSelectedUnitId] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [sent, setSent] = useState(false);
+  const detail = useFmLoad(`repropose:${orderId}`, () =>
+    orderId === null ? Promise.resolve(null) : fetchRentalOrder(orderId),
+  );
 
-  if (!order) {
+  const backToOrders = {
+    label: "Về danh sách đơn thuê",
+    onClick: () => navigate("/fm/rental-orders"),
+  };
+
+  if (orderId === null) {
+    return (
+      <SurfaceState variant="not-found" title="Không tìm thấy đơn thuê" action={backToOrders} />
+    );
+  }
+  if (detail.error) {
     return (
       <SurfaceState
-        variant="not-found"
-        title="Không tìm thấy đơn hàng"
-        action={{ label: "Về hàng chờ yêu cầu", onClick: () => navigate("/fm/rental-requests") }}
+        {...loadErrorState(detail.error, "đơn thuê")}
+        action={
+          detail.error.status === 403 || detail.error.status === 404
+            ? backToOrders
+            : { label: "Thử lại", onClick: detail.reload }
+        }
       />
     );
   }
+  if (!detail.data) {
+    return <SurfaceState variant="loading" title="Đang tải đơn thuê…" />;
+  }
 
-  const availableUnits = fmUnits.filter(
-    (unit) => unit.unitTypeId === order.unitTypeId && unit.status === "Available",
-  );
-  const selectedUnit = fmUnits.find((unit) => unit.id === selectedUnitId);
-  const newDepositEstimate = selectedUnit
-    ? (unitTypes.find((type) => type.id === selectedUnit.unitTypeId)?.monthlyPrice ?? 0)
-    : 0;
-  const depositDiff = order.afterDeposit ? newDepositEstimate - (order.previousDeposit ?? 0) : 0;
+  const order = detail.data;
+  const selectedUnit = order.availableUnits.find((unit) => unit.id === selectedUnitId) ?? null;
+  const needsOverride = selectedUnit?.previouslyRejected ?? false;
 
-  function submit() {
-    if (!selectedUnitId) return;
-    setIsSubmitting(true);
-    window.setTimeout(() => {
-      setIsSubmitting(false);
-      setSent(true);
-    }, 700);
+  async function submit() {
+    if (!selectedUnit) return;
+    const outcome = await action.run("submit", () =>
+      reproposeUnit(order.id, selectedUnit.id, needsOverride ? overrideReason : undefined),
+    );
+    if (outcome.ok) setSentUnitCode(selectedUnit.code);
+    else detail.reload();
+  }
+
+  if (sentUnitCode) {
+    return (
+      <div className="grid gap-6">
+        <div className="bg-surface p-6">
+          <h1 className="m-0 text-title text-ink">Đã gửi đề xuất mới</h1>
+          <p className="mt-2 text-small text-muted">
+            Khách {order.customer.name ?? order.customer.email} nhận thông báo đề xuất khoang{" "}
+            {sentUnitCode} cho đơn #{order.id}.
+          </p>
+          <div className="mt-5">
+            <Button onClick={() => navigate("/fm/rental-orders")}>Về danh sách đơn thuê</Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="grid gap-6">
-      <button
-        className="inline-flex w-fit items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
-        onClick={() => navigate("/fm/rental-requests")}
-      >
-        <ArrowLeft size={16} /> Về hàng chờ yêu cầu
-      </button>
-
       <div>
-        <span className="text-label text-muted">{order.customerName}</span>
-        <h1 className="mt-1 text-title text-ink">Đề xuất lại khoang</h1>
-        <p className="mt-1.5 text-small text-muted">
-          Cần: {unitTypeName(order.unitTypeId)} · {order.desiredSize}
-        </p>
+        <button
+          className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-small text-muted hover:text-ink"
+          onClick={() => navigate("/fm/rental-orders")}
+        >
+          <ArrowLeft size={14} /> Đơn thuê kho
+        </button>
+        <h1 className="mt-2 text-title text-ink">Đề xuất lại khoang · Đơn #{order.id}</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <StatusTag tone={toneOf(ORDER_STATUS_TONE, order.status)}>
+            {labelOf(ORDER_STATUS_LABEL, order.status)}
+          </StatusTag>
+          <span className="text-label text-muted">
+            Khách đã từ chối {order.rejectionCount}/{order.maxRejectionCount} lần · hạn đơn{" "}
+            {formatDateTime(order.expiresAt)}
+          </span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6 max-[980px]:grid-cols-1">
-        <div className="grid gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-6 max-[900px]:grid-cols-1">
+        <div className="grid content-start gap-6">
           <section className="bg-surface p-5">
-            <SectionTitle>
-              <span className="inline-flex items-center gap-2">
-                <History size={16} /> Lịch sử đề xuất trước
-              </span>
-            </SectionTitle>
-            <div className="mt-4 grid gap-2">
-              {order.rejectionHistory.map((entry) => (
-                <div
-                  key={`${entry.unitCode}-${entry.rejectedAt}`}
-                  className="bg-surface-subtle p-3.5"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <strong className="text-small font-semibold text-ink">
-                      Khoang {entry.unitCode}
-                    </strong>
-                    <StatusTag tone={entry.source === "customer" ? "danger" : "warning"}>
-                      {SOURCE_LABEL[entry.source]}
-                    </StatusTag>
-                  </div>
-                  <p className="mt-1.5 text-small text-muted">{entry.note}</p>
-                  <p className="mt-1 text-label text-muted">{entry.rejectedAt}</p>
-                </div>
-              ))}
-            </div>
-            <p className="mt-4 text-label text-muted">
-              Đã từ chối {order.rejectionHistory.length}/{MAX_ORDER_REJECTIONS} lần cho phép.
-            </p>
+            <SectionTitle>Khách hàng &amp; nhu cầu</SectionTitle>
+            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-small">
+              <Field label="Khách hàng" value={order.customer.name} />
+              <Field label="Email" value={order.customer.email} />
+              <Field label="Số điện thoại" value={order.customer.phone} />
+              <Field label="Loại khoang" value={order.requested.unitTypeName} />
+              <Field label="Bắt đầu thuê" value={formatDate(order.requested.startDate)} />
+              <Field label="Thời hạn" value={`${order.requested.period} tháng`} />
+            </dl>
           </section>
 
-          {order.status === "Canceled" ? (
-            <SurfaceState
-              variant="forbidden"
-              title="Đơn đã bị huỷ"
-              description="Đã đạt ngưỡng tối đa số lần từ chối — hệ thống tự huỷ đơn. Chỉ có thể xem lại lịch sử, không thể đề xuất tiếp."
-            />
-          ) : sent ? (
-            <DemoNotice tone="success">
-              Đã gửi đề xuất khoang {selectedUnit?.code} cho khách. Khách sẽ nhận thông báo để xác
-              nhận.
-            </DemoNotice>
-          ) : (
-            <section className="bg-surface p-5">
-              <SectionTitle>Chọn khoang mới</SectionTitle>
-              {order.afterDeposit && (
-                <div className="mt-4">
-                  <DemoNotice tone="pending">
-                    Khách đã đặt cọc trước đó ({formatPrice(order.previousDeposit ?? 0)}đ) — cần đổi
-                    khoang do phát sinh sự cố. Kiểm tra chênh lệch cọc bên dưới trước khi gửi.
-                  </DemoNotice>
-                </div>
-              )}
-              <label className="mt-5 grid gap-1.5 text-label text-muted">
-                Khoang trống phù hợp
-                <select
-                  className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
-                  value={selectedUnitId}
-                  onChange={(event) => setSelectedUnitId(event.target.value)}
-                >
-                  <option value="">— Chọn khoang —</option>
-                  {availableUnits.map((unit) => (
-                    <option key={unit.id} value={unit.id}>
-                      {unit.code} · {unit.size}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {availableUnits.length === 0 && (
-                <p className="mt-2 flex items-center gap-2 text-small text-danger">
-                  <AlertTriangle size={14} /> Hiện không còn khoang trống đúng loại yêu cầu.
-                </p>
-              )}
-              {order.afterDeposit && selectedUnit && (
-                <div className="mt-4 grid gap-2 bg-surface-subtle p-3.5 text-small">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted">Cọc đã thu (khoang cũ)</span>
-                    <strong className="font-semibold text-ink">
-                      {formatPrice(order.previousDeposit ?? 0)} đ
-                    </strong>
+          <section className="bg-surface p-5">
+            <SectionTitle>
+              <History size={15} /> Lịch sử đề xuất
+            </SectionTitle>
+            {order.proposals.length === 0 ? (
+              <p className="mt-3 text-label text-muted">Chưa có đề xuất nào.</p>
+            ) : (
+              <div className="mt-3 grid gap-1.5">
+                {order.proposals.map((proposal) => (
+                  <div key={proposal.id} className="bg-surface-subtle p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <strong className="text-small text-ink">{proposal.unitCode}</strong>
+                      <StatusTag tone={toneOf(PROPOSAL_STATUS_TONE, proposal.status)}>
+                        {labelOf(PROPOSAL_STATUS_LABEL, proposal.status)}
+                      </StatusTag>
+                    </div>
+                    <span className="mt-1 block text-label text-muted">
+                      {formatDateTime(proposal.createdAt)}
+                    </span>
+                    {proposal.note && (
+                      <p className="mt-1 text-label text-ink">Lý do: {proposal.note}</p>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted">Cọc ước tính (khoang mới)</span>
-                    <strong className="font-semibold text-ink">
-                      {formatPrice(newDepositEstimate)} đ
-                    </strong>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted">Chênh lệch</span>
-                    <strong
-                      className={`font-semibold ${depositDiff >= 0 ? "text-danger" : "text-success"}`}
-                    >
-                      {depositDiff >= 0 ? "+" : ""}
-                      {formatPrice(depositDiff)} đ
-                    </strong>
-                  </div>
-                </div>
-              )}
-              <Button
-                className="mt-5"
-                pending={isSubmitting}
-                disabled={!selectedUnitId}
-                onClick={submit}
-              >
-                {!isSubmitting && <Check size={16} />}
-                Đề xuất lại
-              </Button>
-            </section>
-          )}
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
-        <aside className="grid gap-3 bg-surface p-5">
-          <SectionTitle>Tóm tắt yêu cầu</SectionTitle>
-          <div>
-            <span className="text-label text-muted">Loại kho</span>
-            <strong className="mt-0.5 block text-small font-semibold text-ink">
-              {unitTypeName(order.unitTypeId)}
-            </strong>
-          </div>
-          <div>
-            <span className="text-label text-muted">Diện tích mong muốn</span>
-            <strong className="mt-0.5 block text-small font-semibold text-ink">
-              {order.desiredSize}
-            </strong>
-          </div>
-        </aside>
+        <section className="grid content-start gap-4 bg-surface p-5">
+          <SectionTitle>Chọn khoang trống cùng loại</SectionTitle>
+          {order.availableUnits.length === 0 ? (
+            <SurfaceState
+              variant="empty"
+              title="Không còn khoang trống cùng loại"
+              description="Có thể huỷ đơn từ danh sách đơn thuê nếu không thể đề xuất khoang khác."
+              action={backToOrders}
+            />
+          ) : (
+            <div className="grid gap-1.5" role="radiogroup" aria-label="Khoang trống">
+              {order.availableUnits.map((unit) => {
+                const active = unit.id === selectedUnitId;
+                return (
+                  <button
+                    key={unit.id}
+                    role="radio"
+                    aria-checked={active}
+                    className={`flex items-center justify-between gap-3 border-2 p-3 text-left transition-colors ${
+                      active
+                        ? "border-brand bg-surface-subtle"
+                        : "border-transparent bg-surface-subtle hover:border-control-border"
+                    }`}
+                    onClick={() => {
+                      setSelectedUnitId(unit.id);
+                      action.clear();
+                    }}
+                  >
+                    <span>
+                      <strong className="block text-small text-ink">{unit.code}</strong>
+                      <span className="text-label text-muted">
+                        {unit.size ?? order.requested.unitTypeName} ·{" "}
+                        {formatMoney(unit.monthlyPrice)}/tháng
+                      </span>
+                    </span>
+                    {unit.previouslyRejected && (
+                      <StatusTag tone="danger">Khách đã từ chối</StatusTag>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {needsOverride && (
+            <label className="grid gap-1.5 text-label text-muted" htmlFor="override-reason">
+              Lý do đề xuất lại khoang khách đã từ chối (bắt buộc)
+              <div className={INPUT_WRAP}>
+                <textarea
+                  id="override-reason"
+                  className={`${INPUT_ELEMENT} min-h-[72px] py-2`}
+                  value={overrideReason}
+                  onChange={(event) => setOverrideReason(event.target.value)}
+                  placeholder="VD: Khoang đã được sửa cửa theo phản hồi của khách"
+                />
+              </div>
+            </label>
+          )}
+
+          {action.error && <DemoNotice tone="error">{action.error}</DemoNotice>}
+
+          {order.availableUnits.length > 0 && (
+            <div>
+              <Button
+                pending={action.pending === "submit"}
+                disabled={!selectedUnit || (needsOverride && !overrideReason.trim())}
+                onClick={submit}
+              >
+                {action.pending !== "submit" && <Check size={16} />}
+                Gửi đề xuất cho khách
+              </Button>
+            </div>
+          )}
+        </section>
       </div>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-label text-muted">{label}</dt>
+      <dd className="m-0 break-words text-ink">{value || "—"}</dd>
     </div>
   );
 }

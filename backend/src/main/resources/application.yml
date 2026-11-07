@@ -21,21 +21,27 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  # Gửi mail thật qua Gmail SMTP (App Password) — thông tin đăng nhập nằm trong .env.
   mail:
-    host: ${MAIL_HOST:localhost}
-    port: ${MAIL_PORT:1025}
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
-          auth: ${MAIL_SMTP_AUTH:false}
+          auth: ${MAIL_SMTP_AUTH:true}
           starttls:
-            enable: ${MAIL_SMTP_STARTTLS:false}
-
+            enable: ${MAIL_SMTP_STARTTLS:true}
+            required: ${MAIL_SMTP_STARTTLS:true}
+          # SMTP chậm/treo không được giữ request quá lâu (ms).
+          connectiontimeout: ${MAIL_TIMEOUT_MS:10000}
+          timeout: ${MAIL_TIMEOUT_MS:10000}
+          writetimeout: ${MAIL_TIMEOUT_MS:10000}
 app:
   mail:
-    from: ${MAIL_FROM:noreply@lemar.vn}
+    # Gmail chỉ cho gửi từ chính tài khoản đăng nhập (hoặc alias đã xác minh).
+    from: ${MAIL_FROM:${MAIL_USERNAME:noreply@lemar.vn}}
   # Gốc URL frontend để dựng link trong notification/email (vd link xác nhận đề xuất khoang).
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
 
@@ -54,6 +60,20 @@ security:
     ip-max-attempts: ${LOGIN_RATE_LIMIT_IP_MAX:20}
     window: ${LOGIN_RATE_LIMIT_WINDOW:PT15M}
 
+# Cổng thanh toán đang dùng: payos (mặc định) | vnpay. Chỉ cổng đang dùng mới bắt buộc đủ credential.
+payment:
+  provider: ${PAYMENT_PROVIDER:payos}
+
+# payOS (VietQR) — không có sandbox: giao dịch là chuyển khoản thật; không có API hoàn tiền.
+payos:
+  client-id: ${PAYOS_CLIENT_ID:}
+  api-key: ${PAYOS_API_KEY:}
+  checksum-key: ${PAYOS_CHECKSUM_KEY:}
+  base-url: ${PAYOS_BASE_URL:https://api-merchant.payos.vn}
+  # Trang kết quả của FE — FE gọi POST /api/invoices/{id}/payment-check để đối soát.
+  return-url: ${PAYOS_RETURN_URL:${FRONTEND_URL:http://localhost:5173}/payments/result}
+  cancel-url: ${PAYOS_CANCEL_URL:${FRONTEND_URL:http://localhost:5173}/payments/result}
+
 # VNPay — giá trị thật nằm trong .env của từng người, xem docs/vnpay-sandbox.md.
 # Không đặt default: thiếu env thì @NotBlank cho app chết ngay lúc khởi động,
 # tốt hơn là NPE giữa luồng thu tiền.
@@ -62,6 +82,8 @@ vnpay:
   hash-secret: ${VNPAY_HASH_SECRET:}
   pay-url: ${VNPAY_PAY_URL:}
   return-url: ${VNPAY_RETURN_URL:}
+  # API merchant cho querydr (đối soát) — mặc định sandbox.
+  api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
 
 # Cloudinary — giá trị thật nằm trong .env của từng người (tài khoản free, không cần thẻ).
 # Map tường minh qua placeholder vì key trong .env giữ nguyên dạng CLOUDINARY_NAME.
@@ -76,3 +98,10 @@ server:
 logging:
   level:
     vn.lemar.selfstorage: DEBUG
+
+# Chatbot tư vấn (Google Gemini). Thiếu key → POST /api/chat trả 503, các phần khác chạy bình thường.
+chat:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    thinking-level: ${CHAT_THINKING_LEVEL:LOW}
+  model: ${CHAT_MODEL:gemini-3.6-flash}

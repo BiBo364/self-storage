@@ -12,7 +12,7 @@ endpoint nằm trong thư mục [`routes/`](routes.md) — file này chỉ ghi q
 
 ## Backend có gì
 
-Spring Boot 3.3.5 · Java 17 · Spring Modulith · PostgreSQL 16 · Redis · MailHog (mail dev).
+Spring Boot 3.3.5 · Java 17 · Spring Modulith · PostgreSQL 16 · Redis · Gmail SMTP (gửi mail thật).
 
 Kiến trúc **modular monolith**: `vn.lemar.selfstorage` là package gốc,
 mỗi package con trực tiếp là một module độc lập (`identity`, `booking`, `facility`, ...).
@@ -22,7 +22,9 @@ Hiện tại `identity` xử lý xác thực/RBAC; `facility` cung cấp public 
 catalog cơ sở public và đọc khoang theo cơ sở; `audit` ghi vết thao tác nghiệp vụ nhạy cảm; `media`
 upload file (ảnh/PDF) lên Cloudinary và dọn asset theo batch; `booking` có luồng nội bộ convert
 request đã duyệt thành đơn + proposal ([booking/conversion.md](booking/conversion.md));
-`handover` có data layer bàn giao + listener set `due_at` ([handover/records.md](handover/records.md)).
+`handover` có data layer bàn giao, mở biên bản khi đặt lịch, listener set `due_at`
+([handover/records.md](handover/records.md)); thanh toán cọc → đặt lịch check-in
+([booking/deposit-payment.md](booking/deposit-payment.md), [booking/appointment-booking.md](booking/appointment-booking.md)).
 
 Layout trong một module:
 
@@ -74,26 +76,33 @@ Nguồn: `backend/src/main/resources/application.yml`, override qua biến môi 
 | `LOGIN_RATE_LIMIT_IP_MAX` | Số lần đăng nhập sai tối đa theo IP / window | `20` |
 | `LOGIN_RATE_LIMIT_WINDOW` | Cửa sổ đếm lần đăng nhập sai | `PT15M` |
 | `REDIS_HOST` | Redis host cho rate-limit auth / cache | `localhost` |
-| `VNPAY_TMN_CODE` | Mã website đăng ký trên VNPay | — (bắt buộc) |
-| `VNPAY_HASH_SECRET` | Chuỗi bí mật ký/kiểm checksum VNPay | — (bắt buộc) |
-| `VNPAY_PAY_URL` | Endpoint cổng thanh toán VNPay | — (bắt buộc) |
-| `VNPAY_RETURN_URL` | Nơi VNPay đẩy trình duyệt khách về | — (bắt buộc) |
+| `PAYMENT_PROVIDER` | Cổng thanh toán đang dùng: `payos` \| `vnpay` | `payos` |
+| `PAYOS_CLIENT_ID` / `PAYOS_API_KEY` / `PAYOS_CHECKSUM_KEY` | Credential payOS (my.payos.vn) | — (bắt buộc khi `payos`) |
+| `PAYOS_RETURN_URL` / `PAYOS_CANCEL_URL` | Trang FE nhận khách quay về từ payOS | `<FRONTEND_URL>/payments/result` |
+| `VNPAY_TMN_CODE` | Mã website đăng ký trên VNPay | — (bắt buộc khi `vnpay`) |
+| `VNPAY_HASH_SECRET` | Chuỗi bí mật ký/kiểm checksum VNPay | — (bắt buộc khi `vnpay`) |
+| `VNPAY_PAY_URL` | Endpoint cổng thanh toán VNPay | — (bắt buộc khi `vnpay`) |
+| `VNPAY_RETURN_URL` | Nơi VNPay đẩy trình duyệt khách về | — (bắt buộc khi `vnpay`) |
+| `VNPAY_API_URL` | API merchant VNPay cho `querydr` (đối soát) | sandbox `merchant_webapi/api/transaction` |
 | `FRONTEND_URL` | Gốc URL frontend, dựng link trong notification/email (vd `{{confirmLink}}` / `{{proposalLink}}` = `<FRONTEND_URL>/proposals`) | `http://localhost:5173` |
 | `CLOUDINARY_NAME` | Cloud name tài khoản Cloudinary | — (bắt buộc) |
 | `CLOUDINARY_KEY` | API key Cloudinary | — (bắt buộc) |
 | `CLOUDINARY_SECRET` | API secret Cloudinary | — (bắt buộc) |
+| `GEMINI_API_KEY` | Key Google Gemini cho chatbot tư vấn (aistudio.google.com/apikey) | — (trống → `POST /api/chat` trả 503) |
+| `CHAT_MODEL` / `CHAT_THINKING_LEVEL` | Model Gemini và mức thinking (trống = không gửi `thinkingConfig`) | `gemini-3.6-flash` / `LOW` |
 
 Chạy local không cần export tay: `application.yml` có
 `spring.config.import: optional:file:../.env[.properties]` → copy `.env.example` thành `.env`.
 Đường dẫn `../.env` tính theo working directory (đúng khi chạy từ `backend/`).
 
-Bốn biến `VNPAY_*` để `@NotBlank`: thiếu là **app chết ngay lúc khởi động**, có chủ đích — thà
-chết lúc boot còn hơn NPE giữa luồng thu tiền. Credential sandbox mỗi người tự đăng ký riêng,
+Credential của **cổng đang dùng** (`PAYMENT_PROVIDER`, mặc định payOS) thiếu là **app chết ngay lúc khởi động**,
+có chủ đích — thà chết lúc boot còn hơn NPE giữa luồng thu tiền; cổng không dùng thì không bắt buộc.
+payOS không có sandbox (giao dịch là tiền thật) — chi tiết ở [payment.md](payment.md). Credential sandbox mỗi người tự đăng ký riêng,
 hướng dẫn ở [docs/vnpay-sandbox.md](../../docs/vnpay-sandbox.md).
 
 ## Database & seed
 
-Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V16__handover_due_days_seed.sql`.
+Flyway chạy migration lúc khởi động: `V1__baseline_schema.sql` … `V21__support_and_backoffice.sql`.
 V1/V2 có mirror ở `backend/sql/`
 — sửa thì sửa cả hai nơi (CI check đồng bộ); V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -113,12 +122,32 @@ Schema Flow 1.3 đi bằng migration V8–V11 (V1/V2 đóng băng sau khi main c
 - V9 seed `fee.unit_change = 0` (Flow 4 chốt giá trị) và thêm audit action `DEPOSIT_REFUND_REQUIRED`
   cho trường hợp đổi khoang sau khi cọc dư — trước B4, FM hoàn thủ công; B4 hoàn tự động về thẻ đã liên kết.
 - V10 thêm audit action `UNIT_CHANGE_RELEASED` — nhả khoang cũ khi khách đổi khoang sau khi đã cọc;
-  khoang mới chưa reserve cho tới khi thanh toán (B4); trường hợp `delta ≤ 0` cần follow-up reserve riêng.
+  khoang mới được giữ khi hoá đơn bổ sung `Paid`, hoặc ngay lúc đồng ý nếu cọc đã đủ (`delta ≤ 0`).
 - V11 thêm type `DepositSupplement` cho hoá đơn chênh lệch cọc và 2 partial unique index: một `Deposit`
   active (Unpaid/Paid) + một `DepositSupplement` Unpaid trên mỗi đơn.
 - V12 thêm `media_uploads` — theo dõi upload theo batch, dọn asset chưa attach khi Hủy (chi tiết ở
   [routes/media/delete-batch.md](routes/media/delete-batch.md)).
 - V16 seed `handover.due_days = 1` — hạn hoàn tất bàn giao sau khi khách đến (Flow 2.1).
+- V17 thêm audit action `INVOICE_PAID`, `INVOICE_EXPIRED` (thanh toán / cron hoá đơn quá hạn). Notification type
+  `PROPOSAL_UNIT_TAKEN` (khách: khoang đã có người đặt cọc trước) chỉ thêm ở code — cột `notifications.type` không có
+  CHECK.
+- V18 seed policy `appointment.booking_window_days = 7`, `appointment.max_days_after_deposit = 14`,
+  `appointment.daily_slot_count = 3`, `appointment.capacity_mode = fixed_windows` (đặt lịch check-in),
+  `order.expiry_reminder_days = 3` (cron nhắc), `handover.payment_grace_hours = 24`, `contract.prepaid_months = 1`
+  (Flow 2.3 — spec ghi "chờ BOM", đây là giá trị mặc định).
+- V19 thêm `facilities.enabled_key_access` / `enabled_code_access` (mặc định `true`), `handover_records.requested_access`
+  (`AccessCode`/`PhysicalKey`/`Both`) + `customer_confirmed_at`, seed `contract.start_date_rule = handover_date`
+  (bàn giao Flow 2.2–2.5, xem [handover/records.md](handover/records.md)). Notification type
+  `HANDOVER_KEY_REQUESTED` (FS) và `FIRST_MONTH_REFUND_REQUIRED` (FM) chỉ thêm ở code.
+- V20 thêm `return_requests` và `checkout_records`, 9 policy (`extension.*`, `contract.expiry_reminder_days`,
+  `overdue.*`, `fee.cleaning`, `fee.lost_key`, `unit.maintenance_days`, `checkout.invoice_due_days`), audit action
+  `CONTRACT_EXTENDED`, `RETURN_REQUESTED`/`_ASSIGNED`/`_CANCELED`/`_COMPLETED`, `OVERDUE_FEE_ACCRUED` và entity
+  type `ReturnRequest`. Dùng lại cột `storage_units.maintenance_started_at` có từ V1. Xem
+  [tenancy/rentals.md](tenancy/rentals.md), [checkout/return.md](checkout/return.md).
+- V21 thêm `support_requests` (hỗ trợ / sự cố), `login_events` (lịch sử đăng nhập), audit action hỗ trợ + back-office
+  (`SUPPORT_REQUEST_*`, `FACILITY_*`, `STORAGE_UNIT_CREATED`/`_UPDATED`, `POLICY_UPDATED`, `UNIT_TYPE_UPDATED`,
+  `ACCOUNT_CREATED`/`_UPDATED`, `ROLE_PERMISSIONS_UPDATED`) và entity type `SupportRequest`, `Facility`, `Policy`,
+  `UnitType`, `Role`. Xem [support/requests.md](support/requests.md), [backoffice/overview.md](backoffice/overview.md).
 
 Các migration khác trên main: V5 seed `order.expiry_days` (luồng convert), V6 bỏ `Expired` khỏi CHECK
 `rental_orders.status` (quá hạn cũng là `Canceled` + `cancel_reason`), V7 thêm 4 action convert vào
@@ -126,6 +155,10 @@ CHECK `audit_logs.action`.
 
 Seed V2 chưa có đơn thuê/proposal (do luồng convert tạo). Muốn thử Flow 1.3 trên DB local thì
 chạy tay `backend/sql/dev/proposal-sample.sql` — **không** phải migration, Flyway không đọc file này.
+Muốn thử thanh toán cọc ngay (đơn + proposal `Agreed` + hoá đơn `Deposit` `Unpaid` 2.000đ, đủ 5 kịch bản
+spec 1.4) thì chạy `backend/sql/dev/payment-sample.sql` — cũng chạy tay, chạy lại được nhiều lần.
+Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev/handover-sample.sql`. Hợp đồng `Active`
+(còn hạn / sắp hết hạn / quá hạn) để thử gia hạn, trả kho, phí quá hạn: `backend/sql/dev/rental-sample.sql`.
 
 ## Gửi email (module notification)
 
@@ -141,8 +174,16 @@ chạy tay `backend/sql/dev/proposal-sample.sql` — **không** phải migration
   Ngoài transaction gửi ngay.
 - Có sẵn layout HTML chuẩn: `NotificationEmailLayout.wrap(title, body)` → truyền thẳng vào
   `sendHtml(...)`.
-- Cấu hình: `MAIL_HOST`/`MAIL_PORT`/`MAIL_USERNAME`/`MAIL_PASSWORD` (dev: MailHog `localhost:1025`,
-  xem thư tại `http://localhost:8025`), địa chỉ gửi `MAIL_FROM` (mặc định `noreply@lemar.vn`).
+- Cấu hình: gửi mail thật qua Gmail SMTP — mặc định `smtp.gmail.com:587`, `auth` + STARTTLS bật.
+  `MAIL_USERNAME` = địa chỉ Gmail, `MAIL_PASSWORD` = App Password 16 ký tự (cần bật xác minh 2 bước,
+  tạo tại `https://myaccount.google.com/apppasswords`); chỉ đặt trong `.env`, không commit.
+  `MAIL_FROM` để trống → gửi từ `MAIL_USERNAME` (Gmail không cho gửi từ địa chỉ khác tài khoản đăng
+  nhập); muốn tên hiển thị thì đặt `MAIL_FROM=Tên <địa-chỉ-gmail>`. `MAIL_TIMEOUT_MS` (mặc định
+  `10000`) giới hạn connect/read/write SMTP để SMTP treo không giữ request quá lâu.
+- Thiếu `MAIL_USERNAME`/`MAIL_PASSWORD` thì app vẫn khởi động, nhưng mỗi lần gửi Gmail từ chối xác
+  thực → log ERROR và `send` trả `false` (nghiệp vụ không rollback).
+- Giới hạn Gmail: khoảng 500 người nhận/ngày với tài khoản thường; account seed `@lemar.vn` là địa
+  chỉ giả nên mail gửi tới sẽ bị trả về — test bằng email thật.
 - Caller tự dựng `subject` và `body`.
 - **Known limitation**:
   - Gửi best-effort, không retry/outbox. Process chết sau commit nhưng trước khi gửi xong thì
@@ -161,7 +202,7 @@ chạy tay `backend/sql/dev/proposal-sample.sql` — **không** phải migration
   rollback theo.
 - Một thao tác đổi nhiều entity → gọi `record` một lần cho mỗi entity; ví dụ `RENTAL_ORDER_CANCELED`
   hợp lệ với 4 loại entity (`RentalOrder`, `StorageUnit`, `ProposalFeedback`, `RentalContract`).
-- `AuditAction` (48 action) / `AuditEntityType` (12 loại) khớp Audit action catalog
+- `AuditAction` (50 action) / `AuditEntityType` (12 loại) khớp Audit action catalog
   (`specs/db-table-draft.md` › AuditLog); action không khớp entity → `IllegalStateException`
   (lỗi lập trình, 500).
 - Cột `entity_id` lưu dạng chuỗi; `old_value`/`new_value` là JSONB; `actor_account_id` null =
@@ -192,14 +233,27 @@ chạy tay `backend/sql/dev/proposal-sample.sql` — **không** phải migration
   [routes/media/delete-batch.md](routes/media/delete-batch.md),
   [routes/media/attach-batch.md](routes/media/attach-batch.md).
 
+## Cron
+
+| Job | Chu kỳ (property) | Làm gì |
+|---|---|---|
+| `AppointmentNoShowJob` | `booking.appointment-no-show.fixed-delay-ms` (5') | huỷ lịch check-in no-show — [booking/appointment-no-show.md](booking/appointment-no-show.md) |
+| `BookingExpiryJob` | `booking.expiry.fixed-delay-ms` (5') | request hết hạn, hoá đơn quá hạn, catch-all đơn, nhắc sắp hết hạn — [booking/deposit-payment.md](booking/deposit-payment.md#cron-flow-1) |
+| `PaymentReconcileJob` | `payment.reconcile.fixed-delay-ms` (5') | đối soát giao dịch `Pending` quá 20' bằng `querydr` — [payment.md](payment.md#đối-soát-querydr) |
+
 ## Chạy & kiểm thử
 
 ```bash
-docker compose up -d                  # Postgres + Redis + MailHog
+docker compose up -d                  # Postgres + Redis
 cd backend && ./mvnw spring-boot:run  # chạy app
 
 ./mvnw -B verify                      # checkstyle + test + module boundary + coverage ≥80%
 ```
+
+> Test không bao giờ gửi mail thật: `src/test/resources/application.properties` ghim SMTP về `localhost:2`
+> (connection refused) vì `application.yml` đọc `../.env` của dev — nơi có thể có Gmail App Password thật. Test cần
+> kiểm nội dung mail thì `@MockBean JavaMailSender`. Hai cron mới để initial delay 1 giờ trong test để không chạy
+> chen giữa test.
 
 > Lưu ý: `MigrationTest` và `SchemaValidationTest` tự skip khi máy không có Docker/Testcontainers,
 > nên `verify` local có thể xanh mà chưa validate Flyway/schema — CI mới chạy đủ hai test này.
@@ -249,6 +303,8 @@ bấm **Authorize** và dán token (không cần prefix `Bearer `) để gọi A
 | [booking/conversion.md](booking/conversion.md) | Convert request → đơn + proposal, claim sau xác minh |
 | [booking/proposal-flow.md](booking/proposal-flow.md) | Đồng ý / từ chối đề xuất khoang, đề xuất lại: sơ đồ, state, invariant |
 | [booking/appointment-no-show.md](booking/appointment-no-show.md) | Cron no-show check-in, guard `noShowDue`, audit/notification |
+| [booking/deposit-payment.md](booking/deposit-payment.md) | Thanh toán hoá đơn + chốt cọc (IPN/querydr) + cron Flow 1 |
+| [booking/appointment-booking.md](booking/appointment-booking.md) | Đặt lịch check-in: cửa sổ ngày, 3 khung, capacity, HandoverRecord |
 | [handover/records.md](handover/records.md) | `HandoverRecord` + `RentalContract`, `due_at` Flow 2.1, luật huỷ |
 | [flows/cancellation-cascade.md](flows/cancellation-cascade.md) | Cascade huỷ đơn: entity, khoang, audit, notification |
 | [routes.md](routes.md) | Index toàn bộ route hiện có |

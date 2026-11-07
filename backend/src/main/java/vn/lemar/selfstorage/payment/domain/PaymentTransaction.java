@@ -69,6 +69,8 @@ public class PaymentTransaction {
     }
 
     public PaymentTransaction(Long invoiceId, String vnpTxnRef, BigDecimal amount, String transactionContent) {
+        // VNPay chỉ nhận mốc giây (yyyyMMddHHmmss); cắt sẵn để vnp_CreateDate và querydr dùng đúng một mốc.
+        this.createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         this.invoiceId = invoiceId;
         this.vnpTxnRef = vnpTxnRef;
         this.amount = amount;
@@ -122,6 +124,14 @@ public class PaymentTransaction {
 
     public String getGatewayTransactionNo() {
         return gatewayTransactionNo;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public String getTransactionContent() {
+        return transactionContent;
     }
 
     public Instant getPaidAt() {

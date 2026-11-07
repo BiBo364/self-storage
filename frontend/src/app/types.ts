@@ -24,7 +24,22 @@ export type View =
   | "fm-contracts"
   | "fm-orders"
   | "fs-schedule"
-  | "fs-handover";
+  | "fs-handover"
+  | "fs-handovers"
+  | "fs-returns"
+  | "fs-return-detail"
+  | "fs-support"
+  | "handover"
+  | "payment-result"
+  | "support"
+  | "bom-dashboard"
+  | "bom-facilities"
+  | "bom-pricing"
+  | "bom-invoices"
+  | "admin-accounts"
+  | "admin-permissions"
+  | "admin-login-events"
+  | "admin-audit-logs";
 export type Navigate = (path: string) => void;
 export type NoticeTone = "info" | "success" | "error" | "pending";
 export type Notice = { tone: NoticeTone; message: string } | null;

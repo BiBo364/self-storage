@@ -17,8 +17,8 @@ import lombok.NoArgsConstructor;
  * Hoá đơn ({@code specs/db-table-draft.md} › Invoice). B3 chỉ tạo hoá đơn {@code Deposit} gắn đơn thuê
  * và huỷ hoá đơn {@code Unpaid} trong Cancellation Cascade; thanh toán thuộc B4.
  *
- * <p>Cột {@code contract_id} không map: hoá đơn cọc gắn {@code order_id}, CHECK của V1 buộc đúng một
- * trong hai FK được set.
+ * <p>CHECK của V1 buộc đúng một trong hai FK được set: hoá đơn cọc gắn {@code order_id}, hoá đơn tháng đầu
+ * (Flow 2.3) và các hoá đơn sau khi có hợp đồng gắn {@code contract_id}.
  */
 @Entity
 @Table(name = "invoices")
@@ -32,6 +32,9 @@ public class Invoice {
 
     @Column(name = "order_id")
     private Long orderId;
+
+    @Column(name = "contract_id")
+    private Long contractId;
 
     @Column(name = "customer_id", nullable = false)
     private Long customerId;
@@ -86,6 +89,59 @@ public class Invoice {
     public static Invoice depositSupplement(RentalOrder order, String code, String title, String description,
                                             BigDecimal amount, Instant dueDate) {
         return new Invoice(order, InvoiceType.DEPOSIT_SUPPLEMENT, code, title, description, amount, dueDate);
+    }
+
+    /**
+     * Hoá đơn gắn hợp đồng ({@code contract_id}) — tháng đầu ở Flow 2.3, gia hạn/phí ở Flow 3/6.
+     */
+    public static Invoice forContract(Long contractId, Long customerId, InvoiceType type, String code, String title,
+                                      String description, BigDecimal amount, Instant dueDate) {
+        Invoice invoice = new Invoice();
+        invoice.contractId = contractId;
+        invoice.customerId = customerId;
+        invoice.code = code;
+        invoice.title = title;
+        invoice.type = type;
+        invoice.description = description;
+        invoice.status = InvoiceStatus.UNPAID;
+        invoice.amount = amount;
+        invoice.createdAt = Instant.now();
+        invoice.dueDate = dueDate;
+        return invoice;
+    }
+
+    /** Cổng xác nhận thanh toán: chỉ từ {@code Unpaid}. */
+    public void markPaid() {
+        if (status != InvoiceStatus.UNPAID) {
+            throw new IllegalStateException("Hoá đơn " + id + " không thanh toán được ở trạng thái " + status);
+        }
+        this.status = InvoiceStatus.PAID;
+    }
+
+    /** Cron quá {@code due_date}: chỉ từ {@code Unpaid}. */
+    public void expire() {
+        if (status != InvoiceStatus.UNPAID) {
+            throw new IllegalStateException("Hoá đơn " + id + " không hết hạn được ở trạng thái " + status);
+        }
+        this.status = InvoiceStatus.EXPIRED;
+    }
+
+    /** Phí quá hạn cộng dồn: cập nhật số tiền/hạn của hoá đơn {@code Penalty} còn {@code Unpaid}. */
+    public void reprice(BigDecimal newAmount, Instant newDueDate) {
+        if (status != InvoiceStatus.UNPAID) {
+            throw new IllegalStateException("Hoá đơn " + id + " không đổi được số tiền ở trạng thái " + status);
+        }
+        this.amount = newAmount;
+        this.dueDate = newDueDate;
+    }
+
+    public boolean isUnpaid() {
+        return status == InvoiceStatus.UNPAID;
+    }
+
+    /** Hoá đơn giữ khoang (cọc đầu hoặc cọc bổ sung khi đổi khoang). */
+    public boolean isDepositKind() {
+        return type == InvoiceType.DEPOSIT || type == InvoiceType.DEPOSIT_SUPPLEMENT;
     }
 
     /** Cancellation Cascade: chỉ hoá đơn {@code Unpaid} chuyển {@code Canceled}; đã {@code Expired} giữ nguyên. */

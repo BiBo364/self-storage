@@ -1,4 +1,4 @@
-import { Bell, CalendarDays } from "lucide-react";
+import { Bell, CalendarDays, ClipboardCheck, LifeBuoy, Undo2 } from "lucide-react";
 import { authGateway } from "../../app/auth";
 import { useUnreadNotificationCount } from "../../app/notifications";
 import type { Navigate, View } from "../../app/types";
@@ -12,6 +12,14 @@ const navigation: (WorkspaceNavItem & { view: View })[] = [
     view: "fs-schedule",
     icon: CalendarDays,
   },
+  {
+    label: "Đơn đang bàn giao",
+    path: "/staff/handovers",
+    view: "fs-handovers",
+    icon: ClipboardCheck,
+  },
+  { label: "Trả kho", path: "/staff/returns", view: "fs-returns", icon: Undo2 },
+  { label: "Yêu cầu hỗ trợ", path: "/staff/support", view: "fs-support", icon: LifeBuoy },
   { label: "Thông báo", path: "/notifications", view: "notifications", icon: Bell },
 ];
 
@@ -31,7 +39,8 @@ export function FsShell({
   const session = authGateway.getSession();
   const unreadNotifications = useUnreadNotificationCount();
   // Checklist bàn giao là trang chi tiết của lịch làm việc — highlight mục cha.
-  const activeView = view === "fs-handover" ? "fs-schedule" : view;
+  const activeView =
+    view === "fs-handover" ? "fs-handovers" : view === "fs-return-detail" ? "fs-returns" : view;
   const activeItem = navigation.find((item) => item.view === activeView);
   const navItems = navigation.map((item) =>
     item.path === "/notifications" ? { ...item, badge: unreadNotifications } : item,
