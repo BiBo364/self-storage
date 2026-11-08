@@ -401,7 +401,8 @@ public class TenancyService {
         List<ContractBill> bills = invoices.bills(c.id());
         boolean extensionPending = bills.stream().anyMatch(b -> b.unpaid() && "Extension".equals(b.type()));
         return new RentalView(c.id(), c.code(), c.orderId(), c.unitId(), unitCode(c), c.facilityId(), c.status(),
-                c.monthlyPrice(), c.depositAmount(), c.period(), c.startDate(), c.endDate(), daysLeft, daysLeft < 0,
+                c.monthlyPrice(), c.depositAmount(), c.period(), c.startDate(), c.endDate(), daysLeft,
+                c.active() && daysLeft < 0,
                 bills, contracts.accessKeys(c.id()), open, c.active() && open == null && !extensionPending,
                 c.active() && open == null && !extensionPending);
     }

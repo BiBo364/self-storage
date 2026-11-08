@@ -164,7 +164,10 @@ public class InvoicePaymentService {
                     return unitCheck;
                 }
             }
-        } else if (!paymentService.invoicesWithOpenSession(List.of(invoiceId)).isEmpty()) {
+        }
+        // Mọi loại hoá đơn (kể cả tháng đầu trên đơn InProgress): phiên cũ còn mở — bấm đúp, hoặc bước 0 không huỷ
+        // được ở cổng — thì không mở phiên thứ hai.
+        if (!paymentService.invoicesWithOpenSession(List.of(invoiceId)).isEmpty()) {
             return PayResult.rejected(MSG_OWN_SESSION_OPEN, false);
         }
 
@@ -183,6 +186,11 @@ public class InvoicePaymentService {
         boolean maintenance = "Maintenance".equals(unit.status());
         if (!unit.isAvailable()) {
             invoice.cancel();
+            // Đơn đã cọc (đổi khoang, khoang cũ đã nhả) mất khoang mới → FM phải đề xuất lại được, và đơn không được
+            // đặt lịch check-in trên khoang của người khác.
+            if (order.holdsUnit()) {
+                order.requireReproposal();
+            }
             String reason = maintenance ? MSG_UNIT_MAINTENANCE : MSG_UNIT_TAKEN;
             auditRecorder.record(new AuditEntry(AuditAction.INVOICE_CANCELED, AuditEntityType.INVOICE,
                     String.valueOf(invoice.getId()), Map.of("status", InvoiceStatus.UNPAID.dbValue()),

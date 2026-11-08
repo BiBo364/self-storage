@@ -229,11 +229,20 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
   }
 
   function upsert(row: FacilityRow) {
-    setFacilities((list) =>
-      list.some((item) => item.id === row.id)
-        ? list.map((item) => (item.id === row.id ? row : item))
-        : [...list, row],
-    );
+    setFacilities((list) => {
+      // Mỗi FM một cơ sở — backend đã gỡ FM khỏi cơ sở cũ, gỡ theo ở danh sách hiện tại.
+      const cleared =
+        row.fmAccountId === null
+          ? list
+          : list.map((item) =>
+              item.id !== row.id && item.fmAccountId === row.fmAccountId
+                ? { ...item, fmAccountId: null, fmEmail: null }
+                : item,
+            );
+      return cleared.some((item) => item.id === row.id)
+        ? cleared.map((item) => (item.id === row.id ? row : item))
+        : [...cleared, row];
+    });
   }
 
   const openFacility = facilities.find((facility) => facility.id === openId) ?? null;

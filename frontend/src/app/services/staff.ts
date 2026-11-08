@@ -223,6 +223,8 @@ export type ReturnRequestView = {
   appointmentStart: string | null;
   cancelReason: string | null;
   createdAt: string | null;
+  /** Mốc FS xác nhận khách đến buổi trả kho; `null` = chưa đến / chưa có lịch. */
+  appointmentArrivedAt: string | null;
 };
 
 export function fetchStaffReturnRequests(): Promise<ReturnRequestView[]> {

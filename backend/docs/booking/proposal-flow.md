@@ -26,7 +26,7 @@ flowchart TB
     A6 -- có --> A6H{"Đơn giữ khoang?"}
     A6H -- "có (đổi khoang sau khi cọc)" --> A9["Nhả khoang cũ nếu Reserved<br/>audit UNIT_CHANGE_RELEASED<br/>fee = fee.unit_change"]
     A6H -- "không (cọc Paid, khoang cũ bị<br/>đơn khác giữ trước — đơn Pending)" --> A9P["Không nhả khoang cũ<br/>fee = 0"]
-    A9 --> A10["delta = giá mới × months + fee<br/>− tổng Paid (Deposit + DepositSupplement)"]
+    A9 --> A10["delta = giá mới × months + fee<br/>− cọc thực giữ (Paid − đã hoàn)"]
     A9P --> A10
     A10 --> A11{"delta"}
     A11 -- "> 0" --> A12["Invoice DepositSupplement / Unpaid<br/>notify khách UNIT_CHANGE_PAYMENT_REQUIRED"]
@@ -99,7 +99,8 @@ flowchart TB
 
 - Một `Deposit` active (`Unpaid`/`Paid`) + một `DepositSupplement` `Unpaid` trên mỗi đơn — partial unique index của V11.
 - Cọc = giá hiệu lực × `invoice.deposit_months`; hạn = `min(now + deposit_due_days, expires_at)`.
-- Delta = cọc khoang mới + `fee.unit_change` (chỉ khi đơn giữ khoang) − tổng `Paid` của `Deposit` + `DepositSupplement`.
+- Delta = cọc khoang mới + `fee.unit_change` (chỉ khi đơn giữ khoang) − cọc thực đang giữ (tổng `Paid` của `Deposit` + `DepositSupplement` trừ các khoản hoàn thủ công đã ghi nhận trên các
+  hoá đơn đó — đổi sang khoang rẻ hơn rồi đổi tiếp thì không tính lại phần đã hoàn).
 - Chỉ nhả khoang khi đơn thực sự giữ khoang (`Deposited`/`Scheduled`/`InProgress`) — cả khi huỷ đơn lẫn khi đổi
   khoang (`releaseReplacedUnit`).
 - FM đề xuất lại huỷ hoá đơn `Deposit`/`DepositSupplement` `Unpaid` của đơn và **huỷ phiên payOS/VNPay của các hoá đơn

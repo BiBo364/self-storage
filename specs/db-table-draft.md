@@ -97,6 +97,7 @@ Bảng `facility_unit_type` (V4).
 - unit_type_id (N - 1: UnitType)
 - size - kích thước khoang
 - monthly_price (Decimal, nullable) - Giá override được BOM phê duyệt
+- reserved_order_id (N - 1: RentalOrder, nullable) - đơn đang giữ khoang khi `Reserved`; chỉ đơn này nhả được khoang. NULL ở trạng thái khác (và khoang `Reserved` trước V25 không xác định được đơn giữ)
 - maintenance_started_at (nullable) - chỉ do Flow 2.a set khi `Maintenance` phát sinh từ trả kho, để cron tính `unit.maintenance_days`; FM chuyển `Maintenance` do sự cố thì để trống
 - status:
   - Available: khoang sẵn sàng cho thuê

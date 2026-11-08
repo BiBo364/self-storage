@@ -71,7 +71,8 @@ public class PayOsGateway implements PaymentGateway {
 
     @Autowired
     public PayOsGateway(PayOsProperties properties, ObjectProvider<RestClient.Builder> restClientBuilder) {
-        this(properties, restClientBuilder.getIfAvailable(RestClient::builder));
+        this(properties, restClientBuilder.getIfAvailable(RestClient::builder)
+                .requestFactory(GatewayHttp.requestFactory()));
     }
 
     PayOsGateway(PayOsProperties properties, RestClient.Builder builder) {

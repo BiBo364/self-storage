@@ -1,5 +1,6 @@
 package vn.lemar.selfstorage.booking.application;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -52,9 +53,12 @@ public class BookingExpiryService {
     static final String REASON_CHECKIN_BOOKING_OVERDUE = "Quá hạn đặt lịch check-in";
     static final String REASON_NO_SHOW_HOLD = "Không đến nhận kho quá hạn giữ";
     static final String REASON_HANDOVER_OVERDUE = "Chưa hoàn tất bàn giao trong hạn";
+    /** Đơn đã trả cọc nhưng còn {@code Pending} (khoang bị giữ trước, chưa xếp được khoang khác) tới hạn. */
+    static final String REASON_PAID_DEPOSIT_UNSERVED = "Hết hạn chờ xếp khoang sau khi đã cọc";
     /** Lý do huỷ do quá hạn — notification {@code RENTAL_ORDER_CANCELED} ghi "đã hết hạn" thay cho "đã bị hủy". */
     static final java.util.Set<String> EXPIRY_REASONS = java.util.Set.of(REASON_DEPOSIT_OVERDUE,
-            REASON_PROPOSAL_OVERDUE, REASON_CHECKIN_BOOKING_OVERDUE, REASON_NO_SHOW_HOLD, REASON_HANDOVER_OVERDUE);
+            REASON_PROPOSAL_OVERDUE, REASON_CHECKIN_BOOKING_OVERDUE, REASON_NO_SHOW_HOLD, REASON_HANDOVER_OVERDUE,
+            REASON_PAID_DEPOSIT_UNSERVED);
     static final String POLICY_REMINDER_DAYS = "order.expiry_reminder_days";
 
     private static final Set<RentalRequestStatus> OPEN_REQUEST = EnumSet.of(RentalRequestStatus.Pending,
@@ -168,6 +172,21 @@ public class BookingExpiryService {
                 .map(Invoice::getId).toList();
         if (!paymentService.invoicesWithOpenSession(unpaid).isEmpty()) {
             return false;
+        }
+        // Đơn Pending đã thu cọc (khoang bị đơn khác giữ trước, FM chưa xếp khoang khác): cọc không bị giữ lại —
+        // huỷ với lý do riêng và báo FM hoàn.
+        BigDecimal held = order.getStatus() == RentalOrderStatus.PENDING
+                ? invoiceRepository.netDepositHeld(orderId) : BigDecimal.ZERO;
+        if (held.signum() > 0) {
+            cancellation.cancel(order, REASON_PAID_DEPOSIT_UNSERVED, null);
+            auditRecorder.record(new AuditEntry(AuditAction.DEPOSIT_REFUND_REQUIRED, AuditEntityType.RENTAL_ORDER,
+                    String.valueOf(orderId), Map.of("depositPaid", held), Map.of("refundAmount", held),
+                    REASON_PAID_DEPOSIT_UNSERVED, null));
+            Map<String, String> values = Map.of("orderCode", OrderNotifier.orderCode(order),
+                    "refundAmount", held.toPlainString());
+            orderNotifier.notifyFacilityManager(orderId, NotificationType.DEPOSIT_REFUND_REQUIRED, values);
+            orderNotifier.notifyCustomer(order, NotificationType.DEPOSIT_REFUND_PENDING, values);
+            return true;
         }
         cancellation.cancel(order, catchAllReason(order), null);
         return true;

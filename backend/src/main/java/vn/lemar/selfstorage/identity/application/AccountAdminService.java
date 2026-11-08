@@ -144,6 +144,11 @@ public class AccountAdminService {
         if (role != null && !role.equals(before.role()) && !"FS".equals(role)) {
             jdbc.update("delete from account_facility_assignments where account_id = ?", id);
         }
+        // Rời role FM → bỏ khỏi vị trí quản lý cơ sở: FacilityAccess đọc facilities.fm_account_id nên tài khoản cũ
+        // vẫn nhận thông báo FM, và lấy lại quyền ngay nếu sau này được đổi về FM.
+        if (role != null && "FM".equals(before.role()) && !"FM".equals(role)) {
+            jdbc.update("update facilities set fm_account_id = null where fm_account_id = ?", id);
+        }
         AccountRow after = get(id);
         Map<String, Object> oldValue = new HashMap<>();
         oldValue.put("role", before.role());
@@ -205,7 +210,7 @@ public class AccountAdminService {
                         ? " và " + (items.size() - MAX_OPEN_ITEMS_SHOWN) + " việc khác" : "";
                 throw new IllegalStateException("FS còn việc chưa đóng tại cơ sở "
                         + facilityAccess.code(facilityId).orElse("#" + facilityId) + ": " + shown + more
-                        + ". FM phân công lại hoặc đóng các việc này trước khi gỡ FS khỏi cơ sở");
+                        + ". Xử lý các việc này trước khi gỡ FS khỏi cơ sở");
             }
         }
     }

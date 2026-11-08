@@ -86,7 +86,15 @@ class InvoicePaymentSettlement {
         if (!invoice.isUnpaid()) {
             LOG.error("Xác nhận muộn: giao dịch {} đã thu {} cho hoá đơn {} ở trạng thái {} — cần xử lý thủ công",
                     event.vnpTxnRef(), event.amount(), invoice.getCode(), invoice.getStatus());
-            if (order != null && invoice.isDepositKind()) {
+            if (order != null && invoice.isDepositKind() && order.getStatus().isClosed()) {
+                // Đơn đã huỷ/đóng mà cọc vẫn vào → không còn khoang nào để xếp, FM hoàn.
+                orderNotifier.notifyFacilityManager(order.getId(), NotificationType.DEPOSIT_REFUND_REQUIRED,
+                        Map.of("orderCode", OrderNotifier.orderCode(order), "refundAmount",
+                                event.amount().toPlainString()));
+            } else if (order != null && invoice.isDepositKind()) {
+                if (order.holdsUnit()) {
+                    order.requireReproposal();
+                }
                 orderNotifier.notifyFacilityManager(order.getId(), NotificationType.PROPOSAL_REPROPOSAL_REQUIRED,
                         Map.of("orderCode", OrderNotifier.orderCode(order), "unitCode", unitCode(order)));
             } else if (order != null) {
@@ -141,7 +149,7 @@ class InvoicePaymentSettlement {
             LOG.error("Đơn {} đã thu cọc nhưng chưa gán khoang", order.getId());
             return false;
         }
-        if (storageUnitService.reserveIfAvailable(order.getUnitId())) {
+        if (storageUnitService.reserveIfAvailable(order.getUnitId(), order.getId())) {
             auditRecorder.record(new AuditEntry(AuditAction.STORAGE_UNIT_RESERVED, AuditEntityType.STORAGE_UNIT,
                     String.valueOf(order.getUnitId()), Map.of("status", "Available"), Map.of("status", "Reserved",
                     "orderId", order.getId()), null, null));
@@ -151,6 +159,9 @@ class InvoicePaymentSettlement {
         }
         LOG.error("Đơn {} đã thu cọc nhưng khoang {} không còn Available — cần xếp khoang khác/hoàn tiền thủ công",
                 order.getId(), order.getUnitId());
+        if (order.holdsUnit()) {
+            order.requireReproposal();
+        }
         orderNotifier.notifyFacilityManager(order.getId(), NotificationType.PROPOSAL_REPROPOSAL_REQUIRED,
                 Map.of("orderCode", OrderNotifier.orderCode(order), "unitCode", unitCode(order)));
         return false;

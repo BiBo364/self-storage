@@ -288,6 +288,26 @@ class PostRentalIntegrationTest {
     }
 
     @Test
+    void expiredRentDebtIsFoldedIntoSettlement() {
+        Seed seed = seedActive(LocalDate.now(VN).plusMonths(1));
+        ContractBill rent = unpaidRent(seed);
+        // Tháng thuê quá hạn không trả: cron chuyển Expired — không ai trả được nữa, nợ vẫn còn.
+        jdbc.update("update invoices set status = 'Expired' where id = ?", rent.invoiceId());
+        ReturnRequestView request = assignedAndArrived(seed);
+
+        loginAs(FS);
+        checkout.inspect(request.id(), new Inspection(true, false, BigDecimal.ZERO, null, 2, List.of(), null));
+        assertThat(checkout.forStaff(request.id()).unpaidContractInvoices()).isEqualByComparingTo("100000");
+        CheckoutView done = checkout.confirm(request.id());
+
+        // Cọc 500.000 − 100.000 nợ thuê = hoàn 400.000 (trước đây hoàn đủ 500.000).
+        assertThat(done.totalCharges()).isEqualByComparingTo("100000");
+        assertThat(done.refundAmount()).isEqualByComparingTo("400000");
+        assertThat(invoiceStatus(rent.invoiceId())).isEqualTo("Canceled");
+        assertThat(paidPenalty(seed.contractId, "PEN")).isEqualByComparingTo("100000");
+    }
+
+    @Test
     void penaltiesAreSplitPerCategoryAndUncoveredPartGoesIntoOneShortfall() {
         Seed seed = seedActive(LocalDate.now(VN).plusMonths(1));
         unpaidRent(seed);
@@ -588,10 +608,11 @@ class PostRentalIntegrationTest {
                 + "'Small'), current_date, 3, 'Converted', " + unitId + ") returning id");
         long orderId = id("insert into rental_orders (request_id, customer_id, unit_id, status, expires_at) values ("
                 + requestId + ", " + customerId + ", " + unitId + ", 'Done', now() + interval '20 days') returning id");
+        // end_date = start_date + period tháng − 1 ngày (bất biến của hợp đồng thật, handover/records.md).
         long contractId = id("insert into rental_contracts (order_id, customer_id, unit_id, code, terms_version, "
                 + "monthly_price, deposit_amount, period, start_date, end_date, signed_at, status) values (" + orderId
                 + ", " + customerId + ", " + unitId + ", 'HD-T-" + suffix + "', 'builtin-v1', 100000, 500000, 3, '"
-                + endDate.minusMonths(3) + "', '" + endDate + "', now(), 'Active') returning id");
+                + endDate.minusMonths(3).plusDays(1) + "', '" + endDate + "', now(), 'Active') returning id");
         jdbc.update("insert into unit_access_keys (unit_id, contract_id, access_type, quantity) values (?, ?, "
                 + "'PhysicalKey', 2)", unitId, contractId);
         jdbc.update("insert into unit_access_keys (unit_id, contract_id, access_type, code_hash) values (?, ?, "

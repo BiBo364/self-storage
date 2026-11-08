@@ -151,4 +151,17 @@ public class Invoice {
         }
         this.status = InvoiceStatus.CANCELED;
     }
+
+    /** Tiền thuê tháng đã quá hạn ({@code Expired}) được gộp vào quyết toán trả kho → {@code Canceled}. */
+    public void foldExpiredRent() {
+        if (status != InvoiceStatus.EXPIRED || type != InvoiceType.RENTAL) {
+            throw new IllegalStateException("Hoá đơn " + id + " không phải tiền thuê đã quá hạn");
+        }
+        this.status = InvoiceStatus.CANCELED;
+    }
+
+    /** Tiền thuê tháng khách chưa trả và đã quá hạn — vẫn là nợ, trả kho thì trừ vào cọc. */
+    public boolean isExpiredRent() {
+        return status == InvoiceStatus.EXPIRED && type == InvoiceType.RENTAL;
+    }
 }

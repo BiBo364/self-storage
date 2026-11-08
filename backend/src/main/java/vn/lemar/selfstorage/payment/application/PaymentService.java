@@ -125,8 +125,7 @@ public class PaymentService {
         if (!transaction.isPending()) {
             if (notification.success() && transaction.getStatus() == PaymentStatus.FAILED) {
                 // Phiên đã bị huỷ/đóng phía mình nhưng khách vẫn chuyển khoản (vd quét QR cũ) — tiền đã vào.
-                LOG.error("Thanh toán muộn: giao dịch {} đã đóng ({}) nhưng cổng báo đã thu {} — cần hoàn tiền thủ "
-                        + "công", notification.txnRef(), transaction.getFailureReason(), notification.amount());
+                settleLate(transaction, notification.transactionNo(), notification.paidAt(), notification.payload());
             }
             return NotificationResult.ALREADY_SETTLED;
         }
@@ -142,6 +141,19 @@ public class PaymentService {
                     transaction.getAmount(), reason, transaction.getId()));
         }
         return NotificationResult.ACCEPTED;
+    }
+
+    /**
+     * Tiền vào trên giao dịch đã đóng: ghi {@code SUCCESS} + phát {@link PaymentSucceeded} — booking chốt hoá đơn nếu
+     * còn chờ, không thì báo FM hoàn (nhánh xác nhận muộn). Số này tính vào {@link #refundable} nên FM ghi nhận hoàn
+     * được. Gọi lặp không ghi lại: giao dịch đã {@code SUCCESS} thì caller không vào đây.
+     */
+    private void settleLate(PaymentTransaction transaction, String transactionNo, Instant paidAt, String payload) {
+        LOG.error("Thanh toán muộn: giao dịch {} đã đóng ({}) nhưng cổng báo đã thu {} — chốt / hoàn thủ công",
+                transaction.getVnpTxnRef(), transaction.getFailureReason(), transaction.getAmount());
+        transaction.markLateSucceeded(transactionNo, paidAt == null ? Instant.now() : paidAt, payload);
+        events.publishEvent(new PaymentSucceeded(transaction.getInvoiceId(), transaction.getVnpTxnRef(),
+                transaction.getAmount(), transaction.getPaidAt(), transaction.getId()));
     }
 
     /** Ảnh chụp trạng thái giao dịch cho caller (không lộ entity ra ngoài module). */
@@ -342,6 +354,10 @@ public class PaymentService {
 
         // Chốt chặn idempotency: VNPay retry tới 10 lần, lần thứ hai trở đi không được ghi lại.
         if (!transaction.isPending()) {
+            if (gatewayReportedSuccess(params) && transaction.getStatus() == PaymentStatus.FAILED) {
+                settleLate(transaction, params.get("vnp_TransactionNo"), parsePayDate(params.get("vnp_PayDate")),
+                        toJson(params));
+            }
             return IpnResponse.alreadyConfirmed();
         }
 

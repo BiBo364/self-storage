@@ -20,6 +20,6 @@ class StaffSupportOpenWork implements StaffOpenWork {
         return jdbc.query("""
                 select id from support_requests
                 where assigned_staff_id = ? and facility_id = ? and status = 'Assigned' order by id""",
-                (rs, rowNum) -> "yêu cầu hỗ trợ #" + rs.getLong(1), staffId, facilityId);
+                (rs, rowNum) -> "yêu cầu hỗ trợ #" + rs.getLong(1) + " (FM giao lại)", staffId, facilityId);
     }
 }

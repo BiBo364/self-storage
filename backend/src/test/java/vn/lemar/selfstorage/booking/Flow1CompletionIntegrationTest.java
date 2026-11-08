@@ -199,6 +199,32 @@ class Flow1CompletionIntegrationTest {
     }
 
     @Test
+    void lateWebhookOnClosedSessionRecordsMoneyAndAsksFmToRefund() {
+        Seed seed = seedPendingOrder();
+        invoicePaymentService.start(seed.invoiceId, customerId, "127.0.0.1");
+        String ref = txnRef(seed.invoiceId);
+        when(gateway.cancel(eq(ref), anyString())).thenReturn(true);
+        cancelService.cancelByCustomer(seed.orderId, customerId);
+        int refundNotices = notificationsFor("fm1@lemar.vn", "DEPOSIT_REFUND_REQUIRED");
+
+        // Khách vẫn quét QR cũ sau khi link đã huỷ — tiền đã vào.
+        when(gateway.parseNotification(anyString())).thenReturn(java.util.Optional.of(new GatewayNotification(ref,
+                AMOUNT, "FT" + SEQ.incrementAndGet(), Instant.now(), true, "{}")));
+        assertThat(paymentService.handleNotification("{}"))
+                .isEqualTo(PaymentService.NotificationResult.ALREADY_SETTLED);
+
+        assertThat(jdbc.queryForObject("select status from payment_transactions where vnp_txn_ref = ?", String.class,
+                ref)).isEqualTo("Success");
+        assertThat(invoiceStatus(seed.invoiceId)).isEqualTo("Canceled");
+        assertThat(paymentService.refundable(seed.invoiceId)).isEqualByComparingTo(AMOUNT);
+        assertThat(notificationsFor("fm1@lemar.vn", "DEPOSIT_REFUND_REQUIRED")).isEqualTo(refundNotices + 1);
+        // Gọi lặp không ghi nhận lần hai.
+        assertThat(paymentService.handleNotification("{}"))
+                .isEqualTo(PaymentService.NotificationResult.ALREADY_SETTLED);
+        assertThat(notificationsFor("fm1@lemar.vn", "DEPOSIT_REFUND_REQUIRED")).isEqualTo(refundNotices + 1);
+    }
+
+    @Test
     void webhookNotificationSettlesDepositOnce() {
         Seed seed = seedPendingOrder();
         invoicePaymentService.start(seed.invoiceId, customerId, "127.0.0.1");
@@ -596,6 +622,26 @@ class Flow1CompletionIntegrationTest {
         assertThat(jdbc.queryForObject("select status from rental_requests where id = ?", String.class, requestId))
                 .isEqualTo("Expired");
         assertThat(expiryService.expireRequest(requestId)).isFalse();
+    }
+
+    @Test
+    void expiredPendingOrderWithPaidDepositAsksFmToRefundNetDeposit() {
+        Seed seed = seedPendingOrder();
+        // Cọc đã thu nhưng khoang bị giữ trước → đơn ở lại Pending; FM đã hoàn 200.000 trước đó.
+        jdbc.update("update invoices set status = 'Paid' where id = ?", seed.invoiceId);
+        jdbc.update("insert into payment_transactions (invoice_id, vnp_txn_ref, amount, direction, status, paid_at) "
+                + "values (?, ?, 200000, 'REFUND', 'Success', now())", seed.invoiceId, "RF-" + seed.invoiceId);
+        jdbc.update("update rental_orders set expires_at = now() - interval '1 minute' where id = ?", seed.orderId);
+        int refundNotices = notificationsFor("fm1@lemar.vn", "DEPOSIT_REFUND_REQUIRED");
+
+        assertThat(expiryService.cancelExpiredOrder(seed.orderId)).isTrue();
+
+        assertThat(jdbc.queryForObject("select cancel_reason from rental_orders where id = ?", String.class,
+                seed.orderId)).isEqualTo("Hết hạn chờ xếp khoang sau khi đã cọc");
+        assertThat(notificationsFor("fm1@lemar.vn", "DEPOSIT_REFUND_REQUIRED")).isEqualTo(refundNotices + 1);
+        assertThat(jdbc.queryForObject("select (new_value ->> 'refundAmount')::numeric from audit_logs where action = "
+                + "'DEPOSIT_REFUND_REQUIRED' and entity_id = ? order by id desc limit 1", BigDecimal.class,
+                String.valueOf(seed.orderId))).isEqualByComparingTo("300000");
     }
 
     @Test

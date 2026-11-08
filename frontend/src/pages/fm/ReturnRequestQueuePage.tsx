@@ -188,7 +188,12 @@ function ReturnRow({
             <User size={14} /> {assigned ? staffLabel(assigned) : `FS #${request.assignedStaffId}`}
           </span>
         )}
-        {staff.length === 0 ? (
+        {request.appointmentArrivedAt !== null ? (
+          // Buổi trả kho đã bắt đầu — backend từ chối (409) phân công lại.
+          <span className="text-label text-muted">
+            Khách đã đến lúc {formatDateTime(request.appointmentArrivedAt)} — không phân công lại.
+          </span>
+        ) : staff.length === 0 ? (
           <span className="text-label text-muted">Cơ sở chưa có FS để phân công.</span>
         ) : (
           <div className="flex flex-wrap items-center gap-2">

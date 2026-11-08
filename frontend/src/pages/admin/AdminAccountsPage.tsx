@@ -530,7 +530,9 @@ function EditPanel({
     try {
       onSaved(await setAccountFacilities(account.id, facilityIds), "Đã gán cơ sở cho FS.");
     } catch (caught) {
-      setError(errorMessage(caught));
+      // Lưu bị từ chối thì không có gì đổi — ô chọn quay về cơ sở đang gán thật.
+      setFacilityIds(account.facilityIds);
+      setError(`Chưa lưu: ${errorMessage(caught)}`);
     } finally {
       setBusy(null);
     }

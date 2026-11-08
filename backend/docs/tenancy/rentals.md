@@ -41,7 +41,7 @@ Route trả kho tại cơ sở (`…/checkout`) thuộc [checkout/return.md](../
 
 `GET /api/customer/rentals` trả mọi hợp đồng `Active` của khách, gồm:
 - hoá đơn của hợp đồng, quyền truy cập đã cấp, yêu cầu trả kho đang mở;
-- `daysLeft`, `overdue` (đã qua `end_date`);
+- `daysLeft`, `overdue` (hợp đồng `Active` đã qua `end_date`; hợp đồng đã kết thúc luôn `false`);
 - yêu cầu trả kho (`ReturnRequestView`) có `appointmentStart` và `appointmentArrivedAt` (mốc FS xác nhận khách đến
   buổi trả kho; `null` = chưa đến / chưa có lịch);
 - `canExtend`: hợp đồng `Active`, không có yêu cầu trả kho mở, không có hoá đơn gia hạn chờ trả;
@@ -61,7 +61,8 @@ Route trả kho tại cơ sở (`…/checkout`) thuộc [checkout/return.md](../
 4. Cổng xác nhận → `ContractInvoicePaid(type = Extension)` → `ExtensionPaidListener`, cùng transaction chốt thanh
    toán:
    - `months = amount / monthly_price`;
-   - `end_date += months`, `period += months`;
+   - `period += months`, `end_date = start_date + period tháng − 1 ngày` (tính lại từ `start_date`, không cộng tháng
+     vào `end_date` cũ — end_date cuối tháng cộng dồn bị cắt ngày: 31/1 → 28/2 → 28/3);
    - audit `CONTRACT_EXTENDED`; khách nhận `CONTRACT_EXTENDED`.
 5. Hoá đơn gia hạn quá hạn → cron booking chuyển `Expired`; hợp đồng không đổi, khách tạo lại.
 6. Gia hạn và trả kho loại trừ nhau theo cả hai chiều: đang có yêu cầu trả kho mở thì không tạo được hoá đơn gia
@@ -122,9 +123,10 @@ trong `OverdueJob` (mỗi giờ) trên mọi hợp đồng `Active`, mỗi hợp
   - audit `INVOICE_CREATED`; khách nhận `RENT_INVOICE_ISSUED` (kỳ, số tiền, hạn, link `/invoices`).
 - Không lập tháng mới khi hợp đồng đang có yêu cầu trả kho mở.
 - Hoá đơn `INV-RNT` quá hạn (cron booking `Expired`, `ContractInvoiceExpired` loại `Rental`) trên hợp đồng `Active` →
-  FM nhận `RENT_UNPAID` để liên hệ khách; nợ giữ nguyên trên hoá đơn `Expired`, không lập lại. Hoá đơn tháng đầu quá
+  FM nhận `RENT_UNPAID` để liên hệ khách; nợ giữ nguyên trên hoá đơn `Expired`, không lập lại — lúc FS chốt trả kho
+  hoá đơn này được gộp vào quyết toán (trừ vào cọc) như hoá đơn `Unpaid`. Hoá đơn tháng đầu quá
   hạn xảy ra khi hợp đồng còn `Signed` nên không vào nhánh này (handover đóng phiên bàn giao).
-- Hoá đơn tiền thuê còn `Unpaid` lúc FS chốt trả kho được gộp vào quyết toán.
+- Hoá đơn tiền thuê còn `Unpaid` hoặc đã `Expired` lúc FS chốt trả kho được gộp vào quyết toán.
 
 ## Quá hạn (Flow 6)
 
@@ -136,7 +138,7 @@ lập hoá đơn tiền thuê ([trên](#thu-tiền-thuê-hằng-tháng)).
 |---|---|
 | `end_date` trong `contract.expiry_reminder_days` (7) ngày tới | khách nhận `CONTRACT_EXPIRING_SOON`, một lần mỗi kỳ |
 | Hợp đồng `Active`, `end_date < hôm nay` | lần đầu: khách + FM nhận `CONTRACT_OVERDUE` (một lần mỗi kỳ) |
-| Như trên, sau `overdue.grace_days` (3) ngày | phí = `ngày tính phí × overdue.fee_per_day` (20.000đ), trừ phần phí quá hạn đã `Paid` |
+| Như trên, sau `overdue.grace_days` (3) ngày | phí = `ngày tính phí × overdue.fee_per_day` (20.000đ), trừ phần phí quá hạn đã `Paid` **của đợt quá hạn này** (hoá đơn tạo từ `end_date + 1` trở đi) |
 | Quá hạn ≥ `overdue.escalation_days` (30) ngày, chưa có yêu cầu trả kho | tạm khoá truy cập — [bên dưới](#quá-hạn-kéo-dài--tạm-khoá-truy-cập) |
 
 `CONTRACT_EXPIRING_SOON` và `CONTRACT_OVERDUE` gửi **một lần mỗi kỳ** — kỳ xác định bằng `end_date` hiện tại (dedup
@@ -156,8 +158,11 @@ Phí cộng dồn nằm trên đúng một hoá đơn `Penalty` mã `INV-OVD-…
   - lịch chưa tới hoặc khách không đến → vẫn hôm nay; ngày dừng không bao giờ vượt hôm nay.
 - **Gia hạn phủ kỳ quá hạn** (`end_date` mới ≥ hôm nay): còn phải thu ≤ 0 nên hoá đơn đang mở bị `Canceled`. Cron
   quét cả các hợp đồng đang có hoá đơn `INV-OVD` mở để bắt trường hợp này.
-- **Đang có phiên thanh toán mở:** không đổi số tiền, vì cổng đã nhận số cũ.
+- **Còn giao dịch `Pending`:** không đổi số tiền, vì cổng đã nhận số cũ — kể cả giao dịch đã quá 24 giờ (không còn
+  tính là phiên mở) nhưng chưa được đối soát đóng; xác nhận muộn sẽ chốt `Paid` đúng số tiền đã thu.
 - **Khách trả phí quá hạn rồi vẫn tiếp tục quá hạn:** hoá đơn mới chỉ thu phần chênh.
+- **Gia hạn rồi lại quá hạn (đợt mới):** phí đã trả của đợt trước không bù cho đợt mới — đợt mới tính từ `end_date`
+  mới.
 - **Khi trả kho:** hoá đơn quá hạn còn `Unpaid` được gộp vào quyết toán. Đã có hoá đơn quyết toán (`INV-CLN` /
   `INV-DMG` / `INV-KEY` / `INV-PEN` chưa `Canceled`) thì cron không phát hành lại `INV-OVD` cho hợp đồng.
 
@@ -176,7 +181,8 @@ Chìa cơ (`PhysicalKey`) không thu hồi từ xa được — FM xử lý tạ
 (`POST /api/customer/contracts/{id}/access-code`) bị 409.
 
 **Mở lại** (`OverdueService.restoreIfCleared`, cùng lượt cron, quét hợp đồng `Active` đang khoá). Điều kiện chung:
-không còn hoá đơn `INV-OVD` `Unpaid`; thêm **một trong hai**:
+không còn hoá đơn `INV-OVD` `Unpaid` và chưa chốt quyết toán trả kho (chưa có hoá đơn `INV-CLN/DMG/KEY/PEN` khác
+`Canceled` — FS đã thu hồi chìa/mã lúc chốt, không mở lại); thêm **một trong hai**:
 - hợp đồng không còn quá hạn (`end_date` ≥ hôm nay — gia hạn đã phủ kỳ quá hạn);
 - hợp đồng còn quá hạn nhưng có yêu cầu trả kho đang mở — mở để khách dọn đồ. Phí vẫn tính tiếp tới buổi trả kho
   khách đến (hoá đơn `INV-OVD` mới chỉ thu phần chênh) và gộp vào quyết toán; `escalate` bỏ qua hợp đồng có yêu cầu

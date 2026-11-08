@@ -128,11 +128,14 @@ export function BomInvoicesPage({ navigate }: { navigate: Navigate }) {
               onChange={(value) => change(() => setType(value))}
             >
               <option value="">Tất cả</option>
-              {Object.entries(INVOICE_TYPE_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+              {/* ForfeitedDeposit chỉ là nhóm doanh thu, không phải loại hoá đơn — lọc luôn rỗng. */}
+              {Object.entries(INVOICE_TYPE_LABEL)
+                .filter(([value]) => value !== "ForfeitedDeposit")
+                .map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
             </FilterSelect>
           </div>
         </div>

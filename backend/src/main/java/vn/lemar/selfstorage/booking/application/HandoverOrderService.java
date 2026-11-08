@@ -238,8 +238,8 @@ public class HandoverOrderService {
 
     private OrderSnapshot snapshot(RentalOrder order) {
         Long facilityId = orderRepository.findFacilityId(order.getId()).orElse(null);
-        BigDecimal depositPaid = invoiceRepository.sumAmount(order.getId(),
-                List.of(InvoiceType.DEPOSIT, InvoiceType.DEPOSIT_SUPPLEMENT), InvoiceStatus.PAID);
+        // Cọc ghi vào hợp đồng = đã thu − đã hoàn: trả kho hoàn theo số này, không được hoàn lại phần đã hoàn.
+        BigDecimal depositPaid = invoiceRepository.netDepositHeld(order.getId());
         return new OrderSnapshot(order.getId(), order.getCustomerId(), order.getUnitId(), facilityId,
                 order.getStatus().dbValue(), order.getExpiresAt(), OrderNotifier.orderCode(order), depositPaid);
     }

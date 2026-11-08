@@ -139,7 +139,7 @@ public class OverdueService {
         escalate(c, calc);
         BigDecimal accrued = c.active() ? calc.accrued() : BigDecimal.ZERO;
         invoices.syncOverdueFee(c.orderId(), c.id(), c.customerId(), accrued, calc.chargedDays(),
-                Instant.now().plus(Duration.ofDays(INVOICE_DUE_DAYS)));
+                Instant.now().plus(Duration.ofDays(INVOICE_DUE_DAYS)), startOf(c.endDate().plusDays(1)));
         return calc.daysOverdue() > 0;
     }
 
@@ -164,7 +164,10 @@ public class OverdueService {
         // Còn quá hạn nhưng đã gửi yêu cầu trả kho và trả hết phí tới nay → mở để khách dọn đồ. Phí vẫn tính tới buổi
         // trả kho khách đến; escalate bỏ qua hợp đồng có yêu cầu trả kho mở nên không khoá lại.
         boolean movingOut = overdue && tenancy.openReturnOf(c.id()).isPresent();
-        if ((overdue && !movingOut) || feeOpen || !contracts.restoreAccess(c.id(), null)) {
+        // Đã chốt quyết toán trả kho (FS đã thu hồi chìa / mã) — không "mở lại để dọn đồ" nữa.
+        boolean settled = invoices.bills(c.id()).stream()
+                .anyMatch(b -> ContractInvoiceService.isSettlementCode(b.code()) && !"Canceled".equals(b.status()));
+        if ((overdue && !movingOut) || feeOpen || settled || !contracts.restoreAccess(c.id(), null)) {
             return false;
         }
         notifications.notifyCustomer(c.orderId(), NotificationType.CONTRACT_ACCESS_RESTORED,

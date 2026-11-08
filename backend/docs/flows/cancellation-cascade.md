@@ -45,7 +45,10 @@ flowchart TB
 4. Mọi `Appointment` `Pending` của đơn → `Canceled`, ghi `cancel_reason`; audit `APPOINTMENT_CANCELED` với
    actor = System.
 5. Khoang: chỉ nhả `Reserved → Available` khi đơn bị huỷ **thực sự đang giữ khoang**
-   (`Deposited`/`Scheduled`/`InProgress`). Đơn `Pending` mới gán `unit_id` chưa cọc nên không nhả.
+   (`Deposited`/`Scheduled`/`InProgress`) **và** là đơn ghi ở `storage_units.reserved_order_id` (V25). Đơn `Pending`
+   mới gán `unit_id` chưa cọc nên không nhả; đơn đã cọc đổi khoang mà khoang mới bị đơn khác cọc trước vẫn trỏ
+   `unit_id` tới khoang đó nhưng không giữ — không nhả khoang của đơn kia. Khoang `Reserved` từ trước V25 không xác
+   định được đơn giữ (`reserved_order_id` NULL) nhả theo luật cũ.
 6. Khách + FM nhận notification `RENTAL_ORDER_CANCELED`; lý do khách chịu rủi ro (quá ngưỡng từ chối)
    thì body nêu rõ "Tiền cọc không được hoàn". Tiêu đề / body ghi "đã hết hạn" khi huỷ vì quá hạn — lý do thuộc
    `BookingExpiryService.EXPIRY_REASONS` (quá hạn cọc, quá hạn xác nhận đề xuất, quá hạn đặt lịch check-in, không đến

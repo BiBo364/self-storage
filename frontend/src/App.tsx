@@ -66,6 +66,8 @@ function getInitialTheme(): Theme {
 
 function App() {
   const [view, setView] = useState<View>(viewFromLocation);
+  // Giữ pathname để key lại trang đọc id từ URL — cùng view khác id thì setView không render lại.
+  const [pathname, setPathname] = useState(() => window.location.pathname);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -83,7 +85,10 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    const onPopState = () => setView(viewFromLocation());
+    const onPopState = () => {
+      setView(viewFromLocation());
+      setPathname(window.location.pathname);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -126,7 +131,10 @@ function App() {
 
   function navigate(path: string) {
     window.history.pushState({}, "", path);
-    startTransition(() => setView(viewFromLocation()));
+    startTransition(() => {
+      setView(viewFromLocation());
+      setPathname(window.location.pathname);
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -247,7 +255,7 @@ function App() {
         <FmShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
           {view === "fm-rental-requests" && <RentalRequestQueuePage navigate={navigate} />}
           {view === "fm-orders" && <RentalOrderListPage navigate={navigate} />}
-          {view === "fm-proposal-redo" && <ProposalRedoPage navigate={navigate} />}
+          {view === "fm-proposal-redo" && <ProposalRedoPage key={pathname} navigate={navigate} />}
           {view === "fm-appointments" && <AppointmentSchedulePage />}
           {view === "fm-return-requests" && <ReturnRequestQueuePage />}
           {view === "fm-extend-requests" && <ExtendRequestQueuePage />}

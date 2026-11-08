@@ -142,8 +142,8 @@ Chi tiết: [error-handling.md](error-handling.md).
   ([backoffice/overview.md › Admin](backoffice/overview.md#admin-apiadmin-role-admin)). Role đọc lại quyền từ DB mỗi
   request nên thay đổi có hiệu lực ngay.
 - **FM của cơ sở:** BOM gán / bỏ FM qua `PUT /api/bom/facilities/{id}/manager` (1–1: FM đang phụ trách cơ sở khác bị
-  gỡ khỏi cơ sở đó). Khoá (`BANNED`) một tài khoản FM không tự gỡ `facilities.fm_account_id` — BOM gán FM khác bằng
-  route trên.
+  gỡ khỏi cơ sở đó; chỉ nhận FM `ACTIVE`). Khoá (`BANNED`) một tài khoản FM không tự gỡ `facilities.fm_account_id` — BOM
+  gán FM khác bằng route trên. Đổi role khỏi `FM` thì tự gỡ.
 - **FS của cơ sở:** BOM gán qua `PUT /api/bom/staff/{id}/facilities`, ADMIN qua `PUT /api/admin/accounts/{id}/facilities`
   (cùng logic). Gỡ FS khỏi cơ sở mà FS còn việc mở ở đó → 409
   ([backoffice/overview.md › Gán FS vào cơ sở](backoffice/overview.md#gán-fs-vào-cơ-sở)); đổi role khỏi `FS` thì gán

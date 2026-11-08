@@ -24,6 +24,7 @@ class StaffHandoverOpenWork implements StaffOpenWork {
                 select h.id from handover_records h join appointments a on a.id = h.appointment_id
                 where a.staff_id = ? and a.facility_id = ? and h.result = 'IN_PROGRESS' and a.arrived_at is not null
                 order by h.id""",
-                (rs, rowNum) -> "phiên bàn giao #" + rs.getLong(1), staffId, facilityId);
+                (rs, rowNum) -> "phiên bàn giao #" + rs.getLong(1) + " (FS hoàn tất hoặc đóng phiên)",
+                staffId, facilityId);
     }
 }

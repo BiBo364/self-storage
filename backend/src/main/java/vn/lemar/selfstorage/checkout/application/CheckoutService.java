@@ -134,6 +134,10 @@ public class CheckoutService {
         if (input.damageAmount() != null && input.damageAmount().signum() < 0) {
             throw TenancyException.invalid("Phí hư hỏng không được âm");
         }
+        // Cổng (payOS) chỉ thu số nguyên VND — phần lẻ làm số tiền thu ≠ hoá đơn, giao dịch không chốt được.
+        if (input.damageAmount() != null && input.damageAmount().stripTrailingZeros().scale() > 0) {
+            throw TenancyException.invalid("Phí hư hỏng phải là số nguyên (VND)");
+        }
         if (input.returnedKeys() != null && input.returnedKeys() < 0) {
             throw TenancyException.invalid("Số chìa thu lại không được âm");
         }
@@ -331,7 +335,9 @@ public class CheckoutService {
         int keysIssued = contracts.accessKeys(contract.id()).stream()
                 .filter(k -> "PhysicalKey".equals(k.accessType()) && k.quantity() != null)
                 .mapToInt(RentalContractService.AccessKeySnapshot::quantity).max().orElse(0);
-        BigDecimal unpaid = invoices.bills(contract.id()).stream().filter(ContractBill::unpaid)
+        // Gồm cả tiền thuê tháng đã quá hạn (Expired) — confirm gộp chúng vào quyết toán như hoá đơn Unpaid.
+        BigDecimal unpaid = invoices.bills(contract.id()).stream()
+                .filter(b -> b.unpaid() || ("Expired".equals(b.status()) && "Rental".equals(b.type())))
                 .filter(b -> record == null || !b.invoiceId().equals(record.getShortfallInvoiceId()))
                 .map(ContractBill::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         ContractBill shortfall = record == null || record.getShortfallInvoiceId() == null ? null

@@ -63,13 +63,14 @@ public class VnPayGateway implements PaymentGateway {
     public VnPayGateway(VnPayProperties properties, ObjectProvider<RestClient.Builder> restClientBuilder) {
         requireConfigured(properties);
         this.properties = properties;
-        this.restClient = restClientBuilder.getIfAvailable(RestClient::builder).build();
+        this.restClient = restClientBuilder.getIfAvailable(RestClient::builder)
+                .requestFactory(GatewayHttp.requestFactory()).build();
     }
 
     public VnPayGateway(VnPayProperties properties) {
         requireConfigured(properties);
         this.properties = properties;
-        this.restClient = RestClient.builder().build();
+        this.restClient = RestClient.builder().requestFactory(GatewayHttp.requestFactory()).build();
     }
 
     /** Fail-fast lúc khởi động khi VNPay là cổng đang dùng mà thiếu một trong bốn biến bắt buộc. */

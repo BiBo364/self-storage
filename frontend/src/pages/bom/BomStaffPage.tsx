@@ -64,7 +64,7 @@ export function BomStaffPage(_props: { navigate: Navigate }) {
         <h1 className="m-0 text-title text-ink">Nhân viên FS</h1>
         <p className="mt-1.5 text-small text-muted">
           Gán hoặc chuyển FS giữa các cơ sở. FS còn việc chưa đóng ở cơ sở bị bỏ thì không chuyển
-          được — FM phân công lại các việc đó trước.
+          được — xử lý các việc đó trước.
         </p>
       </div>
 
@@ -164,7 +164,9 @@ function AssignPanel({
     try {
       onSaved(await setBomStaffFacilities(member.id, facilityIds));
     } catch (caught) {
-      setError(errorMessage(caught));
+      // Lưu bị từ chối thì không có gì đổi — ô chọn quay về cơ sở đang gán thật.
+      setFacilityIds(member.facilityIds);
+      setError(`Chưa lưu: ${errorMessage(caught)}`);
     } finally {
       setBusy(false);
     }
@@ -210,7 +212,7 @@ function AssignPanel({
         ))}
         <p className="m-0 text-label text-muted">
           Bỏ một cơ sở mà FS còn lịch hẹn, phiên bàn giao hoặc yêu cầu hỗ trợ chưa đóng ở đó sẽ bị
-          từ chối kèm danh sách việc cần phân công lại.
+          từ chối kèm danh sách việc và cách xử lý từng việc.
         </p>
       </div>
       {error && <DemoNotice tone="error">{error}</DemoNotice>}

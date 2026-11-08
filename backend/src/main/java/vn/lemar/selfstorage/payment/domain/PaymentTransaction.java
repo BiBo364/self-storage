@@ -107,6 +107,15 @@ public class PaymentTransaction {
         this.responsePayload = responsePayload;
     }
 
+    /**
+     * Phiên đã đóng {@code FAILED} (huỷ / hết hạn phía mình) nhưng cổng báo khách vẫn trả (quét QR cũ): tiền đã vào nên
+     * ghi {@code SUCCESS} — số này tính vào "đã thu qua cổng" để FM ghi nhận hoàn được. Giữ lý do đóng cũ để tra cứu.
+     */
+    public void markLateSucceeded(String gatewayTransactionNo, Instant paidAt, String responsePayload) {
+        this.failureReason = "Thanh toán muộn sau khi phiên đã đóng: " + failureReason;
+        markSucceeded(gatewayTransactionNo, paidAt, responsePayload);
+    }
+
     public boolean isPending() {
         return status == PaymentStatus.PENDING;
     }

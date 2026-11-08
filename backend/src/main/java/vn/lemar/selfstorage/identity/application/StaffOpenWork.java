@@ -11,6 +11,9 @@ import java.util.List;
  */
 public interface StaffOpenWork {
 
-    /** Nhãn ngắn của từng việc còn mở (vd {@code "lịch CHECKIN #12"}); rỗng nếu không còn việc. */
+    /**
+     * Nhãn ngắn của từng việc còn mở kèm cách gỡ chặn (vd {@code "lịch check-in #12 (FM đổi FS)"}); rỗng nếu không
+     * còn việc.
+     */
     List<String> openItems(Long staffId, Long facilityId);
 }

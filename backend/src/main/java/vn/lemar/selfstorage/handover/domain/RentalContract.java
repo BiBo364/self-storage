@@ -216,7 +216,8 @@ public class RentalContract {
             throw new IllegalArgumentException("Số tháng gia hạn phải > 0");
         }
         this.period = period + months;
-        this.endDate = endDate.plusMonths(months);
+        // Tính lại từ start_date — cộng tháng vào end_date cuối tháng bị cắt ngày (31/1 → 28/2 → 28/3) và trôi dần.
+        this.endDate = startDate.plusMonths(period).minusDays(1);
     }
 
     /** Trả kho hoàn tất: {@code Active -> Ended}. */

@@ -521,6 +521,34 @@ class SupportBackofficeIntegrationTest {
                 + "where a.email = ? and n.type = ?", email, type);
     }
 
+    @Test
+    void pricesAndIntegerPoliciesRejectValuesTheGatewayOrReadersCannotUse() {
+        loginAs(BOM);
+        long smallType = id("select id from unit_types where name = 'Small'");
+        String code = "PV-" + SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000;
+        // Giá 0 → hoá đơn cọc 0đ không thanh toán được; giá lẻ → payOS thu số làm tròn, không khớp hoá đơn.
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, smallType, BigDecimal.ZERO))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("lớn hơn 0");
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, smallType, new BigDecimal("750000.50")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("số nguyên");
+        assertThatThrownBy(() -> backoffice.updateUnitTypePrice(smallType, new BigDecimal("500000.5")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("số nguyên");
+        assertThat(backoffice.createUnit(facilityId, code, smallType, new BigDecimal("750000.00")).monthlyPrice())
+                .isEqualByComparingTo("750000");
+
+        // Policy số nguyên đọc bằng Integer.parseInt — "2.5" / "1e2" / quá miền int làm mọi chỗ đọc lỗi.
+        assertThatThrownBy(() -> backoffice.updatePolicy("overdue.grace_days", "2.5"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("số nguyên");
+        assertThatThrownBy(() -> backoffice.updatePolicy("overdue.grace_days", "1e2"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> backoffice.updatePolicy("overdue.grace_days", "99999999999"))
+                .isInstanceOf(IllegalArgumentException.class);
+        String grace = jdbc.queryForObject("select value from policies where key = 'overdue.grace_days'",
+                String.class);
+        assertThat(backoffice.updatePolicy("overdue.grace_days", "4").value()).isEqualTo("4");
+        backoffice.updatePolicy("overdue.grace_days", grace);
+    }
+
     private static void loginAs(String email) {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(email, null, List.of()));

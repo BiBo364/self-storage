@@ -23,14 +23,14 @@ class StaffAppointmentOpenWork implements StaffOpenWork {
         return jdbc.query("""
                 select id, type from appointments
                 where staff_id = ? and facility_id = ? and status = 'Pending' order by id""",
-                (rs, rowNum) -> label(rs.getString(2)) + " #" + rs.getLong(1), staffId, facilityId);
+                (rs, rowNum) -> label(rs.getString(2), rs.getLong(1)), staffId, facilityId);
     }
 
-    private static String label(String type) {
+    private static String label(String type, long id) {
         return switch (type) {
-            case "CHECKIN" -> "lịch check-in";
-            case "RETURN" -> "lịch trả kho";
-            default -> "lịch bàn giao";
+            case "CHECKIN" -> "lịch check-in #" + id + " (FM đổi FS)";
+            case "RETURN" -> "lịch trả kho #" + id + " (FM phân công lại yêu cầu trả kho)";
+            default -> "lịch bàn giao #" + id + " (FM đổi FS)";
         };
     }
 }

@@ -41,7 +41,7 @@ sequenceDiagram
 | `DepositSupplement` `Unpaid → Paid`, đơn còn `Pending` (cọc đã trả, khoang cũ bị giữ trước) | cổng xác nhận | chốt cọc như `Deposit`: khoang thay thế `Reserved`, đơn `Pending → Deposited`, audit `RENTAL_ORDER_DEPOSITED`, khách nhận `DEPOSIT_PAYMENT_SUCCEEDED` |
 | gắn hợp đồng `Unpaid → Paid` | cổng xác nhận | phát `ContractInvoicePaid(invoiceId, contractId, type, paidAt)` cho module sở hữu hợp đồng |
 | gắn hợp đồng, đã đóng (`Canceled`/`Expired`) mà tiền vẫn vào | cổng xác nhận muộn | giao dịch `Success`, log ERROR, FM nhận `FIRST_MONTH_REFUND_REQUIRED` |
-| `Unpaid → Canceled` | bấm thanh toán khi khoang `Reserved`/`Rented`/`Maintenance` | FM nhận `PROPOSAL_REPROPOSAL_REQUIRED`, đơn giữ nguyên |
+| `Unpaid → Canceled` | bấm thanh toán khi khoang `Reserved`/`Rented`/`Maintenance` | FM nhận `PROPOSAL_REPROPOSAL_REQUIRED`; đơn giữ trạng thái, đơn đã cọc (đổi khoang) bật `needs_reproposal` để FM đề xuất lại được và đơn không đặt lịch check-in trên khoang đã mất. Cổng xác nhận cọc khi khoang đã bị giữ, hay đổi khoang `delta ≤ 0` giữ khoang mới, cũng áp cùng quy tắc (đổi khoang giữ khoang → chặn hoá đơn cọc khác của khoang như cọc qua cổng) |
 | `Unpaid → Expired` | cron quá `due_date` | xem [Cron Flow 1](#cron-flow-1) |
 
 Hoá đơn gắn hợp đồng sau bàn giao (tiền thuê tháng, gia hạn, phí quá hạn, quyết toán trả kho) có đơn ở `Done`. Bấm
@@ -62,7 +62,8 @@ Audit nhánh thành công (actor = hệ thống): `PAYMENT_SUCCEEDED` (PaymentTr
   song không cùng mở được phiên.
 - **Bấm thanh toán lại hoá đơn đang có phiên:** trước khi khoá, đối soát phiên cũ (đã trả → chốt luôn, request sau
   nhận 409 "không còn chờ thanh toán"); chưa trả → huỷ phiên cũ ở cổng (payOS cancel) rồi mở phiên mới; cổng không huỷ
-  được → 409 "Hoá đơn đang có phiên thanh toán chưa kết thúc…".
+  được → 409 "Hoá đơn đang có phiên thanh toán chưa kết thúc…". Áp cho mọi loại hoá đơn (kể cả tháng đầu trên đơn
+  `InProgress`): bấm đúp hai request thì request sau thấy phiên của request trước → 409, không mở phiên thứ hai.
 - **Khoang vừa có người trả cọc → chặn ngay các hoá đơn khác của khoang** (spec 1.1 "đã có người khác đặt cọc"):
   sau commit bước chốt cọc, `CompetingInvoiceCanceller` (transaction riêng, khoá đơn → hoá đơn) huỷ mọi hoá đơn cọc
   `Unpaid` khác trỏ khoang (audit `INVOICE_CANCELED` lý do "Khoang đã có người đặt cọc trước"), FM nhận
@@ -113,7 +114,7 @@ nguồn).
 |---|---|---|
 | Request hết hạn | `RentalRequest` `Pending`/`Approved`, `expires_at < now` | `Expired` (update có điều kiện), audit `RENTAL_REQUEST_EXPIRED` |
 | Hoá đơn quá hạn | `Unpaid`, `due_date < now`, **không** còn phiên thanh toán mở | `Expired` + audit `INVOICE_EXPIRED`; `Deposit` → cascade "Quá hạn thanh toán cọc"; `DepositSupplement` → bật `needs_reproposal` + FM nhận `PROPOSAL_REPROPOSAL_REQUIRED`; gắn hợp đồng → phát `ContractInvoiceExpired` |
-| Catch-all đơn | `expires_at < now`, chưa `Canceled`/`Done`, không còn phiên mở | cascade, lý do: `Pending` + proposal chưa `Agreed` → "Quá hạn xác nhận đề xuất"; `Pending` + `Agreed` → "Quá hạn thanh toán cọc"; `Deposited` → "Quá hạn đặt lịch check-in"; `Scheduled`/`InProgress` → "Không đến nhận kho quá hạn giữ" (chưa đến) / "Chưa hoàn tất bàn giao trong hạn" (đã đến) |
+| Catch-all đơn | `expires_at < now`, chưa `Canceled`/`Done`, không còn phiên mở | cascade, lý do: `Pending` + proposal chưa `Agreed` → "Quá hạn xác nhận đề xuất"; `Pending` + `Agreed` → "Quá hạn thanh toán cọc"; `Pending` mà đã thu cọc (khoang bị giữ trước, chưa xếp được khoang khác) → "Hết hạn chờ xếp khoang sau khi đã cọc" + audit `DEPOSIT_REFUND_REQUIRED`, FM nhận `DEPOSIT_REFUND_REQUIRED`, khách nhận `DEPOSIT_REFUND_PENDING` (cọc thực giữ = đã thu − đã hoàn); `Deposited` → "Quá hạn đặt lịch check-in"; `Scheduled`/`InProgress` → "Không đến nhận kho quá hạn giữ" (chưa đến) / "Chưa hoàn tất bàn giao trong hạn" (đã đến) |
 | Nhắc sắp hết hạn | `expires_at` trong `order.expiry_reminder_days` (3) tới, chưa đóng | `RENTAL_ORDER_EXPIRING_SOON` cho khách, mỗi đơn một lần (dedup qua `OrderNotification` theo đơn + type) |
 
 Hoá đơn gắn hợp đồng (`Rental`, `Extension`, `Penalty`, `Service`) đi chung nhánh "gắn hợp đồng" ở trên: `Expired` +

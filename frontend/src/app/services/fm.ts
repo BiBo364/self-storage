@@ -371,6 +371,8 @@ export type ReturnRequest = {
   appointmentStart: string | null;
   cancelReason: string | null;
   createdAt: string;
+  /** Mốc FS xác nhận khách đến buổi trả kho; `null` = chưa đến / chưa có lịch. */
+  appointmentArrivedAt: string | null;
 };
 
 /** `booking/application/ContractInvoiceService.ContractBill`. */

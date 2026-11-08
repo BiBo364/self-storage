@@ -92,7 +92,7 @@ public class BackofficeService {
         if (unitTypeId == null || !unitTypes.exists(unitTypeId)) {
             throw new IllegalArgumentException("Loại khoang không tồn tại");
         }
-        requireNonNegative(monthlyPrice);
+        requireVndPrice(monthlyPrice);
         Long id = facilities.createUnit(facilityId, code.trim(), unitTypeId, monthlyPrice);
         UnitRow unit = facilities.findUnit(id).orElseThrow();
         Map<String, Object> value = new HashMap<>();
@@ -113,7 +113,7 @@ public class BackofficeService {
         if (!unitTypes.exists(typeId)) {
             throw new IllegalArgumentException("Loại khoang không tồn tại");
         }
-        requireNonNegative(monthlyPrice);
+        requireVndPrice(monthlyPrice);
         facilities.updateUnit(unitId, typeId, monthlyPrice);
         UnitRow after = facilities.findUnit(unitId).orElseThrow();
         Map<String, Object> oldValue = new HashMap<>();
@@ -228,7 +228,7 @@ public class BackofficeService {
         FacilityRow before = facilities.find(facilityId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy cơ sở"));
         if (fmAccountId != null && !isFm) {
-            throw new IllegalArgumentException("Tài khoản được gán phải có role FM");
+            throw new IllegalArgumentException("Tài khoản được gán phải có role FM và đang hoạt động");
         }
         facilities.assignManager(facilityId, fmAccountId);
         Map<String, Object> oldValue = new HashMap<>();
@@ -244,7 +244,11 @@ public class BackofficeService {
         return pricing.policies();
     }
 
-    /** Policy số (giá trị hiện tại là số) chỉ nhận số ≥ 0. */
+    /**
+     * Policy số (giá trị hiện tại là số) chỉ nhận số ≥ 0; policy đang là số nguyên (đọc bằng
+     * {@code PricingQuery.intPolicy}) chỉ nhận số nguyên trong miền {@code int} — "2.5" hay "1e2" sẽ làm mọi chỗ đọc
+     * policy đó lỗi.
+     */
     @Transactional
     public PolicyRow updatePolicy(String key, String value) {
         PolicyRow before = pricing.policy(key)
@@ -254,6 +258,9 @@ public class BackofficeService {
         }
         if (isNumber(before.value()) && (!isNumber(value) || new BigDecimal(value.trim()).signum() < 0)) {
             throw new IllegalArgumentException("Policy " + key + " phải là số không âm");
+        }
+        if (isInteger(before.value()) && !isInteger(value)) {
+            throw new IllegalArgumentException("Policy " + key + " phải là số nguyên không âm");
         }
         pricing.updatePolicy(key, value.trim());
         audit(AuditAction.POLICY_UPDATED, AuditEntityType.POLICY, before.id(), Map.of("value", before.value()),
@@ -270,9 +277,10 @@ public class BackofficeService {
     public UnitTypeRow updateUnitTypePrice(Long unitTypeId, BigDecimal monthlyPrice) {
         UnitTypeRow before = pricing.unitTypes().stream().filter(u -> u.id().equals(unitTypeId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy loại khoang"));
-        if (monthlyPrice == null || monthlyPrice.signum() <= 0) {
+        if (monthlyPrice == null) {
             throw new IllegalArgumentException("Giá thuê phải lớn hơn 0");
         }
+        requireVndPrice(monthlyPrice);
         pricing.updateUnitTypePrice(unitTypeId, monthlyPrice, currentAccount.getCurrentAccountId());
         audit(AuditAction.UNIT_TYPE_UPDATED, AuditEntityType.UNIT_TYPE, unitTypeId,
                 Map.of("monthlyPrice", before.monthlyPrice()), Map.of("monthlyPrice", monthlyPrice));
@@ -303,10 +311,28 @@ public class BackofficeService {
                 readRepository.occupancy(facilityId));
     }
 
-    private static void requireNonNegative(BigDecimal value) {
-        if (value != null && value.signum() < 0) {
-            throw new IllegalArgumentException("Giá không được âm");
+    /**
+     * Giá thuê ({@code null} = dùng giá loại khoang) phải là số nguyên VND {@code > 0}: giá 0 sinh hoá đơn cọc 0 đ
+     * không thanh toán được; cổng (payOS) chỉ nhận số nguyên nên phần lẻ làm số tiền thu ≠ số tiền hoá đơn.
+     */
+    private static void requireVndPrice(BigDecimal value) {
+        if (value == null) {
+            return;
         }
+        if (value.signum() <= 0) {
+            throw new IllegalArgumentException("Giá thuê phải lớn hơn 0");
+        }
+        if (value.stripTrailingZeros().scale() > 0) {
+            throw new IllegalArgumentException("Giá thuê phải là số nguyên (VND)");
+        }
+    }
+
+    private static boolean isInteger(String value) {
+        String trimmed = value.trim();
+        if (!trimmed.matches("[0-9]{1,10}")) {
+            return false;
+        }
+        return Long.parseLong(trimmed) <= Integer.MAX_VALUE;
     }
 
     private static boolean isNumber(String value) {

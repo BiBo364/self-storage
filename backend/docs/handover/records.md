@@ -137,7 +137,8 @@ Sinh hợp đồng `Draft`:
 - `code = HD-{facility}-{YYMMDD}-{6 ký tự}`;
 - `terms_version = builtin-v1` (mẫu dựng sẵn trong code, không có bảng mẫu);
 - `monthly_price = PricingQuery.effectiveMonthlyPrice(unit)`;
-- `deposit_amount` = tổng `Deposit` + `DepositSupplement` đã `Paid`;
+- `deposit_amount` = tổng `Deposit` + `DepositSupplement` đã `Paid` trừ khoản hoàn thủ công đã ghi nhận trên các hoá
+  đơn đó (cọc thực đang giữ — trả kho hoàn theo số này);
 - `period = rental_requests.period`;
 - `start_date` theo `contract.start_date_rule` (V19 = `handover_date` = ngày sinh hợp đồng theo giờ VN; giá trị khác
   log WARN rồi vẫn dùng ngày sinh hợp đồng);

@@ -61,6 +61,18 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     List<Invoice> findByContractIdOrderByIdDesc(Long contractId);
 
+    /**
+     * Cọc thực đang giữ của đơn = tổng hoá đơn {@code Deposit}/{@code DepositSupplement} đã {@code Paid} − các khoản
+     * hoàn thủ công đã ghi nhận trên các hoá đơn đó. Dùng cho chênh lệch cọc khi đổi khoang và cọc ghi vào hợp đồng.
+     */
+    @Query(value = """
+            select coalesce((select sum(i.amount) from invoices i where i.order_id = :orderId
+                             and i.type in ('Deposit', 'DepositSupplement') and i.status = 'Paid'), 0)
+                 - coalesce((select sum(t.amount) from payment_transactions t join invoices i on i.id = t.invoice_id
+                             where i.order_id = :orderId and i.type in ('Deposit', 'DepositSupplement')
+                               and t.direction = 'REFUND' and t.status = 'Success'), 0)""", nativeQuery = true)
+    BigDecimal netDepositHeld(@Param("orderId") Long orderId);
+
     /** Tổng tiền đã thu của các loại hoá đơn trên đơn — dùng để tính chênh lệch cọc. */
     @Query("select coalesce(sum(i.amount), 0) from Invoice i where i.orderId = :orderId "
             + "and i.type in :types and i.status = :status")

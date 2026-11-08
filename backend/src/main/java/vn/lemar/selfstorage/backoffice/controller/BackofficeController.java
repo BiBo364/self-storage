@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -145,7 +146,9 @@ public class BackofficeController {
     @PutMapping("/api/bom/facilities/{id}/manager")
     public ResponseEntity<ApiEnvelope<FacilityRow>> assignManager(@PathVariable Long id,
                                                                   @RequestBody ManagerBody body) {
-        boolean isFm = body.fmAccountId() != null && "FM".equals(accounts.get(body.fmAccountId()).role());
+        // FM bị khoá không đăng nhập được — gán làm quản lý thì thông báo cho FM của cơ sở không tới ai.
+        boolean isFm = body.fmAccountId() != null && "FM".equals(accounts.get(body.fmAccountId()).role())
+                && "ACTIVE".equals(accounts.get(body.fmAccountId()).status());
         return ok("Đã gán FM", backoffice.assignManager(id, body.fmAccountId(), isFm));
     }
 
@@ -292,7 +295,9 @@ public class BackofficeController {
     public record AccessBody(@NotNull Boolean keyAccess, @NotNull Boolean codeAccess) {
     }
 
-    public record FacilityBody(@NotBlank @Size(max = 50) String code, @NotBlank @Size(max = 255) String name,
+    /** Mã cơ sở nằm trong mã hoá đơn ({@code INV-XXX-{code}-yyMMdd-xxxxxx}, cột 50 ký tự) nên giới hạn 20. */
+    public record FacilityBody(@NotBlank @Size(max = 20) @Pattern(regexp = "[A-Za-z0-9-]+") String code,
+                               @NotBlank @Size(max = 255) String name,
                                String address, String operatingHours) {
     }
 

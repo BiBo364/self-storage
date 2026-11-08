@@ -20,6 +20,14 @@ public interface ProposalFeedbackRepository extends JpaRepository<ProposalFeedba
     @Query("select p from ProposalFeedback p where p.id = :id")
     Optional<ProposalFeedback> findByIdForUpdate(@Param("id") Long id);
 
+    /** Đơn và khách của proposal, đọc không khoá và không nạp entity — để khoá đơn trước rồi mới khoá proposal. */
+    @Query("select new vn.lemar.selfstorage.booking.repository.ProposalFeedbackRepository$Owner("
+            + "p.orderId, p.customerId) from ProposalFeedback p where p.id = :id")
+    Optional<Owner> findOwnerById(@Param("id") Long id);
+
+    record Owner(Long orderId, Long customerId) {
+    }
+
     boolean existsByOrderIdAndStatus(Long orderId, ProposalStatus status);
 
     long countByOrderIdAndStatus(Long orderId, ProposalStatus status);

@@ -108,7 +108,7 @@ class RentalOrderCancellation {
         // Chỉ nhả khoang khi đơn thực sự đang giữ nó: nhiều đơn có thể cùng unit_id (đã đồng ý, chưa cọc),
         // trả khoang của đơn khác đã cọc là sai.
         if (heldUnit && order.getUnitId() != null
-                && storageUnitService.releaseIfReserved(order.getUnitId())) {
+                && storageUnitService.releaseIfReserved(order.getUnitId(), order.getId())) {
             record(AuditAction.RENTAL_ORDER_CANCELED, AuditEntityType.STORAGE_UNIT, order.getUnitId(),
                     Map.of("status", "Reserved"), Map.of("status", "Available"), reason, actorAccountId);
         }

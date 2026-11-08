@@ -63,14 +63,16 @@ public class HandoverExpiryService {
         if (peek == null || !peek.isOpen()) {
             return false;
         }
-        RentalContract contract = contracts.findCurrentByOrderId(peek.getOrderId()).orElse(null);
-        if (contract != null && hasOpenPaymentSession(contract)) {
-            return false;
-        }
         orders.lock(peek.getOrderId());
         HandoverRecord record = records.findByIdForUpdate(handoverId).orElse(null);
         if (record == null || !record.isOpen() || record.getDueAt() == null
                 || !record.getDueAt().isBefore(Instant.now())) {
+            return false;
+        }
+        // Kiểm phiên cổng sau khi khoá đơn: khách mở phiên trả tháng đầu (cũng khoá đơn) giữa lúc kiểm và lúc khoá thì
+        // phiên đóng sẽ huỷ hoá đơn đang có link còn sống.
+        RentalContract contract = contracts.findCurrentByOrderId(record.getOrderId()).orElse(null);
+        if (contract != null && hasOpenPaymentSession(contract)) {
             return false;
         }
         close(record.getOrderId(), REASON_OVERDUE);

@@ -301,6 +301,8 @@ function RequestPanel({
           : `Đã duyệt yêu cầu của ${request.customerName}.`,
       );
     } else {
+      // Khoang vừa chọn có thể đã bị giữ (409) — bỏ chọn để FM chọn lại từ danh sách mới.
+      setUnitId("");
       units.reload();
     }
   }

@@ -32,6 +32,27 @@ class StorageUnitStatusTest {
     }
 
     @Test
+    void onlyTheReservingOrderReleasesTheUnit() {
+        StorageUnit unit = new StorageUnit();
+        org.springframework.test.util.ReflectionTestUtils.setField(unit, "status", StorageUnitStatus.AVAILABLE);
+        assertThat(unit.reserveIfAvailable(7L)).isTrue();
+
+        // Đơn khác trỏ unit_id tới khoang (đổi khoang nhưng bị cọc trước) không nhả được khoang của đơn 7.
+        assertThat(unit.releaseIfReservedBy(8L)).isFalse();
+        assertThat(unit.getStatus()).isEqualTo(StorageUnitStatus.RESERVED);
+        assertThat(unit.releaseIfReservedBy(7L)).isTrue();
+        assertThat(unit.getStatus()).isEqualTo(StorageUnitStatus.AVAILABLE);
+    }
+
+    @Test
+    void unitReservedBeforeOwnerTrackingReleasesForAnyOrder() {
+        StorageUnit unit = new StorageUnit();
+        org.springframework.test.util.ReflectionTestUtils.setField(unit, "status", StorageUnitStatus.RESERVED);
+
+        assertThat(unit.releaseIfReservedBy(8L)).isTrue();
+    }
+
+    @Test
     void onlyAvailableUnitIsAvailable() {
         assertThat(new StorageUnitView(1L, "A-01", 1L, 1L, "Available").isAvailable()).isTrue();
         assertThat(new StorageUnitView(1L, "A-01", 1L, 1L, "Reserved").isAvailable()).isFalse();

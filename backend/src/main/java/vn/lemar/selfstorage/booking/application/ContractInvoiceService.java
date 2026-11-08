@@ -129,7 +129,7 @@ public class ContractInvoiceService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<ContractBill> syncOverdueFee(Long orderId, Long contractId, Long customerId, BigDecimal accrued,
-                                                 long days, Instant dueDate) {
+                                                 long days, Instant dueDate, Instant periodStart) {
         List<Invoice> all = invoiceRepository.findByContractIdOrderByIdDesc(contractId);
         // Đã chốt quyết toán trả kho (có hoá đơn INV-CLN/DMG/KEY/PEN): phí quá hạn đã gộp vào quyết toán — không
         // phát hành lại.
@@ -139,13 +139,17 @@ public class ContractInvoiceService {
         List<Invoice> overdue = all.stream()
                 .filter(i -> i.getType() == InvoiceType.PENALTY && i.getCode().startsWith("INV-" + OVERDUE_KIND))
                 .toList();
+        // Chỉ trừ phí đã trả của đợt quá hạn hiện tại: phí của đợt trước (trước khi gia hạn) không bù cho đợt mới.
         BigDecimal paid = overdue.stream().filter(i -> i.getStatus() == InvoiceStatus.PAID)
+                .filter(i -> !i.getCreatedAt().isBefore(periodStart))
                 .map(Invoice::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal due = accrued.subtract(paid);
         Invoice open = overdue.stream().filter(Invoice::isUnpaid).findFirst().orElse(null);
         if (open != null) {
             open = invoiceRepository.findByIdForUpdate(open.getId()).orElse(open);
-            if (!paymentService.invoicesWithOpenSession(List.of(open.getId())).isEmpty()) {
+            // Còn giao dịch Pending (kể cả phiên quá 24h đã thôi tính là "mở") → giữ số tiền: cổng đã nhận số cũ, đổi
+            // giá rồi xác nhận muộn sẽ chốt Paid hoá đơn bằng số tiền khác số đã thu.
+            if (!paymentService.pendingTxnRefs(List.of(open.getId())).isEmpty()) {
                 return Optional.of(bill(open));
             }
             if (due.signum() <= 0) {
@@ -173,7 +177,8 @@ public class ContractInvoiceService {
     }
 
     /**
-     * Quyết toán trả kho: huỷ các hoá đơn {@code Unpaid} của hợp đồng (gộp vào quyết toán) và trả tổng tiền của chúng.
+     * Quyết toán trả kho: huỷ các hoá đơn {@code Unpaid} và tiền thuê tháng {@code Expired} của hợp đồng (gộp vào
+     * quyết toán) và trả tổng tiền của chúng.
      * Còn phiên thanh toán mở → 409 để FS thử lại sau khi phiên đóng.
      */
     @Transactional(propagation = Propagation.MANDATORY)
@@ -196,6 +201,20 @@ public class ContractInvoiceService {
             invoice.cancel();
             canceled.add(invoice.getId());
             record(AuditAction.INVOICE_CANCELED, invoice, Map.of("status", InvoiceStatus.UNPAID.dbValue()),
+                    Map.of("status", invoice.getStatus().dbValue()), reason);
+        }
+        // Tiền thuê tháng đã quá hạn (Expired): không ai trả được nữa và kỳ đó không lập lại — vẫn là nợ, trừ vào cọc.
+        for (Invoice found : invoiceRepository.findByContractIdOrderByIdDesc(contractId)) {
+            if (!found.isExpiredRent()) {
+                continue;
+            }
+            Invoice invoice = invoiceRepository.findByIdForUpdate(found.getId()).orElse(found);
+            if (!invoice.isExpiredRent()) {
+                continue;
+            }
+            total = total.add(invoice.getAmount());
+            invoice.foldExpiredRent();
+            record(AuditAction.INVOICE_CANCELED, invoice, Map.of("status", InvoiceStatus.EXPIRED.dbValue()),
                     Map.of("status", invoice.getStatus().dbValue()), reason);
         }
         sessionCloser.closeAfterCommit(canceled, "Gop vao quyet toan tra kho");

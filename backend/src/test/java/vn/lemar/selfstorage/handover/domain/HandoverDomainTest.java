@@ -92,4 +92,25 @@ class HandoverDomainTest {
         ReflectionTestUtils.setField(contract, "status", status);
         return contract;
     }
+
+    @Test
+    void extendRecomputesEndDateFromStartDateAtMonthEnd() {
+        RentalContract contract = RentalContract.draft(1L, 2L, 3L, "HD-T", "builtin-v1",
+                new java.math.BigDecimal("100000"), new java.math.BigDecimal("300000"), 1,
+                java.time.LocalDate.of(2026, 1, 31));
+        assertThat(contract.getEndDate()).isEqualTo(java.time.LocalDate.of(2026, 2, 27));
+        ReflectionTestUtils.setField(contract, "status", RentalContractStatus.ACTIVE);
+
+        contract.extend(1);
+        contract.extend(1);
+
+        // Gia hạn phải ra cùng end_date với hợp đồng 3 tháng ký từ đầu (31/1 + 3 tháng − 1 ngày = 29/4); cộng tháng
+        // vào end_date cũ sẽ trôi về 27/4 (27/2 → 27/3 → 27/4).
+        RentalContract threeMonths = RentalContract.draft(1L, 2L, 3L, "HD-T3", "builtin-v1",
+                new java.math.BigDecimal("100000"), new java.math.BigDecimal("300000"), 3,
+                java.time.LocalDate.of(2026, 1, 31));
+        assertThat(contract.getPeriod()).isEqualTo(3);
+        assertThat(contract.getEndDate()).isEqualTo(threeMonths.getEndDate())
+                .isEqualTo(java.time.LocalDate.of(2026, 4, 29));
+    }
 }

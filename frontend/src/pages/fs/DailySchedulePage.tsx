@@ -276,9 +276,15 @@ export function DailySchedulePage() {
                       <Button onClick={() => openAction(appointment, "arrive")}>
                         Khách đã đến
                       </Button>
-                      <Button variant="secondary" onClick={() => openAction(appointment, "cancel")}>
-                        Hủy
-                      </Button>
+                      {/* Backend chỉ cho FS huỷ lịch check-in (lịch khác trả 409). */}
+                      {appointment.type === "CHECKIN" && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => openAction(appointment, "cancel")}
+                        >
+                          Hủy
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}

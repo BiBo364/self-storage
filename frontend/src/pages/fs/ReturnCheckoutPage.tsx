@@ -79,6 +79,23 @@ function formFrom(view: CheckoutView): Form {
   };
 }
 
+/** Form khác biên bản đã lưu — chốt dùng bản đã lưu nên phải lưu trước. */
+function hasUnsavedChanges(form: Form, photos: PickedFile[], view: CheckoutView) {
+  const saved = formFrom(view);
+  const num = (value: string) => (value.trim() === "" ? null : Number(value));
+  const savedPhotos = view.photos ?? [];
+  return (
+    form.unitEmptied !== saved.unitEmptied ||
+    form.cleaningRequired !== saved.cleaningRequired ||
+    (num(form.damageAmount) ?? 0) !== (num(saved.damageAmount) ?? 0) ||
+    num(form.returnedKeys) !== num(saved.returnedKeys) ||
+    form.damages.trim() !== saved.damages.trim() ||
+    form.note.trim() !== saved.note.trim() ||
+    photos.length !== savedPhotos.length ||
+    photos.some((photo, index) => photo.url !== savedPhotos[index])
+  );
+}
+
 /** Phí dự kiến từ biên bản đã lưu — số chốt cuối cùng do backend tính khi xác nhận. */
 function estimate(view: CheckoutView) {
   const cleaning = view.cleaningRequired ? Number(view.cleaningFee ?? 0) : 0;
@@ -199,6 +216,7 @@ export function ReturnCheckoutPage({ navigate }: { navigate: Navigate }) {
     current.result !== "COMPLETED" &&
     current.result !== "AWAITING_PAYMENT";
   const balance = Number(current.depositAmount ?? 0) - fees.total;
+  const dirty = hasUnsavedChanges(form, photos, current);
 
   async function saveInspection() {
     if (!form || returnRequestId === null) return;
@@ -449,11 +467,14 @@ export function ReturnCheckoutPage({ navigate }: { navigate: Navigate }) {
                   Lưu kết quả kiểm tra
                 </Button>
                 {current.result === "IN_PROGRESS" && (
-                  <Button disabled={busy} onClick={() => setConfirmOpen(true)}>
+                  <Button disabled={busy || dirty} onClick={() => setConfirmOpen(true)}>
                     <Check size={16} /> Chốt trả kho
                   </Button>
                 )}
               </div>
+              {current.result === "IN_PROGRESS" && dirty && (
+                <p className="mb-0 mt-2 text-label text-muted">Lưu biên bản trước khi chốt.</p>
+              )}
             </div>
           )}
         </section>

@@ -8,6 +8,8 @@ type ChatReply = { text: string; refused: boolean };
 
 const STORAGE_KEY = "kho-moc-chat";
 const MAX_TURNS = 20;
+// Backend từ chối (400) tin nhắn dài hơn 2000 ký tự — câu trả lời dài vẫn hiển thị đủ, chỉ cắt khi gửi lại.
+const MAX_CHARS = 2000;
 const GREETING: ChatTurn = {
   role: "assistant",
   content:
@@ -52,7 +54,9 @@ export function ChatWidget() {
     try {
       const reply = await apiRequest<ChatReply>("/api/chat", {
         method: "POST",
-        body: { messages: next },
+        body: {
+          messages: next.map((turn) => ({ ...turn, content: turn.content.slice(0, MAX_CHARS) })),
+        },
       });
       setTurns([...next, { role: "assistant" as const, content: reply.text }].slice(-MAX_TURNS));
     } catch (caught) {

@@ -48,12 +48,22 @@ public class StorageUnit {
     @Column(name = "maintenance_started_at")
     private Instant maintenanceStartedAt;
 
+    /** Đơn đang giữ khoang khi {@code Reserved} (V25); {@code null} ở trạng thái khác hoặc khoang Reserved cũ. */
+    @Column(name = "reserved_order_id")
+    private Long reservedOrderId;
+
     /** Cancellation Cascade: khoang đang giữ cho đơn bị huỷ được giải phóng {@code Reserved -> Available}. */
     /** Spec 1.4: cọc thành công → {@code Available -> Reserved}; khoang ở trạng thái khác giữ nguyên. */
     public boolean reserveIfAvailable() {
+        return reserveIfAvailable(null);
+    }
+
+    /** Như {@link #reserveIfAvailable()} và ghi đơn giữ khoang — chỉ đơn này mới nhả được khoang. */
+    public boolean reserveIfAvailable(Long orderId) {
         if (status != StorageUnitStatus.AVAILABLE) {
             return false;
         }
+        this.reservedOrderId = orderId;
         this.status = StorageUnitStatus.RESERVED;
         this.updatedAt = Instant.now();
         return true;
@@ -65,6 +75,7 @@ public class StorageUnit {
             return false;
         }
         this.status = StorageUnitStatus.RENTED;
+        this.reservedOrderId = null;
         this.updatedAt = Instant.now();
         return true;
     }
@@ -73,9 +84,22 @@ public class StorageUnit {
         if (status != StorageUnitStatus.RESERVED) {
             return false;
         }
+        this.reservedOrderId = null;
         this.status = StorageUnitStatus.AVAILABLE;
         this.updatedAt = Instant.now();
         return true;
+    }
+
+    /**
+     * Nhả khoang chỉ khi {@code orderId} là đơn đang giữ nó. Khoang Reserved không ghi đơn giữ (trước V25) nhả theo
+     * luật cũ. Đơn trỏ {@code unit_id} tới khoang mà không giữ (khoang đã bị đơn khác cọc trước) → giữ nguyên.
+     */
+    public boolean releaseIfReservedBy(Long orderId) {
+        if (status != StorageUnitStatus.RESERVED
+                || (reservedOrderId != null && !reservedOrderId.equals(orderId))) {
+            return false;
+        }
+        return releaseIfReserved();
     }
 
     /** Trả kho hoàn tất → {@code Rented -> Maintenance}, ghi mốc để cron mở lại sau {@code unit.maintenance_days}. */

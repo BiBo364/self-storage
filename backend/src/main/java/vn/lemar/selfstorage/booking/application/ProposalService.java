@@ -69,13 +69,17 @@ public class ProposalService {
     private final String frontendUrl;
     private final PaymentSessionCloser sessionCloser;
 
+    private final org.springframework.context.ApplicationEventPublisher events;
+
     ProposalService(ProposalFeedbackRepository proposalRepository, RentalOrderRepository orderRepository,
                     StorageUnitQuery storageUnitQuery, StorageUnitService storageUnitService,
                     PricingQuery pricingQuery, Access access,
                     AuditRecorder auditRecorder, OrderNotifier orderNotifier,
                     DepositInvoiceIssuer depositInvoiceIssuer, RentalOrderCancellation orderCancellation,
                     InvoiceRepository invoiceRepository, PaymentSessionCloser sessionCloser,
+                    org.springframework.context.ApplicationEventPublisher events,
                     @Value("${app.frontend-url}") String frontendUrl) {
+        this.events = events;
         this.sessionCloser = sessionCloser;
         this.proposalRepository = proposalRepository;
         this.orderRepository = orderRepository;
@@ -98,10 +102,10 @@ public class ProposalService {
      */
     @Transactional
     public AgreeResult agree(Long proposalId, Long customerAccountId) {
-        ProposalFeedback proposal = lockPendingProposalOf(proposalId, customerAccountId);
         // Khoá đơn vì agree đọc/ghi tiền (hoá đơn cọc, chênh lệch cọc) và trạng thái đơn.
-        RentalOrder order = orderRepository.findByIdForUpdate(proposal.getOrderId())
-                .orElseThrow(RentalOrderNotFoundException::new);
+        Locked locked = lockPendingProposalOf(proposalId, customerAccountId);
+        ProposalFeedback proposal = locked.proposal();
+        RentalOrder order = locked.order();
         requireAgreeable(order);
         if (invoiceRepository.existsByOrderIdAndStatusInAndTypeIn(order.getId(),
                 List.of(InvoiceStatus.UNPAID),
@@ -161,7 +165,7 @@ public class ProposalService {
         if (!order.holdsUnit() || oldUnitId == null || oldUnitId.equals(newUnitId)) {
             return;
         }
-        if (storageUnitService.releaseIfReserved(oldUnitId)) {
+        if (storageUnitService.releaseIfReserved(oldUnitId, order.getId())) {
             auditRecorder.record(new AuditEntry(AuditAction.UNIT_CHANGE_RELEASED, AuditEntityType.STORAGE_UNIT,
                     String.valueOf(oldUnitId), Map.of("status", "Reserved", "orderId", order.getId()),
                     Map.of("status", "Available", "unitId", newUnitId), "Đổi khoang sau khi đã cọc",
@@ -174,8 +178,8 @@ public class ProposalService {
      * lệch với tiền cọc đã thu — thiếu thì hoá đơn bổ sung, dư thì báo FM hoàn thủ công, bằng thì không tạo gì.
      */
     private Invoice issueDeposit(RentalOrder order, StorageUnitView unit, Long actorAccountId) {
-        BigDecimal paidDeposit = invoiceRepository.sumAmount(order.getId(),
-                List.of(InvoiceType.DEPOSIT, InvoiceType.DEPOSIT_SUPPLEMENT), InvoiceStatus.PAID);
+        // Cọc thực đang giữ: trừ khoản đã hoàn (đổi sang khoang rẻ hơn trước đó) — không thì lần đổi sau thu thiếu.
+        BigDecimal paidDeposit = invoiceRepository.netDepositHeld(order.getId());
         if (!order.holdsUnit() && paidDeposit.signum() == 0) {
             return depositInvoiceIssuer.issue(order, unit, actorAccountId);
         }
@@ -212,11 +216,14 @@ public class ProposalService {
     }
 
     private boolean reserveReplacementUnit(RentalOrder order, StorageUnitView unit, Long actorAccountId) {
-        if (storageUnitService.reserveIfAvailable(unit.id())) {
+        if (storageUnitService.reserveIfAvailable(unit.id(), order.getId())) {
             auditRecorder.record(new AuditEntry(AuditAction.STORAGE_UNIT_RESERVED, AuditEntityType.STORAGE_UNIT,
                     String.valueOf(unit.id()), Map.of("status", "Available"),
                     Map.of("status", "Reserved", "orderId", order.getId()), "Đổi khoang sau khi đã cọc",
                     actorAccountId));
+            // Như cọc qua cổng: khoang đã có chủ → chặn hoá đơn cọc khác đang trỏ khoang này (đánh dấu đơn của họ
+            // cần đề xuất lại).
+            events.publishEvent(new UnitReservedByDeposit(unit.id(), order.getId()));
             return true;
         }
         return false;
@@ -254,10 +261,10 @@ public class ProposalService {
         if (note == null || note.isBlank()) {
             throw new ProposalValidationException("Vui lòng nhập lý do từ chối");
         }
-        ProposalFeedback proposal = lockPendingProposalOf(proposalId, customerAccountId);
         // Khoá đơn để việc đếm số lần từ chối và cập nhật nằm gọn trong một transaction.
-        RentalOrder order = orderRepository.findByIdForUpdate(proposal.getOrderId())
-                .orElseThrow(RentalOrderNotFoundException::new);
+        Locked locked = lockPendingProposalOf(proposalId, customerAccountId);
+        ProposalFeedback proposal = locked.proposal();
+        RentalOrder order = locked.order();
         if (order.getStatus().isClosed()) {
             throw new ProposalConflictException("Đơn thuê đã đóng, không thể từ chối đề xuất");
         }
@@ -363,15 +370,25 @@ public class ProposalService {
         sessionCloser.closeAfterCommit(canceled, "FM đề xuất lại khoang khác");
     }
 
-    private ProposalFeedback lockPendingProposalOf(Long proposalId, Long customerAccountId) {
-        ProposalFeedback proposal = proposalRepository.findByIdForUpdate(proposalId)
-                .orElseThrow(ProposalNotFoundException::new);
-        if (!proposal.getCustomerId().equals(customerAccountId)) {
+    private record Locked(ProposalFeedback proposal, RentalOrder order) {
+    }
+
+    /**
+     * Khoá đơn rồi mới khoá proposal — cùng chiều với Cancellation Cascade (khoá đơn rồi cập nhật proposal), tránh
+     * deadlock khi khách đồng ý/từ chối đúng lúc đơn bị huỷ.
+     */
+    private Locked lockPendingProposalOf(Long proposalId, Long customerAccountId) {
+        var owner = proposalRepository.findOwnerById(proposalId).orElseThrow(ProposalNotFoundException::new);
+        if (!owner.customerId().equals(customerAccountId)) {
             throw new ProposalForbiddenException();
         }
+        RentalOrder order = orderRepository.findByIdForUpdate(owner.orderId())
+                .orElseThrow(RentalOrderNotFoundException::new);
+        ProposalFeedback proposal = proposalRepository.findByIdForUpdate(proposalId)
+                .orElseThrow(ProposalNotFoundException::new);
         if (!proposal.isPending()) {
             throw new ProposalConflictException("Đề xuất này đã được xử lý");
         }
-        return proposal;
+        return new Locked(proposal, order);
     }
 }

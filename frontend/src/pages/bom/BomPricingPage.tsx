@@ -74,7 +74,8 @@ export function BomPricingPage({ navigate }: { navigate: Navigate }) {
   }
 
   async function saveEdit() {
-    if (!editing) return;
+    // Enter gọi thẳng hàm này, không qua nút đang pending — chặn gửi PUT trùng.
+    if (!editing || busy) return;
     setBusy(true);
     setActionError(null);
     try {

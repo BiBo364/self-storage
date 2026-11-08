@@ -502,6 +502,8 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
               <Button
                 className="mt-4"
                 pending={busy}
+                // Biên bản trống thì khách không đồng ý được (backend 409) — cần ghi chú hoặc ảnh.
+                disabled={!inspectionNotes.trim() && inspectionPhotos.length === 0}
                 onClick={async () => {
                   const ok = await run(
                     () =>
@@ -520,6 +522,11 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
               >
                 Lưu hiện trạng
               </Button>
+              {!inspectionNotes.trim() && inspectionPhotos.length === 0 && (
+                <p className="mb-0 mt-2 text-label text-muted">
+                  Nhập ghi chú hoặc thêm ảnh hiện trạng trước khi lưu.
+                </p>
+              )}
               {current.unitInspectedAt === null &&
                 (current.inspectionNotes || (current.inspectionPhotos?.length ?? 0) > 0) && (
                   <WaitingCustomer

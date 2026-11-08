@@ -102,8 +102,14 @@ Module sở hữu Invoice nghe PaymentSucceeded → chuyển Invoice sang Paid
   số tiền khớp → còn `Pending` thì `Success` + `PaymentSucceeded` (hoặc `Failed` + `PaymentFailed`).
 - Kết quả: `ACCEPTED` / `ALREADY_SETTLED` (gọi lặp) / `NOT_FOUND` → HTTP 200; `INVALID_SIGNATURE` /
   `INVALID_AMOUNT` → 400. Request thử của payOS khi khai báo webhook (mã không tồn tại) vẫn 200.
-- Giao dịch đã đóng `Failed` (phiên đã huỷ) mà cổng vẫn báo đã thu → log ERROR "Thanh toán muộn…", trả
-  `ALREADY_SETTLED`, hoàn tiền thủ công (khách chuyển khoản tay theo QR cũ sau khi link đã huỷ).
+- Giao dịch đã đóng `Failed` (phiên đã huỷ) mà cổng vẫn báo đã thu (khách quét QR cũ sau khi link đã huỷ) → log
+  ERROR "Thanh toán muộn…", giao dịch chuyển `Success` (`failure_reason` giữ lý do đóng cũ, tiền tố "Thanh toán muộn
+  sau khi phiên đã đóng") và phát `PaymentSucceeded`; trả `ALREADY_SETTLED`. Booking chốt hoá đơn nếu còn `Unpaid`,
+  không thì báo FM hoàn (cọc của đơn đã đóng → `DEPOSIT_REFUND_REQUIRED`). Khoản này tính vào "đã thu qua cổng" nên
+  FM ghi nhận hoàn được. IPN VNPay xử lý giống vậy.
+- Gọi cổng (tạo link, hỏi, huỷ phiên — payOS và VNPay querydr) có timeout kết nối 5 giây, đọc 15 giây
+  (`GatewayHttp`): các lời gọi này chạy trong transaction đang khoá đơn / hoá đơn / giao dịch, cổng treo không được
+  giữ khoá mãi. Hết timeout → lỗi, transaction rollback.
 - Khai URL webhook (https công khai) ở my.payos.vn → Kênh thanh toán. Chạy local không có URL public thì
   `payment-check` + job đối soát vẫn chốt được giao dịch.
 

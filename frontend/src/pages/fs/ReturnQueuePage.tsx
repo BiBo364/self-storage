@@ -52,10 +52,10 @@ export function ReturnQueuePage({ navigate }: { navigate: Navigate }) {
     setNotice(null);
     try {
       await arriveAppointment(request.appointmentId);
-      setNotice(`Đã xác nhận khách đến trả khoang ${request.unitCode ?? ""}.`);
+      // Bước tiếp theo là kiểm tra khoang — mở biên bản luôn, tránh bấm "Khách đã đến" lần nữa (409).
+      navigate(`/staff/returns/${request.id}`);
     } catch (caught) {
       setActionError(errorMessage(caught));
-    } finally {
       setArrivingId(null);
     }
   }
@@ -119,7 +119,7 @@ export function ReturnQueuePage({ navigate }: { navigate: Navigate }) {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                {request.appointmentId !== null && (
+                {request.appointmentId !== null && request.appointmentArrivedAt === null && (
                   <Button
                     variant="secondary"
                     size="sm"

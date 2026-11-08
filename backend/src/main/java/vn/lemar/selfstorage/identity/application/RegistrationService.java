@@ -19,6 +19,7 @@ import vn.lemar.selfstorage.identity.application.exception.EmailAlreadyExistsExc
 import vn.lemar.selfstorage.identity.application.exception.EmailAlreadyVerifiedException;
 import vn.lemar.selfstorage.identity.application.exception.EmailNotRegisteredException;
 import vn.lemar.selfstorage.identity.application.exception.InvalidVerificationCodeException;
+import vn.lemar.selfstorage.identity.application.exception.RegistrationPendingException;
 import vn.lemar.selfstorage.identity.domain.Account;
 import vn.lemar.selfstorage.identity.repository.AccountRepository;
 
@@ -66,6 +67,11 @@ public class RegistrationService {
             throw new EmailAlreadyExistsException();
         }
         verificationCodes.markResendCooldown(email);
+        // Đang chờ xác minh → không ghi đè hash mật khẩu đã lưu: mã mới đi tới chủ email nhưng account tạo ra sẽ
+        // mang mật khẩu của người gửi register sau. Chủ email dùng resend-verification.
+        if (verificationCodes.hasPending(email)) {
+            throw new RegistrationPendingException();
+        }
         String code = verificationCodes.issue(email, passwordEncoder.encode(request.password()),
                 request.name(), request.phone());
         events.publishEvent(new VerificationEmailRequested(email, code, codeTtl));

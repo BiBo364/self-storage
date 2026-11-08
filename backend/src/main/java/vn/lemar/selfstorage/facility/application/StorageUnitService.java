@@ -23,9 +23,9 @@ public class StorageUnitService {
      * @return {@code true} nếu trạng thái khoang thực sự đổi — caller ghi AuditLog cho khoang
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public boolean reserveIfAvailable(Long unitId) {
+    public boolean reserveIfAvailable(Long unitId, Long orderId) {
         return storageUnitRepository.findByIdForUpdate(unitId)
-                .map(StorageUnit::reserveIfAvailable)
+                .map(unit -> unit.reserveIfAvailable(orderId))
                 .orElse(false);
     }
 
@@ -37,10 +37,11 @@ public class StorageUnitService {
                 .orElse(false);
     }
 
+    /** Nhả khoang {@code Reserved -> Available} khi đúng đơn {@code orderId} đang giữ nó (V25). */
     @Transactional(propagation = Propagation.MANDATORY)
-    public boolean releaseIfReserved(Long unitId) {
+    public boolean releaseIfReserved(Long unitId, Long orderId) {
         return storageUnitRepository.findByIdForUpdate(unitId)
-                .map(StorageUnit::releaseIfReserved)
+                .map(unit -> unit.releaseIfReservedBy(orderId))
                 .orElse(false);
     }
 

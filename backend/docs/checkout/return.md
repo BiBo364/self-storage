@@ -50,7 +50,7 @@ flowchart TB
   - FS được phân (`assigned_staff_id`) có `unit_access_key.issue` theo cơ sở;
   - yêu cầu ở `Assigned`, lịch `RETURN` đã có `arrived_at`;
   - hợp đồng `Active`.
-- **Body:** `unitEmptied`, `cleaningRequired`, `damageAmount` (≥ 0, FS nhập), `damages`, `returnedKeys`,
+- **Body:** `unitEmptied`, `cleaningRequired`, `damageAmount` (số nguyên VND ≥ 0, FS nhập; có phần lẻ → 400), `damages`, `returnedKeys`,
   `photos` (≤ 20), `note`. Ảnh là upload `Pending` của FS thì được attach phía server (`media.MediaAttachments`) để
   cron dọn upload bỏ ngang không xoá; URL không khớp upload của FS vẫn lưu, chỉ không attach.
 - **Biên bản:** tạo mới ở lần đầu, các lần sau cập nhật trên cùng bản ghi. `unitEmptied=false` → `PENDING_ITEMS`:
@@ -74,9 +74,10 @@ flowchart TB
    | `INV-CLN` | Phí vệ sinh | `fee.cleaning` nếu FS đánh dấu cần vệ sinh |
    | `INV-DMG` | Phí hư hỏng | `damageAmount` FS nhập |
    | `INV-KEY` | Phí mất chìa | `fee.lost_key × số chìa thiếu` |
-   | `INV-PEN` | Hoá đơn chưa thanh toán gộp vào quyết toán | tổng mọi hoá đơn `Unpaid` của hợp đồng (tiền thuê tháng, gia hạn, phí quá hạn, phí dịch vụ…) |
+   | `INV-PEN` | Hoá đơn chưa thanh toán gộp vào quyết toán | tổng mọi hoá đơn `Unpaid` của hợp đồng (tiền thuê tháng, gia hạn, phí quá hạn, phí dịch vụ…) + tiền thuê tháng đã `Expired` (nợ thuê chưa trả) |
 
-   - Các hoá đơn `Unpaid` được gộp bị `Canceled` lý do "Gộp vào quyết toán trả kho" (audit `INVOICE_CANCELED`), phiên
+   - Các hoá đơn `Unpaid` và tiền thuê `Expired` được gộp bị `Canceled` lý do "Gộp vào quyết toán trả kho" (audit
+     `INVOICE_CANCELED`). `GET` biên bản (`unpaid`) cũng tính cả tiền thuê `Expired`. Phiên
      cổng của chúng huỷ sau commit. Còn phiên thanh toán mở → 409, thử lại sau.
    - Khoản bằng 0 không sinh hoá đơn.
 3. **Đối trừ cọc** theo thứ tự `CLN → DMG → KEY → PEN`: phần mỗi khoản được cọc còn lại phủ thành hoá đơn của loại

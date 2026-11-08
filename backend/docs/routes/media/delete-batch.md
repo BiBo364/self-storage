@@ -32,7 +32,8 @@ phase). Không gọi khi rời trang hoặc Hủy upload — batch Pending đư�
 - Gọi Cloudinary nằm trong transaction; provider lỗi → rollback row, client có thể retry.
 - Không audit — hành vi dọn file, không đổi state nghiệp vụ của flow.
 - Sau khi phase chuyển, FE không còn hiển thị nút X; file đã attach và delete batch sẽ bỏ qua.
-- Batch `Pending` bị bỏ ngang (không X, không attach) giữ nguyên: không có job nào tự dọn, asset còn trên Cloudinary.
+- Batch `Pending` bị bỏ ngang (không X, không attach) không bị xoá ở đây; quá `media.orphan-cleanup.max-age`
+  (3 ngày) thì cron `MediaCleanupJob` dọn ([upload.md](upload.md)).
 
 ## Ví dụ
 

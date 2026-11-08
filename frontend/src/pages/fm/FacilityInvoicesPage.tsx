@@ -85,11 +85,14 @@ export function FacilityInvoicesPage() {
         </FilterSelect>
         <FilterSelect label="Loại hoá đơn" value={type} onChange={setType}>
           <option value="">Tất cả loại</option>
-          {Object.keys(INVOICE_TYPE_LABEL).map((value) => (
-            <option key={value} value={value}>
-              {INVOICE_TYPE_LABEL[value]}
-            </option>
-          ))}
+          {/* ForfeitedDeposit chỉ là nhóm doanh thu, không phải loại hoá đơn — lọc luôn rỗng. */}
+          {Object.keys(INVOICE_TYPE_LABEL)
+            .filter((value) => value !== "ForfeitedDeposit")
+            .map((value) => (
+              <option key={value} value={value}>
+                {INVOICE_TYPE_LABEL[value]}
+              </option>
+            ))}
         </FilterSelect>
       </div>
 
