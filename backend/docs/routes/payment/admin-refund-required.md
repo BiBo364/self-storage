@@ -7,7 +7,8 @@ purpose: ADMIN xem các invoice đang có nghĩa vụ hoàn tiền; read-only, c
 Trả các invoice có `refund_status = Required`, kèm giao dịch `PAY/Success` gần nhất. Route
 read-only; chưa có endpoint ghi nhận hoàn tiền.
 
-- **Actor / quyền:** role `ADMIN`.
+- **Actor / quyền:** role `ADMIN`; đây là queue oversight. FM dùng
+  `GET /api/fm/invoices/refunds` theo facility.
 - **Contract chi tiết:** annotation tại `AdminRefundPaymentController.java`; Swagger UI —
   `http://localhost:8080/swagger-ui/index.html`.
 

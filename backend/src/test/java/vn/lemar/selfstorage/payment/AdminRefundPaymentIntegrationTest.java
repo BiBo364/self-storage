@@ -112,6 +112,32 @@ class AdminRefundPaymentIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void fmSeesRefundRequiredForOwnFacility() throws Exception {
+        mockMvc.perform(get("/api/fm/invoices/refunds")
+                        .param("facilityId", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm1@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].invoiceCode").value("INV-ADMIN-REFUND"));
+    }
+
+    @Test
+    void fmOfOtherFacilityCannotSeeRefundQueue() throws Exception {
+        mockMvc.perform(get("/api/fm/invoices/refunds")
+                        .param("facilityId", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("fm2@lemar.vn")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void customerCannotSeeFmRefundQueue() throws Exception {
+        mockMvc.perform(get("/api/fm/invoices/refunds")
+                        .param("facilityId", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("customer1@lemar.vn")))
+                .andExpect(status().isForbidden());
+    }
+
     private String bearerOf(String email) {
         Account account = accounts.findByEmail(email).orElseThrow();
         return "Bearer " + jwtService.issueAccessToken(account);

@@ -16,7 +16,6 @@ import { DetailPanel } from "../../components/ui/DetailPanel";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 import { formatPrice } from "../../mocks/catalog";
-import { RefundRequiredPanel } from "./RefundRequiredPanel";
 
 function formatDateTime(value: string | null) {
   if (!value) return "—";
@@ -189,8 +188,6 @@ export function PaymentReconciliationPage() {
       </div>
 
       {notice && <DemoNotice tone={notice.tone}>{notice.message}</DemoNotice>}
-
-      <RefundRequiredPanel />
 
       <div>
         <h2 className="m-0 text-section text-ink">

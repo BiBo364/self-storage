@@ -82,16 +82,6 @@ export function loadPendingCases(
   });
 }
 
-export function loadRefundCases(page: number, size = 20): Promise<RefundCasePage> {
-  const params = new URLSearchParams({
-    page: String(page),
-    size: String(size),
-  });
-  return apiRequest<RefundCasePage>(`/api/admin/payments/refunds?${params.toString()}`, {
-    accessToken: token(),
-  });
-}
-
 export function reconcilePayment(txnRef: string, payload: ReconcilePayload): Promise<unknown> {
   return apiRequest(`/api/admin/payments/${encodeURIComponent(txnRef)}/reconcile`, {
     method: "POST",

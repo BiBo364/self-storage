@@ -138,6 +138,53 @@ public class PaymentReconciliationCaseRepository {
                 limit, offset);
     }
 
+    /** Refund Required của một facility — dùng cho queue FM. */
+    public List<RefundRow> findRefundRequiredPageForFacility(Long facilityId, long offset, int limit) {
+        String sql = """
+                select i.id as invoice_id, i.code, i.order_id, i.amount, i.refund_status,
+                       i.refund_reason, i.refund_requested_at,
+                       pt.vnp_txn_ref, pt.gateway_transaction_no, pt.paid_at
+                from invoices i
+                left join rental_orders o on o.id = i.order_id
+                left join rental_contracts c on c.id = i.contract_id
+                left join storage_units u on u.id = coalesce(o.unit_id, c.unit_id)
+                left join lateral (
+                    select pt.vnp_txn_ref, pt.gateway_transaction_no, pt.paid_at
+                    from payment_transactions pt
+                    where pt.invoice_id = i.id
+                      and pt.direction = 'PAY'
+                      and pt.status = 'Success'
+                    order by pt.paid_at desc nulls last, pt.id desc
+                    limit 1
+                ) pt on true
+                where u.facility_id = ? and i.refund_status = 'Required'
+                order by i.refund_requested_at nulls last, i.id
+                limit ? offset ?
+                """;
+        return jdbc.query(sql, (rs, rowNum) -> new RefundRow(
+                        rs.getLong("invoice_id"), rs.getString("code"),
+                        rs.getObject("order_id", Long.class), rs.getBigDecimal("amount"),
+                        rs.getString("refund_status"), rs.getString("refund_reason"),
+                        rs.getTimestamp("refund_requested_at") == null
+                                ? null : rs.getTimestamp("refund_requested_at").toInstant(),
+                        rs.getString("vnp_txn_ref"), rs.getString("gateway_transaction_no"),
+                        rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toInstant()),
+                facilityId, limit, offset);
+    }
+
+    public long countRefundRequiredForFacility(Long facilityId) {
+        String sql = """
+                select count(*)
+                from invoices i
+                left join rental_orders o on o.id = i.order_id
+                left join rental_contracts c on c.id = i.contract_id
+                left join storage_units u on u.id = coalesce(o.unit_id, c.unit_id)
+                where u.facility_id = ? and i.refund_status = 'Required'
+                """;
+        Long count = jdbc.queryForObject(sql, Long.class, facilityId);
+        return count == null ? 0 : count;
+    }
+
     public long countRefundRequired() {
         Long count = jdbc.queryForObject(
                 "select count(*) from invoices where refund_status = 'Required'", Long.class);

@@ -81,6 +81,20 @@ public class PaymentReconciliationCaseService {
     }
 
     @Transactional(readOnly = true)
+    public RefundCasePageView listRefundRequiredForFacility(Long facilityId, int page, int size) {
+        validatePage(page, size);
+        long total = repository.countRefundRequiredForFacility(facilityId);
+        List<RefundCaseView> items = repository
+                .findRefundRequiredPageForFacility(facilityId, (long) page * size, size)
+                .stream()
+                .map(row -> new RefundCaseView(row.invoiceId(), row.invoiceCode(), row.orderId(),
+                        row.amount(), row.refundStatus(), row.refundReason(), row.refundRequestedAt(),
+                        row.vnpTxnRef(), row.gatewayTransactionNo(), row.paidAt()))
+                .toList();
+        return new RefundCasePageView(items, page, size, total, totalPages(total, size));
+    }
+
+    @Transactional(readOnly = true)
     public RefundCasePageView listRefundRequired(int page, int size) {
         validatePage(page, size);
         long total = repository.countRefundRequired();

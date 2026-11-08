@@ -1,11 +1,7 @@
 import { ReceiptText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../app/api";
-import {
-  loadRefundCases,
-  type RefundCase,
-  type RefundCasePage,
-} from "../../app/adminReconciliation";
+import { type RefundCase, type RefundCasePage } from "../../app/adminReconciliation";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
@@ -34,7 +30,11 @@ function refundReasonLabel(reason: string | null) {
 }
 
 /** Read-only queue: tiền đã vào nhưng chưa có thao tác hoàn tiền. */
-export function RefundRequiredPanel() {
+type FmRefundQueuePanelProps = {
+  loadCases: (page: number, size?: number) => Promise<RefundCasePage>;
+};
+
+export function FmRefundQueuePanel({ loadCases }: FmRefundQueuePanelProps) {
   const [page, setPage] = useState(0);
   const [data, setData] = useState<RefundCasePage>(EMPTY_PAGE);
   const [loading, setLoading] = useState(true);
@@ -44,7 +44,7 @@ export function RefundRequiredPanel() {
 
   useEffect(() => {
     let active = true;
-    loadRefundCases(page)
+    loadCases(page)
       .then((result) => {
         if (active) setData(result);
       })
@@ -62,7 +62,7 @@ export function RefundRequiredPanel() {
     return () => {
       active = false;
     };
-  }, [page, reloadKey]);
+  }, [page, reloadKey, loadCases]);
 
   function reload() {
     setLoading(true);

@@ -1,5 +1,6 @@
 import { apiRequest } from "./api";
 import { authGateway } from "./auth";
+import type { RefundCasePage } from "./adminReconciliation";
 
 export type FmInvoiceType =
   "Deposit" | "DepositSupplement" | "Rental" | "Extension" | "Penalty" | "Service";
@@ -85,5 +86,22 @@ export async function loadFacilityInvoices(
   return apiRequest<FmInvoicePage>(`/api/fm/invoices?${params.toString()}`, {
     accessToken,
     signal,
+  });
+}
+
+/** Queue refund Required theo facility của FM hiện tại. */
+export async function loadFmRefundCases(page: number, size = 20): Promise<RefundCasePage> {
+  const accessToken = authGateway.getSession()?.token;
+  if (!accessToken) {
+    throw new Error("Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.");
+  }
+  const facility = await apiRequest<ManagedFacility>("/api/fm/facility", { accessToken });
+  const params = new URLSearchParams({
+    facilityId: String(facility.id),
+    page: String(page),
+    size: String(size),
+  });
+  return apiRequest<RefundCasePage>(`/api/fm/invoices/refunds?${params.toString()}`, {
+    accessToken,
   });
 }

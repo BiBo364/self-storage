@@ -46,6 +46,7 @@ Toàn bộ HTTP route backend đang cung cấp. Chi tiết contract từng route
 | GET | `/api/payments/vnpay/return` | Public (redirect VNPay) | Trang kết quả cho khách — không ghi dữ liệu | [routes/payment/vnpay-return.md](routes/payment/vnpay-return.md) |
 | POST | `/api/invoices/{invoiceId}/pay` | Chủ hóa đơn + đã xác minh email | Mở phiên thanh toán hóa đơn cọc (Flow 1.4) | [routes/booking/invoice-pay.md](routes/booking/invoice-pay.md) |
 | GET | `/api/admin/payments/reconciliation` | Bearer + role `ADMIN` | Case đối soát `view=open|history`, có pagination; `/payments/pending` là alias `open` | [routes/payment/admin-pending-payments.md](routes/payment/admin-pending-payments.md) |
+| GET | `/api/fm/invoices/refunds` | Bearer + role `FM`; `payment_transaction.refund` + facility scope | Queue invoice `Required` của cơ sở, có pagination | [routes/booking/fm-refund-queue.md](routes/booking/fm-refund-queue.md) |
 | GET | `/api/admin/payments/refunds` | Bearer + role `ADMIN` | Danh sách invoice đang chờ hoàn tiền, có pagination | [routes/payment/admin-refund-required.md](routes/payment/admin-refund-required.md) |
 | POST | `/api/admin/payments/{txnRef}/reconcile` | Bearer + role `ADMIN` | Chốt thủ công giao dịch Pending theo portal VNPay | [routes/payment/manual-reconcile.md](routes/payment/manual-reconcile.md) |
 | POST | `/api/media/uploads` | Bearer + `ACCOUNT_ACTIVE` | Upload file (ảnh/PDF ≤ 10MB), trả URL + batchId dùng lại trong flow | [routes/media/upload.md](routes/media/upload.md) |

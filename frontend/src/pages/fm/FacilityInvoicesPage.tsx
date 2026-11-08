@@ -15,6 +15,8 @@ import { FilterSelect } from "../../components/ui/FilterSelect";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 import { formatPrice } from "../../mocks/catalog";
+import { FmRefundQueuePanel } from "./FmRefundQueuePanel";
+import { loadFmRefundCases } from "../../app/fmInvoices";
 
 type TypeFilter = "all" | FmInvoiceType;
 type StatusFilter = "all" | FmInvoiceStatus;
@@ -68,6 +70,7 @@ function paymentTone(invoice: FmInvoice): "neutral" | "warning" | "success" | "d
 }
 
 export function FacilityInvoicesPage() {
+  const [tab, setTab] = useState<"invoices" | "refunds">("invoices");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
@@ -85,6 +88,7 @@ export function FacilityInvoicesPage() {
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    if (tab !== "invoices") return;
     const controller = new AbortController();
     const paymentStatus =
       paymentFilter === "needs-reconciliation"
@@ -121,7 +125,7 @@ export function FacilityInvoicesPage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [typeFilter, statusFilter, paymentFilter, page, reloadKey]);
+  }, [typeFilter, statusFilter, paymentFilter, page, reloadKey, tab]);
 
   function reload() {
     setLoading(true);
@@ -156,6 +160,15 @@ export function FacilityInvoicesPage() {
     setError(null);
   }
 
+  function changeTab(next: "invoices" | "refunds") {
+    setTab(next);
+    setOpenId(null);
+    if (next === "invoices") {
+      setLoading(true);
+      setError(null);
+    }
+  }
+
   const invoices = data.items;
   const openInvoice = invoices.find((invoice) => invoice.id === openId) ?? null;
   const totalUnpaid = invoices
@@ -165,15 +178,53 @@ export function FacilityInvoicesPage() {
     .filter((invoice) => invoice.status === "Paid")
     .reduce((sum, invoice) => sum + invoice.amount, 0);
 
+  const header = (
+    <div>
+      <h1 className="m-0 text-title text-ink">Quản lý hoá đơn cơ sở</h1>
+      <p className="mt-1.5 text-small text-muted">
+        Hoá đơn phát sinh từ khách hàng thuộc cơ sở của bạn — chỉ xem, hệ thống tự tạo hoá đơn theo
+        từng flow (đặt cọc, gia hạn, trả kho, sự cố).
+      </p>
+    </div>
+  );
+
+  const tabs = (
+    <div className="flex gap-2 border-b border-rule" role="tablist" aria-label="Hoá đơn cơ sở">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === "invoices"}
+        className={`border-b-2 px-3 py-2 text-small font-semibold ${tab === "invoices" ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink"}`}
+        onClick={() => changeTab("invoices")}
+      >
+        Hoá đơn
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === "refunds"}
+        className={`border-b-2 px-3 py-2 text-small font-semibold ${tab === "refunds" ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink"}`}
+        onClick={() => changeTab("refunds")}
+      >
+        Hoàn tiền
+      </button>
+    </div>
+  );
+
+  if (tab === "refunds") {
+    return (
+      <div className="grid gap-6">
+        {header}
+        {tabs}
+        <FmRefundQueuePanel loadCases={loadFmRefundCases} />
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="m-0 text-title text-ink">Quản lý hoá đơn cơ sở</h1>
-        <p className="mt-1.5 text-small text-muted">
-          Hoá đơn phát sinh từ khách hàng thuộc cơ sở của bạn — chỉ xem, hệ thống tự tạo hoá đơn
-          theo từng flow (đặt cọc, gia hạn, trả kho, sự cố).
-        </p>
-      </div>
+      {header}
+      {tabs}
 
       <div className="grid grid-cols-2 gap-2 max-[520px]:grid-cols-1">
         <div className="bg-surface p-5">
