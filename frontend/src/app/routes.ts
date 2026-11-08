@@ -32,6 +32,7 @@ export function viewFromLocation(): View {
   if (path === "/staff/support") return "fs-support";
   if (path === "/bom/dashboard") return "bom-dashboard";
   if (path === "/bom/facilities") return "bom-facilities";
+  if (path === "/bom/staff") return "bom-staff";
   if (path === "/bom/pricing") return "bom-pricing";
   if (path === "/bom/invoices") return "bom-invoices";
   if (path === "/admin/accounts") return "admin-accounts";

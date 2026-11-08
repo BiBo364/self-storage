@@ -34,15 +34,20 @@ public class FacilityStaffQuery {
                 facilityId, STAFF_ROLE);
     }
 
-    /** Tài khoản là FS đang hoạt động và được gán vào đúng cơ sở. */
-    @Transactional(readOnly = true)
+    /**
+     * Tài khoản là FS đang hoạt động và được gán vào đúng cơ sở. Khoá {@code FOR SHARE} dòng gán tới hết transaction
+     * của người gọi (FM đang phân công việc): gỡ FS khỏi cơ sở cùng lúc phải chờ, rồi thấy việc vừa giao
+     * ({@link AccountAdminService#setStaffFacilities}).
+     */
+    @Transactional
     public boolean isActiveStaffOf(Long accountId, Long facilityId) {
-        return Boolean.TRUE.equals(jdbc.queryForObject("""
-                select exists(select 1 from accounts a
-                    join roles r on r.id = a.role_id
-                    join account_facility_assignments f on f.account_id = a.id
-                    where a.id = ? and f.facility_id = ? and r.name = ? and a.status = 'ACTIVE')""",
-                Boolean.class, accountId, facilityId, STAFF_ROLE));
+        return !jdbc.queryForList("""
+                select f.account_id from accounts a
+                join roles r on r.id = a.role_id
+                join account_facility_assignments f on f.account_id = a.id
+                where a.id = ? and f.facility_id = ? and r.name = ? and a.status = 'ACTIVE'
+                for share of f""",
+                Long.class, accountId, facilityId, STAFF_ROLE).isEmpty();
     }
 
     /** Một FS của cơ sở; {@code name}/{@code phone} nullable — FE fallback về email. */

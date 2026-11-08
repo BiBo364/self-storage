@@ -149,6 +149,21 @@ public class BackofficeController {
         return ok("Đã gán FM", backoffice.assignManager(id, body.fmAccountId(), isFm));
     }
 
+    @Operation(summary = "Tài khoản FS",
+            description = "FS kèm `facilityIds` đang gán — BOM điều phối FS giữa các cơ sở.")
+    @GetMapping("/api/bom/staff")
+    public ResponseEntity<ApiEnvelope<List<AccountRow>>> staffAccounts() {
+        return ok("Tài khoản FS", accounts.list("FS", null, null, 0, 200));
+    }
+
+    @Operation(summary = "Gán cơ sở cho FS", description = "Như `PUT /api/admin/accounts/{id}/facilities`: thay toàn "
+            + "bộ danh sách cơ sở; gỡ khỏi cơ sở mà FS còn việc mở ở đó → 409 kèm danh sách việc.")
+    @PutMapping("/api/bom/staff/{id}/facilities")
+    public ResponseEntity<ApiEnvelope<AccountRow>> bomStaffFacilities(@PathVariable Long id,
+                                                                      @Valid @RequestBody FacilitiesBody body) {
+        return staffFacilities(id, body);
+    }
+
     @PutMapping("/api/bom/facilities/{id}/access-options")
     public ResponseEntity<ApiEnvelope<FacilityRow>> bomAccessOptions(@PathVariable Long id,
                                                                      @Valid @RequestBody AccessBody body) {

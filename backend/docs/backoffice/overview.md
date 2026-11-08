@@ -73,6 +73,8 @@ Màn "Hoá đơn cơ sở" của FM có panel "Hoàn tiền" trên từng hoá �
 | PUT | `/api/bom/facilities/{id}/manager` `{fmAccountId}` | gán FM (1–1: FM đang ở cơ sở khác bị gỡ), `null` = bỏ FM; tài khoản không phải FM → 400 |
 | PUT | `/api/bom/facilities/{id}/access-options` | như route FM (cùng kiểm `facility.access`; BOM có quyền mọi cơ sở) |
 | GET | `/api/bom/managers` | tài khoản FM đang hoạt động |
+| GET | `/api/bom/staff` | tài khoản FS (mọi trạng thái) kèm `facilityIds` đang gán |
+| PUT | `/api/bom/staff/{id}/facilities` `{facilityIds}` | như `PUT /api/admin/accounts/{id}/facilities` — BOM điều phối FS giữa các cơ sở (xem [Gán FS vào cơ sở](#gán-fs-vào-cơ-sở)) |
 | GET / PUT | `/api/bom/policies`, `/api/bom/policies/{key}` `{value}` | policy đang là số thì giá trị mới phải là số ≥ 0 |
 | GET / PUT | `/api/bom/unit-types`, `/api/bom/unit-types/{id}/price` `{monthlyPrice}` | giá theo loại khoang (> 0). Hợp đồng đã ký giữ giá chốt lúc ký |
 | PATCH | `/api/bom/storage-units/{id}` | giá riêng từng khoang |
@@ -84,6 +86,48 @@ Audit:
 - `STORAGE_UNIT_CREATED`, `STORAGE_UNIT_UPDATED`, `STORAGE_UNIT_MAINTENANCE`, `STORAGE_UNIT_AVAILABLE` (`StorageUnit`);
 - `POLICY_UPDATED` (`Policy`), `UNIT_TYPE_UPDATED` (`UnitType`).
 
+## Gán FS vào cơ sở
+
+BOM (`PUT /api/bom/staff/{id}/facilities`) và ADMIN (`PUT /api/admin/accounts/{id}/facilities`) dùng chung
+`AccountAdminService.setStaffFacilities`. FS chuyển cơ sở giữ nguyên tài khoản — không tạo tài khoản mới; lịch sử
+audit và việc đã làm vẫn gắn với một account id.
+
+- Body là danh sách cơ sở **đích** (thay toàn bộ, trùng id bị gộp). Cơ sở giữ nguyên không bị xoá / chèn lại nên
+  `assigned_at` không đổi; chỉ cơ sở bị bỏ mới xoá dòng, cơ sở mới mới chèn dòng.
+- **Việc còn mở chặn gỡ:** FS bị gỡ khỏi cơ sở thì mất quyền ở đó (mọi thao tác FS kiểm scope cơ sở theo từng
+  request), nên việc đang giao sẽ bị treo. Còn một trong các việc sau tại cơ sở bị bỏ → 409, không đổi gì:
+
+  | Việc | Điều kiện | Cách gỡ chặn |
+  |---|---|---|
+  | lịch check-in | `appointments` `CHECKIN` `Pending`, `staff_id` = FS | FM đổi FS: `PUT /api/fm/appointments/{id}/staff` |
+  | lịch trả kho | `appointments` `RETURN` `Pending`, `staff_id` = FS (yêu cầu trả kho `Assigned`) | FM phân công lại yêu cầu trả kho |
+  | phiên bàn giao | `handover_records` `IN_PROGRESS`, khách đã đến, lịch có `staff_id` = FS | FS hoàn tất / đóng phiên — không phân công lại được |
+  | yêu cầu hỗ trợ | `support_requests` `Assigned`, `assigned_staff_id` = FS | FM giao lại yêu cầu |
+
+  Message liệt kê tối đa 5 việc (`… và N việc khác`). Trả kho sau khi khách đến (checkout) không chặn: mọi FS của
+  cơ sở có `unit_access_key.issue` đều làm tiếp được.
+- Mỗi module giao việc cho FS khai báo việc còn mở qua interface `identity.application.StaffOpenWork`
+  (booking, handover, support) — identity không phụ thuộc ngược các module đó.
+- **Tranh chấp với FM đang phân công:** `FacilityStaffQuery.isActiveStaffOf` khoá `FOR SHARE` dòng gán tới hết
+  transaction phân công. Lệnh gỡ xoá dòng gán **trước** rồi mới kiểm việc, nên chờ FM commit và thấy việc vừa giao
+  (→ 409, rollback). FM phân công sau khi dòng đã xoá → 400 "không phải FS của cơ sở".
+- Audit một bản ghi `ACCOUNT_UPDATED` (`Account`): `old_value.facilityIds` / `new_value.facilityIds`.
+- Đổi role khỏi `FS` (`PATCH /api/admin/accounts/{id}`) vẫn xoá mọi dòng gán mà **không** kiểm việc còn mở.
+
+```bash
+TOKEN='<token của bom1@lemar.vn>'
+
+# 409 — fs1 (id 5) còn lịch check-in #1 ở Q7
+curl -s -X PUT http://localhost:8080/api/bom/staff/5/facilities -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json' -d '{"facilityIds":[2]}'
+# {"message":"FS còn việc chưa đóng tại cơ sở Q7: lịch check-in #1. FM phân công lại hoặc đóng các việc này trước khi gỡ FS khỏi cơ sở","timestamp":"2026-11-08T18:44:03.649603100Z"}
+
+# 200 — sau khi FM đổi lịch #1 sang FS khác (PUT /api/fm/appointments/1/staff)
+# {"message":"Đã gán cơ sở","data":{"id":5,"email":"fs1@lemar.vn","name":"FS Quận 7","phone":null,"role":"FS","status":"ACTIVE","verified":true,"createdAt":"2026-11-08T18:41:03.175270Z","facilityIds":[2],"lastLoginAt":null}}
+```
+
+Lần 409 không ghi audit; lần 200 ghi `ACCOUNT_UPDATED | Account | 5 | {"facilityIds": [1]} → {"facilityIds": [2]}`
+(actor = BOM).
+
 ## Admin (`/api/admin/**`, role `ADMIN`)
 
 | Method | Path | Hành vi |
@@ -91,7 +135,7 @@ Audit:
 | GET | `/api/admin/accounts?role=&status=&q=&page=&size=` | tài khoản + cơ sở được gán / phụ trách + lần đăng nhập thành công gần nhất |
 | POST | `/api/admin/accounts` `{email, password, name?, phone?, role}` | tạo tài khoản đã xác minh email; mật khẩu ≥ 8; email trùng → 409 |
 | PATCH | `/api/admin/accounts/{id}` `{role?, status?, name?, phone?}` | đổi role / khoá (`BANNED`) / mở; không tự đổi role hoặc khoá chính mình (409); đổi khỏi FS thì gỡ gán cơ sở |
-| PUT | `/api/admin/accounts/{id}/facilities` `{facilityIds}` | gán FS vào đúng các cơ sở này (thay toàn bộ); chỉ tài khoản FS |
+| PUT | `/api/admin/accounts/{id}/facilities` `{facilityIds}` | gán FS vào đúng các cơ sở này (thay toàn bộ); không phải tài khoản FS → 409; cơ sở không tồn tại → 400; gỡ khỏi cơ sở mà FS còn việc mở → 409 ([Gán FS vào cơ sở](#gán-fs-vào-cơ-sở)) |
 | GET | `/api/admin/login-events?email=` | lịch sử đăng nhập (thành công / thất bại + lý do + IP), mới nhất trước |
 | GET | `/api/admin/audit-logs?action=&entityType=&entityId=&actor=` | nhật ký thao tác (lọc theo email actor) |
 | GET | `/api/admin/permissions` | ma trận permission × role (scope `GLOBAL`/`FACILITY`) |

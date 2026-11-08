@@ -144,7 +144,10 @@ Chi tiết: [error-handling.md](error-handling.md).
 - **FM của cơ sở:** BOM gán / bỏ FM qua `PUT /api/bom/facilities/{id}/manager` (1–1: FM đang phụ trách cơ sở khác bị
   gỡ khỏi cơ sở đó). Khoá (`BANNED`) một tài khoản FM không tự gỡ `facilities.fm_account_id` — BOM gán FM khác bằng
   route trên.
-- **FS của cơ sở:** ADMIN gán qua `PUT /api/admin/accounts/{id}/facilities`; đổi role khỏi `FS` thì gán cơ sở bị xoá.
+- **FS của cơ sở:** BOM gán qua `PUT /api/bom/staff/{id}/facilities`, ADMIN qua `PUT /api/admin/accounts/{id}/facilities`
+  (cùng logic). Gỡ FS khỏi cơ sở mà FS còn việc mở ở đó → 409
+  ([backoffice/overview.md › Gán FS vào cơ sở](backoffice/overview.md#gán-fs-vào-cơ-sở)); đổi role khỏi `FS` thì gán
+  cơ sở bị xoá.
 - Namespace `/api/fm/**`, `/api/bom/**`, `/api/admin/**` đều role-bound như bảng trên; route FM còn kiểm permission
   theo cơ sở ở service. Thao tác đề xuất khoang theo quy tắc đặt route ở trên: `/api/proposals/**` (ownership) và
   `/api/rental-orders/{orderId}/proposals` (permission `proposal_feedback.repropose` theo cơ sở) nằm trong `/api/**`

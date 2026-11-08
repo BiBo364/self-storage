@@ -169,6 +169,21 @@ export function fetchBomManagers(): Promise<ManagerRow[]> {
   return authed<ManagerRow[]>("/api/bom/managers");
 }
 
+/** `AccountAdminService.AccountRow` của FS — `facilityIds` = cơ sở đang gán. */
+export type StaffRow = ManagerRow & { facilityIds: number[] };
+
+export function fetchBomStaff(): Promise<StaffRow[]> {
+  return authed<StaffRow[]>("/api/bom/staff");
+}
+
+/** Thay toàn bộ cơ sở của FS; gỡ khỏi cơ sở mà FS còn việc mở → 409 (message liệt kê việc). */
+export function setBomStaffFacilities(id: number, facilityIds: number[]): Promise<StaffRow> {
+  return authed<StaffRow>(`/api/bom/staff/${id}/facilities`, {
+    method: "PUT",
+    body: { facilityIds },
+  });
+}
+
 export function fetchBomPolicies(): Promise<PolicyRow[]> {
   return authed<PolicyRow[]>("/api/bom/policies");
 }

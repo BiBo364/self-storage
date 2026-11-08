@@ -34,6 +34,7 @@ export type View =
   | "support"
   | "bom-dashboard"
   | "bom-facilities"
+  | "bom-staff"
   | "bom-pricing"
   | "bom-invoices"
   | "admin-accounts"

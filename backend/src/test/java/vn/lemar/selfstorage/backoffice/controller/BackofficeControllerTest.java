@@ -163,6 +163,30 @@ class BackofficeControllerTest {
     }
 
     @Test
+    void bomAssignsStaffFacilities() throws Exception {
+        login("bom@x.vn", "BOM", 3L);
+        when(accounts.list("FS", null, null, 0, 200)).thenReturn(List.of(account("FS")));
+        when(accounts.setStaffFacilities(5L, List.of(2L), 3L)).thenReturn(account("FS"));
+        when(accounts.setStaffFacilities(6L, List.of(), 3L))
+                .thenThrow(new IllegalStateException("FS còn việc chưa đóng tại cơ sở Q7: lịch check-in #12"));
+
+        mockMvc.perform(as(get("/api/bom/staff"), "bom@x.vn"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].role").value("FS"));
+        mockMvc.perform(json(put("/api/bom/staff/5/facilities"), "bom@x.vn", "{\"facilityIds\":[2]}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(json(put("/api/bom/staff/6/facilities"), "bom@x.vn", "{\"facilityIds\":[]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("FS còn việc chưa đóng tại cơ sở Q7: lịch check-in #12"));
+        mockMvc.perform(json(put("/api/bom/staff/5/facilities"), "bom@x.vn", "{}"))
+                .andExpect(status().isBadRequest());
+
+        login("fm@x.vn", "FM", 2L);
+        mockMvc.perform(json(put("/api/bom/staff/5/facilities"), "fm@x.vn", "{\"facilityIds\":[2]}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void adminRoutes() throws Exception {
         login("admin@x.vn", "ADMIN", 1L);
         when(accounts.list(isNull(), isNull(), eq("fs"), eq(0), eq(50))).thenReturn(List.of(account("FS")));

@@ -168,6 +168,86 @@ class AppointmentServiceIntegrationTest {
         assertThat(notificationTypes(fsId)).containsExactly("FS_ASSIGNED");
     }
 
+    // ---------------------------------------------------------------- đổi FS
+
+    @Test
+    void reassignStaffMovesAppointmentKeepsOrderAuditsAndNotifiesNewStaff() {
+        long otherFsId = secondStaffOfQ7();
+        loginAs("fm1@lemar.vn");
+        service.assignStaff(appointmentId, fsId, fmId);
+
+        FmAppointmentResponse result = service.reassignStaff(appointmentId, otherFsId, fmId);
+
+        assertThat(result.staffId()).isEqualTo(otherFsId);
+        assertThat(result.orderStatus()).isEqualTo("InProgress");
+        assertThat(jdbc.queryForObject("select staff_id from appointments where id = ?", Long.class, appointmentId))
+                .isEqualTo(otherFsId);
+        List<Map<String, Object>> audits = jdbc.queryForList("""
+                select entity_type, old_value ->> 'staffId' as old_staff, new_value ->> 'staffId' as new_staff
+                from audit_logs where action = 'FS_ASSIGNED' order by id""");
+        assertThat(audits).hasSize(3);
+        assertThat(audits.get(2).get("entity_type")).isEqualTo("Appointment");
+        assertThat(audits.get(2).get("old_staff")).isEqualTo(String.valueOf(fsId));
+        assertThat(audits.get(2).get("new_staff")).isEqualTo(String.valueOf(otherFsId));
+        assertThat(notificationTypes(otherFsId)).containsExactly("FS_ASSIGNED");
+    }
+
+    @Test
+    void reassignToTheSameStaffConflicts() {
+        loginAs("fm1@lemar.vn");
+        service.assignStaff(appointmentId, fsId, fmId);
+
+        assertThatThrownBy(() -> service.reassignStaff(appointmentId, fsId, fmId))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessage("FS này đang phụ trách lịch hẹn");
+    }
+
+    @Test
+    void reassignWithoutStaffConflicts() {
+        long otherFsId = secondStaffOfQ7();
+        loginAs("fm1@lemar.vn");
+
+        assertThatThrownBy(() -> service.reassignStaff(appointmentId, otherFsId, fmId))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessage("Lịch hẹn chưa có FS — dùng phân công lần đầu");
+        assertThat(orderStatus()).isEqualTo("Scheduled");
+    }
+
+    @Test
+    void reassignToAccountOutsideTheFacilityIsRejected() {
+        loginAs("fm1@lemar.vn");
+        service.assignStaff(appointmentId, fsId, fmId);
+
+        assertThatThrownBy(() -> service.reassignStaff(appointmentId, fmId, fmId))
+                .isInstanceOf(AppointmentValidationException.class)
+                .hasMessage("Nhân viên không phải FS của cơ sở này");
+    }
+
+    @Test
+    void reassignAfterArrivalConflicts() {
+        long otherFsId = secondStaffOfQ7();
+        loginAs("fm1@lemar.vn");
+        service.assignStaff(appointmentId, fsId, fmId);
+        entityManager.flush();
+        jdbc.update("update appointments set status = 'Done', arrived_at = now() where id = ?", appointmentId);
+        entityManager.clear();
+
+        assertThatThrownBy(() -> service.reassignStaff(appointmentId, otherFsId, fmId))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessage("Lịch hẹn không còn ở trạng thái chờ");
+    }
+
+    @Test
+    void reassignOnAnotherFacilityIsForbidden() {
+        long otherFsId = secondStaffOfQ7();
+        loginAs("fm1@lemar.vn");
+        service.assignStaff(appointmentId, fsId, fmId);
+        loginAs("fm2@lemar.vn");
+
+        assertThatThrownBy(() -> service.reassignStaff(appointmentId, otherFsId, accountId("fm2@lemar.vn")))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
     @Test
     void accountThatIsNotStaffOfTheFacilityIsRejected() {
         loginAs("fm1@lemar.vn");

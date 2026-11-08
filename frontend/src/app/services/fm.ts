@@ -344,6 +344,17 @@ export function assignAppointmentStaff(
   });
 }
 
+/** Đổi FS của lịch check-in đã phân công, khách chưa đến (đơn giữ `InProgress`). */
+export function reassignAppointmentStaff(
+  appointmentId: number,
+  staffId: number,
+): Promise<FmAppointment> {
+  return authed(`/api/fm/appointments/${appointmentId}/staff`, {
+    method: "PUT",
+    body: { staffId },
+  });
+}
+
 // ------------------------------------------------------------------ Trả kho, quá hạn
 
 /** `tenancy/application/TenancyService.ReturnRequestView`. */

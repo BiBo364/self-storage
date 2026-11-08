@@ -27,7 +27,8 @@ Body `{ "staffId": 5 }`.
 
 - Spec 1.5: FM chỉ định một FS phụ trách ca tiếp đón; gán xong đơn sang `InProgress`.
 - `started_at`/`end_at` NOT NULL từ V15 — lịch phải có giờ trước khi assign; DB chặn lịch thiếu giờ.
-- Đổi FS đã gán không cho ở MVP: lịch đã có FS → 409.
+- Route này chỉ phân công lần đầu: lịch đã có FS → 409 (kể cả khi hai FM bấm cùng lúc — chỉ một lần thắng). Đổi FS
+  đã gán dùng [`PUT`](#put--đổi-fs).
 
 ## Ví dụ
 
@@ -63,6 +64,40 @@ Sau lần gọi 200: `audit_logs` có 2 bản ghi `FS_ASSIGNED` (actor = FM):
 
 fs1 nhận "Bạn được phân công lịch check-in — Đơn 1: lịch hẹn 08:00–10:00 27/10/2026 tại 123 Nguyễn Văn Linh,
 Quận 7, TP.HCM, khoang A-01."
+
+## PUT — đổi FS
+
+`PUT /api/fm/appointments/{appointmentId}/staff` body `{ "staffId": 9 }` — cùng actor / quyền như `POST`. Dùng khi FS
+cũ nghỉ hoặc cần chuyển cơ sở: BOM / ADMIN không gỡ được FS khỏi cơ sở khi FS còn lịch check-in `Pending` ở đó
+([backoffice/overview.md › Gán FS vào cơ sở](../../backoffice/overview.md#gán-fs-vào-cơ-sở)).
+
+1. Lịch không tồn tại → 404; ngoài phạm vi cơ sở → 403. Khoá đơn rồi khoá lịch (cùng thứ tự với `POST`).
+2. Lịch không phải `CHECKIN` / không còn `Pending` (khách đã đến, đã huỷ) → 409. Lịch chưa có FS → 409 "Lịch hẹn
+   chưa có FS — dùng phân công lần đầu". `staffId` trùng FS hiện tại → 409 "FS này đang phụ trách lịch hẹn".
+3. `staffId` không phải FS đang hoạt động của cùng cơ sở → 400. Đơn không ở `InProgress` → 409.
+4. OK → `appointments.staff_id = staffId`; đơn giữ `InProgress`. Một AuditLog `FS_ASSIGNED` cho `Appointment`
+   (`old_value = {staffId: <FS cũ>}`, `new_value = {staffId, orderId}`); không ghi cho `RentalOrder` vì đơn không đổi.
+   FS mới nhận notification + email `FS_ASSIGNED`; FS cũ không nhận thông báo.
+5. Phiên bàn giao của đơn đọc FS qua `appointments.staff_id`, nên đi theo FS mới.
+
+Hai FM cùng đổi FS một lịch: khoá đơn tuần tự hoá, lần sau ghi đè lần trước (mỗi lần một audit).
+
+```bash
+TOKEN='<token của fm1@lemar.vn>'
+
+# 200 — lịch #1 đang do fs1 (id 5) phụ trách, đổi sang fs2 (id 9)
+curl -s -X PUT http://localhost:8080/api/fm/appointments/1/staff -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json' -d '{"staffId":9}'
+# {"message":"Đã đổi nhân viên phụ trách lịch hẹn","data":{"id":1,"type":"CHECKIN","status":"Pending","date":"2026-11-12","startedAt":"2026-11-12T01:00:00Z","endAt":"2026-11-12T03:00:00Z","orderId":1,"orderStatus":"InProgress","unitCode":"A-01","customerName":"Khách Demo","customerEmail":"customer1@lemar.vn","staffId":9,"staffEmail":"fs2@lemar.vn"}}
+
+# 409 — đổi sang chính FS đang phụ trách
+# {"message":"FS này đang phụ trách lịch hẹn","timestamp":"2026-11-08T18:44:03.723557300Z"}
+
+# 400 — fs1 đã được BOM chuyển sang cơ sở TD, không còn là FS của Q7
+# {"message":"Nhân viên không phải FS của cơ sở này","timestamp":"2026-11-08T18:44:03.995379800Z"}
+```
+
+Sau lần gọi 200, `audit_logs` thêm `FS_ASSIGNED | Appointment | 1 | old_value {"staffId": 5} | new_value
+{"orderId": 1, "staffId": 9}` (actor = FM); fs2 nhận notification `FS_ASSIGNED`.
 
 ## Liên quan
 

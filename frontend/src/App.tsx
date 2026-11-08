@@ -41,6 +41,7 @@ import { BomShell } from "./components/layout/BomShell";
 import { AdminShell } from "./components/layout/AdminShell";
 import { BomDashboardPage } from "./pages/bom/BomDashboardPage";
 import { BomFacilitiesPage } from "./pages/bom/BomFacilitiesPage";
+import { BomStaffPage } from "./pages/bom/BomStaffPage";
 import { BomPricingPage } from "./pages/bom/BomPricingPage";
 import { BomInvoicesPage } from "./pages/bom/BomInvoicesPage";
 import { AdminAccountsPage } from "./pages/admin/AdminAccountsPage";
@@ -272,6 +273,7 @@ function App() {
         <BomShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
           {view === "bom-dashboard" && <BomDashboardPage navigate={navigate} />}
           {view === "bom-facilities" && <BomFacilitiesPage navigate={navigate} />}
+          {view === "bom-staff" && <BomStaffPage navigate={navigate} />}
           {view === "bom-pricing" && <BomPricingPage navigate={navigate} />}
           {view === "bom-invoices" && <BomInvoicesPage navigate={navigate} />}
         </BomShell>

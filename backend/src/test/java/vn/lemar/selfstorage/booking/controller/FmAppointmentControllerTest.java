@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -174,6 +175,28 @@ class FmAppointmentControllerTest {
         mockMvc.perform(assign(7L)).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Lịch hẹn đã có FS phụ trách"));
         mockMvc.perform(assign(6L)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void reassignReturnsUpdatedAppointmentAndMapsConflicts() throws Exception {
+        authenticate(FM, "FM");
+        when(accountQueryService.requireIdByEmail(FM)).thenReturn(3L);
+        when(appointmentService.reassignStaff(1L, 4L, 3L)).thenReturn(appointment(4L));
+        when(appointmentService.reassignStaff(2L, 4L, 3L))
+                .thenThrow(new AppointmentConflictException("FS này đang phụ trách lịch hẹn"));
+
+        mockMvc.perform(as(put("/api/fm/appointments/1/staff"), FM).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"staffId\":4}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(FmAppointmentController.REASSIGN_MESSAGE))
+                .andExpect(jsonPath("$.data.staffId").value(4));
+        mockMvc.perform(as(put("/api/fm/appointments/2/staff"), FM).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"staffId\":4}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("FS này đang phụ trách lịch hẹn"));
+        mockMvc.perform(as(put("/api/fm/appointments/1/staff"), FM).contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
     }
 
     // ---------------------------------------------------------------- helpers

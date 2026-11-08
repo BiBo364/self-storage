@@ -29,18 +29,21 @@ public class AccountAdminService {
 
     public static final Set<String> ROLES = Set.of("ADMIN", "BOM", "FM", "FS", "CUSTOMER");
     public static final Set<String> STATUSES = Set.of("ACTIVE", "BANNED");
+    private static final int MAX_OPEN_ITEMS_SHOWN = 5;
 
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final FacilityAccess facilityAccess;
     private final AuditRecorder auditRecorder;
+    private final List<StaffOpenWork> openWork;
 
     public AccountAdminService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, FacilityAccess facilityAccess,
-                               AuditRecorder auditRecorder) {
+                               AuditRecorder auditRecorder, List<StaffOpenWork> openWork) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.facilityAccess = facilityAccess;
         this.auditRecorder = auditRecorder;
+        this.openWork = List.copyOf(openWork);
     }
 
     /** Tài khoản; {@code facilityIds} = cơ sở được gán (FS) hoặc phụ trách (FM). */
@@ -152,26 +155,59 @@ public class AccountAdminService {
         return after;
     }
 
-    /** Gán FS vào đúng các cơ sở {@code facilityIds} (thay toàn bộ danh sách). */
+    /**
+     * Gán FS vào đúng các cơ sở {@code facilityIds} (thay toàn bộ danh sách). Cơ sở giữ nguyên không bị xoá / chèn lại
+     * (giữ {@code assigned_at}). Gỡ khỏi cơ sở mà FS còn việc mở ở đó ({@link StaffOpenWork}) → 409, không đổi gì.
+     *
+     * <p>Xoá dòng gán trước rồi mới kiểm việc: lệnh xoá chờ khoá {@code FOR SHARE} của FM đang phân công FS này
+     * ({@link FacilityStaffQuery#isActiveStaffOf}), nên câu kiểm sau đó thấy việc FM vừa giao; FM phân công sau khi
+     * dòng đã xoá thì nhận 400 "không phải FS của cơ sở".
+     */
     @Transactional
     public AccountRow setStaffFacilities(Long accountId, List<Long> facilityIds, Long actorId) {
         AccountRow account = get(accountId);
         if (!"FS".equals(account.role())) {
             throw new IllegalStateException("Chỉ gán cơ sở cho tài khoản FS");
         }
-        for (Long facilityId : facilityIds) {
+        List<Long> target = facilityIds.stream().distinct().toList();
+        for (Long facilityId : target) {
             if (!facilityAccess.exists(facilityId)) {
                 throw new IllegalArgumentException("Cơ sở " + facilityId + " không tồn tại");
             }
         }
-        jdbc.update("delete from account_facility_assignments where account_id = ?", accountId);
-        for (Long facilityId : facilityIds.stream().distinct().toList()) {
-            jdbc.update("insert into account_facility_assignments (account_id, facility_id) values (?, ?)",
+        List<Long> current = jdbc.queryForList(
+                "select facility_id from account_facility_assignments where account_id = ? order by facility_id",
+                Long.class, accountId);
+        List<Long> removed = current.stream().filter(id -> !target.contains(id)).toList();
+        for (Long facilityId : removed) {
+            jdbc.update("delete from account_facility_assignments where account_id = ? and facility_id = ?",
                     accountId, facilityId);
         }
+        requireNoOpenWork(accountId, removed);
+        for (Long facilityId : target) {
+            if (!current.contains(facilityId)) {
+                jdbc.update("insert into account_facility_assignments (account_id, facility_id) values (?, ?)",
+                        accountId, facilityId);
+            }
+        }
         audit(AuditAction.ACCOUNT_UPDATED, AuditEntityType.ACCOUNT, accountId,
-                Map.of("facilityIds", account.facilityIds()), Map.of("facilityIds", facilityIds), null, actorId);
+                Map.of("facilityIds", current), Map.of("facilityIds", target), null, actorId);
         return get(accountId);
+    }
+
+    private void requireNoOpenWork(Long staffId, List<Long> removedFacilityIds) {
+        for (Long facilityId : removedFacilityIds) {
+            List<String> items = openWork.stream()
+                    .flatMap(source -> source.openItems(staffId, facilityId).stream()).toList();
+            if (!items.isEmpty()) {
+                String shown = String.join(", ", items.subList(0, Math.min(items.size(), MAX_OPEN_ITEMS_SHOWN)));
+                String more = items.size() > MAX_OPEN_ITEMS_SHOWN
+                        ? " và " + (items.size() - MAX_OPEN_ITEMS_SHOWN) + " việc khác" : "";
+                throw new IllegalStateException("FS còn việc chưa đóng tại cơ sở "
+                        + facilityAccess.code(facilityId).orElse("#" + facilityId) + ": " + shown + more
+                        + ". FM phân công lại hoặc đóng các việc này trước khi gỡ FS khỏi cơ sở");
+            }
+        }
     }
 
     @Transactional(readOnly = true)

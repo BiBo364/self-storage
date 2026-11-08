@@ -5,6 +5,7 @@ import { fetchFacilityStaff, type FmStaff } from "../../app/fmStaff";
 import { queryParam } from "../../app/routes";
 import {
   assignAppointmentStaff,
+  reassignAppointmentStaff,
   fetchAppointments,
   labelOf,
   loadErrorState,
@@ -152,14 +153,21 @@ function AppointmentRow({
   onAssigned: (result: FmAppointment, staffMember: FmStaff | undefined) => void;
 }) {
   const [staffId, setStaffId] = useState("");
+  const [changing, setChanging] = useState(false);
   const action = useFmAction();
   const selectId = `assign-staff-${appointment.id}`;
+  const hasStaff = appointment.staffId !== null;
+  const choices = staff.filter((member) => member.id !== appointment.staffId);
 
   async function assign() {
     const outcome = await action.run("assign", () =>
-      assignAppointmentStaff(appointment.id, Number(staffId)),
+      hasStaff
+        ? reassignAppointmentStaff(appointment.id, Number(staffId))
+        : assignAppointmentStaff(appointment.id, Number(staffId)),
     );
     if (outcome.ok) {
+      setChanging(false);
+      setStaffId("");
       onAssigned(
         outcome.value,
         staff.find((member) => member.id === Number(staffId)),
@@ -196,11 +204,23 @@ function AppointmentRow({
         )}
       </div>
       <div>
-        {appointment.staffId !== null ? (
-          <span className="flex items-center gap-2 text-small text-ink">
+        {hasStaff && !changing ? (
+          <span className="flex flex-wrap items-center gap-2 text-small text-ink">
             <User size={14} /> {appointment.staffEmail ?? `FS #${appointment.staffId}`}
+            {appointment.status === "Pending" && choices.length > 0 && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  action.clear();
+                  setChanging(true);
+                }}
+              >
+                Đổi FS
+              </Button>
+            )}
           </span>
-        ) : staff.length === 0 ? (
+        ) : choices.length === 0 ? (
           <span className="text-label text-muted">Cơ sở chưa có FS để phân công.</span>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
@@ -217,8 +237,8 @@ function AppointmentRow({
                   action.clear();
                 }}
               >
-                <option value="">— Chọn FS —</option>
-                {staff.map((member) => (
+                <option value="">{hasStaff ? "— Chọn FS mới —" : "— Chọn FS —"}</option>
+                {choices.map((member) => (
                   <option key={member.id} value={member.id}>
                     {staffLabel(member)}
                   </option>
@@ -231,8 +251,22 @@ function AppointmentRow({
               disabled={!staffId}
               onClick={assign}
             >
-              {action.pending !== "assign" && <Check size={14} />} Phân công
+              {action.pending !== "assign" && <Check size={14} />} {hasStaff ? "Đổi" : "Phân công"}
             </Button>
+            {hasStaff && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={action.pending === "assign"}
+                onClick={() => {
+                  setChanging(false);
+                  setStaffId("");
+                  action.clear();
+                }}
+              >
+                Huỷ
+              </Button>
+            )}
           </div>
         )}
         {action.error && <DemoNotice tone="error">{action.error}</DemoNotice>}
