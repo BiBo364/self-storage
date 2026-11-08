@@ -7,7 +7,7 @@ import { WorkspaceShell, type WorkspaceNavItem } from "./WorkspaceShell";
 const navigation: (WorkspaceNavItem & { view: View })[] = [
   {
     label: "Đối soát thanh toán",
-    path: "/admin/payments",
+    path: "/admin/reconciliation",
     view: "admin-payments",
     icon: ClipboardCheck,
   },
@@ -40,7 +40,7 @@ export function AdminShell({
       navItems={navigation}
       activePath={activeItem?.path ?? ""}
       onNavigate={navigate}
-      onBrandClick={() => navigate("/admin/payments")}
+      onBrandClick={() => navigate("/admin/reconciliation")}
       user={{ name: session?.user.name ?? "", email: session?.user.email ?? "" }}
       onLogout={logout}
       theme={theme}

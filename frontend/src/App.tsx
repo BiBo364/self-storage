@@ -68,6 +68,9 @@ function App() {
   useEffect(() => {
     const onPopState = () => setView(viewFromLocation());
     window.addEventListener("popstate", onPopState);
+    if (window.location.pathname === "/admin/payments") {
+      window.history.replaceState({}, "", "/admin/reconciliation");
+    }
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 

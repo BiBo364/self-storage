@@ -64,6 +64,36 @@ public class PaymentReconciliationCaseRepository {
                 java.sql.Timestamp.from(cutoff), limit, offset);
     }
 
+    public List<CaseRow> findHistoryPage(long offset, int limit) {
+        String sql = "select c.id, c.transaction_id, c.invoice_id, c.detected_at, c.notified_at, "
+                + "c.status, c.resolution, c.gateway_transaction_no, c.paid_at, c.note, c.evidence_url, "
+                + "c.resolved_at, c.resolved_by_email, pt.vnp_txn_ref, pt.amount, pt.created_at "
+                + "from payment_reconciliation_cases c "
+                + "join payment_transactions pt on pt.id = c.transaction_id "
+                + "where c.status = 'Resolved' "
+                + "order by c.resolved_at desc nulls last, c.id desc limit ? offset ?";
+        return jdbc.query(sql, (rs, rowNum) -> new CaseRow(
+                        rs.getLong("id"), rs.getLong("transaction_id"), rs.getLong("invoice_id"),
+                        rs.getString("vnp_txn_ref"), rs.getBigDecimal("amount"),
+                        rs.getTimestamp("created_at").toInstant(),
+                        rs.getTimestamp("detected_at").toInstant(),
+                        rs.getTimestamp("notified_at") == null ? null : rs.getTimestamp("notified_at").toInstant(),
+                        rs.getString("status"), rs.getString("resolution"),
+                        rs.getString("gateway_transaction_no"),
+                        rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toInstant(),
+                        rs.getString("note"), rs.getString("evidence_url"),
+                        rs.getTimestamp("resolved_at") == null ? null : rs.getTimestamp("resolved_at").toInstant(),
+                        rs.getString("resolved_by_email")),
+                limit, offset);
+    }
+
+    public long countResolved() {
+        Long count = jdbc.queryForObject(
+                "select count(*) from payment_reconciliation_cases where status = 'Resolved'",
+                Long.class);
+        return count == null ? 0 : count;
+    }
+
     public long countOpen(Instant cutoff) {
         Long count = jdbc.queryForObject("""
                 select count(*)

@@ -118,6 +118,54 @@ class AdminPendingPaymentIntegrationTest {
         org.assertj.core.api.Assertions.assertThat(cases.listOpen(15, 0, 20).items()).isEmpty();
     }
 
+    @Test
+    void historyShowsResolvedCase() throws Exception {
+        Long transactionId = jdbc.queryForObject(
+                "select id from payment_transactions where vnp_txn_ref = 'TXN-ADMIN-PENDING'", Long.class);
+        cases.resolve(transactionId, "Failed", null, null, "portal says failed", null, "admin@lemar.vn");
+
+        mockMvc.perform(get("/api/admin/payments/reconciliation")
+                        .param("view", "history")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("admin@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].status").value("Resolved"))
+                .andExpect(jsonPath("$.data.items[0].resolution").value("Failed"))
+                .andExpect(jsonPath("$.data.items[0].note").value("portal says failed"))
+                .andExpect(jsonPath("$.data.items[0].resolvedByEmail").value("admin@lemar.vn"))
+                .andExpect(jsonPath("$.data.items[0].resolvedAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+
+        mockMvc.perform(get("/api/admin/payments/reconciliation")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("admin@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(0));
+    }
+
+    @Test
+    void invalidReconciliationViewIsRejected() throws Exception {
+        mockMvc.perform(get("/api/admin/payments/reconciliation")
+                        .param("view", "unknown")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("admin@lemar.vn")))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void historyRouteWorksThroughLegacyPendingAlias() throws Exception {
+        Long transactionId = jdbc.queryForObject(
+                "select id from payment_transactions where vnp_txn_ref = 'TXN-ADMIN-PENDING'", Long.class);
+        cases.resolve(transactionId, "Success", "GW-HISTORY", Instant.now(),
+                "portal success", null, "admin@lemar.vn");
+
+        mockMvc.perform(get("/api/admin/payments/pending")
+                        .param("view", "history")
+                        .header(HttpHeaders.AUTHORIZATION, bearerOf("admin@lemar.vn")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].status").value("Resolved"))
+                .andExpect(jsonPath("$.data.items[0].resolution").value("Success"))
+                .andExpect(jsonPath("$.data.items[0].gatewayTransactionNo").value("GW-HISTORY"));
+    }
+
     private String bearerOf(String email) {
         Account account = accounts.findByEmail(email).orElseThrow();
         return "Bearer " + jwtService.issueAccessToken(account);

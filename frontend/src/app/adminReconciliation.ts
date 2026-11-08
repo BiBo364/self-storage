@@ -64,13 +64,20 @@ function token() {
   return authGateway.getSession()?.token;
 }
 
-export function loadPendingCases(page: number, size = 20): Promise<PendingPaymentPage> {
+export type ReconciliationView = "open" | "history";
+
+export function loadPendingCases(
+  page: number,
+  size = 20,
+  view: ReconciliationView = "open",
+): Promise<PendingPaymentPage> {
   const params = new URLSearchParams({
+    view,
     olderThanMinutes: "15",
     page: String(page),
     size: String(size),
   });
-  return apiRequest<PendingPaymentPage>(`/api/admin/payments/pending?${params.toString()}`, {
+  return apiRequest<PendingPaymentPage>(`/api/admin/payments/reconciliation?${params.toString()}`, {
     accessToken: token(),
   });
 }

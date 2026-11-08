@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../app/api";
 import {
   loadPendingCases,
+  type ReconciliationView,
   reconcilePayment,
   type PendingPaymentCase,
   type PendingPaymentPage,
@@ -31,6 +32,7 @@ function localDateTimeNow() {
 }
 
 export function PaymentReconciliationPage() {
+  const [view, setView] = useState<ReconciliationView>("open");
   const [page, setPage] = useState(0);
   const [data, setData] = useState<PendingPaymentPage>({
     items: [],
@@ -55,7 +57,7 @@ export function PaymentReconciliationPage() {
 
   useEffect(() => {
     let active = true;
-    loadPendingCases(page)
+    loadPendingCases(page, 20, view)
       .then((result) => {
         if (active) setData(result);
       })
@@ -73,12 +75,21 @@ export function PaymentReconciliationPage() {
     return () => {
       active = false;
     };
-  }, [page, reloadKey]);
+  }, [page, reloadKey, view]);
 
   function reload() {
     setLoading(true);
     setError(null);
     setReloadKey((key) => key + 1);
+  }
+
+  function changeView(next: ReconciliationView) {
+    if (next === view) return;
+    setView(next);
+    setPage(0);
+    setSelected(null);
+    setLoading(true);
+    setError(null);
   }
 
   function openCase(item: PendingPaymentCase) {
@@ -151,9 +162,30 @@ export function PaymentReconciliationPage() {
       <div>
         <h1 className="m-0 text-title text-ink">Đối soát thanh toán</h1>
         <p className="mt-1.5 text-small text-muted">
-          Khoản chờ hoàn tiền và case Pending quá 15 phút. Tra portal VNPay, đính kèm bằng chứng và
+          Case Pending quá 15 phút và lịch sử đã đối soát. Tra portal VNPay, đính kèm bằng chứng và
           chốt kết quả.
         </p>
+      </div>
+
+      <div className="flex gap-2 border-b border-rule" role="tablist" aria-label="Đối soát">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "open"}
+          className={`border-b-2 px-3 py-2 text-small font-semibold ${view === "open" ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink"}`}
+          onClick={() => changeView("open")}
+        >
+          Cần đối soát
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "history"}
+          className={`border-b-2 px-3 py-2 text-small font-semibold ${view === "history" ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink"}`}
+          onClick={() => changeView("history")}
+        >
+          Lịch sử
+        </button>
       </div>
 
       {notice && <DemoNotice tone={notice.tone}>{notice.message}</DemoNotice>}
@@ -161,23 +193,39 @@ export function PaymentReconciliationPage() {
       <RefundRequiredPanel />
 
       <div>
-        <h2 className="m-0 text-section text-ink">Case Pending cần đối soát</h2>
+        <h2 className="m-0 text-section text-ink">
+          {view === "history" ? "Case đã đối soát" : "Case Pending cần đối soát"}
+        </h2>
         <p className="mt-1.5 text-small text-muted">
-          Giao dịch Pending quá 15 phút chưa được cổng xác nhận.
+          {view === "history"
+            ? "Các case đã chốt kết quả, chỉ đọc để tra cứu."
+            : "Giao dịch Pending quá 15 phút chưa được cổng xác nhận."}
         </p>
       </div>
 
       {loading ? (
-        <SurfaceState variant="loading" title="Đang tải case Pending" />
+        <SurfaceState
+          variant="loading"
+          title={view === "history" ? "Đang tải lịch sử đối soát" : "Đang tải case Pending"}
+        />
       ) : error ? (
         <SurfaceState
           variant="error"
-          title="Không tải được case Pending"
+          title={
+            view === "history" ? "Không tải được lịch sử đối soát" : "Không tải được case Pending"
+          }
           description={error}
           action={{ label: "Thử lại", onClick: reload }}
         />
       ) : data.items.length === 0 ? (
-        <SurfaceState variant="empty" title="Không có giao dịch Pending nào cần đối soát" />
+        <SurfaceState
+          variant="empty"
+          title={
+            view === "history"
+              ? "Chưa có case đối soát nào đã xử lý"
+              : "Không có giao dịch Pending nào cần đối soát"
+          }
+        />
       ) : (
         <div className="grid gap-2">
           {data.items.map((item) => (
@@ -191,16 +239,25 @@ export function PaymentReconciliationPage() {
                   <ReceiptText size={14} /> {item.vnpTxnRef}
                 </span>
                 <strong className="mt-1 block text-small font-semibold text-ink">
-                  Invoice #{item.invoiceId} · Pending {item.pendingAgeMinutes} phút
+                  Invoice #{item.invoiceId}
+                  {view === "history"
+                    ? ` · ${item.resolution ?? "Đã xử lý"}`
+                    : ` · Pending ${item.pendingAgeMinutes} phút`}
                 </strong>
                 <span className="mt-1 block text-label text-muted">
-                  Phát hiện {formatDateTime(item.detectedAt)}
+                  {view === "history"
+                    ? `Xử lý ${formatDateTime(item.resolvedAt)}`
+                    : `Phát hiện ${formatDateTime(item.detectedAt)}`}
                 </span>
               </div>
               <strong className="text-[18px] font-semibold text-ink">
                 {formatPrice(item.amount)} đ
               </strong>
-              <StatusTag tone="danger">Cần đối soát</StatusTag>
+              {view === "history" ? (
+                <StatusTag tone="neutral">{item.status}</StatusTag>
+              ) : (
+                <StatusTag tone="danger">Cần đối soát</StatusTag>
+              )}
             </button>
           ))}
         </div>
@@ -235,7 +292,49 @@ export function PaymentReconciliationPage() {
         </div>
       </div>
 
-      {selected && (
+      {selected && view === "history" && (
+        <DetailPanel
+          title={selected.vnpTxnRef}
+          eyebrow={`Invoice #${selected.invoiceId} · ${selected.status}`}
+          onClose={() => setSelected(null)}
+        >
+          <div className="grid grid-cols-2 gap-3 bg-surface-subtle p-3.5 text-small">
+            <span className="text-muted">Số tiền</span>
+            <strong className="text-right text-ink">{formatPrice(selected.amount)} đ</strong>
+            <span className="text-muted">Kết quả</span>
+            <strong className="text-right text-ink">{selected.resolution ?? "—"}</strong>
+            <span className="text-muted">Phát hiện</span>
+            <strong className="text-right text-ink">{formatDateTime(selected.detectedAt)}</strong>
+            <span className="text-muted">Xử lý lúc</span>
+            <strong className="text-right text-ink">{formatDateTime(selected.resolvedAt)}</strong>
+            <span className="text-muted">Người xử lý</span>
+            <strong className="break-all text-right text-ink">
+              {selected.resolvedByEmail ?? "—"}
+            </strong>
+            <span className="text-muted">Mã VNPay</span>
+            <strong className="break-all text-right text-ink">
+              {selected.gatewayTransactionNo ?? "—"}
+            </strong>
+            <span className="text-muted">Đã thanh toán</span>
+            <strong className="text-right text-ink">{formatDateTime(selected.paidAt)}</strong>
+          </div>
+          <p className="mt-4 whitespace-pre-wrap text-small leading-relaxed text-muted">
+            {selected.note || "Không có ghi chú đối soát."}
+          </p>
+          {selected.evidenceUrl && (
+            <a
+              className="mt-3 block break-all text-label text-accent underline"
+              href={selected.evidenceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Bằng chứng đối soát
+            </a>
+          )}
+        </DetailPanel>
+      )}
+
+      {selected && view === "open" && (
         <DetailPanel
           title={selected.vnpTxnRef}
           eyebrow={`Invoice #${selected.invoiceId} · Pending ${selected.pendingAgeMinutes} phút`}

@@ -136,7 +136,8 @@ Bốn biến `VNPAY_*` fail-fast (thiếu là app không boot): `VNPAY_TMN_CODE`
 - **Endpoint:** `POST /api/admin/payments/{txnRef}/reconcile`; quyền `ADMIN`; contract chi tiết ở
   [routes/payment/manual-reconcile.md](routes/payment/manual-reconcile.md).
 - **Case Pending:** `PendingPaymentWatchdogJob` tạo case `Open`; ADMIN xem
-  `GET /api/admin/payments/pending`; reconcile đóng case và lưu note/evidence.
+  `GET /api/admin/payments/reconciliation?view=open|history`; reconcile đóng case và lưu
+  note/evidence. `/api/admin/payments/pending` là alias cũ của `view=open`.
   Khoản cần hoàn tiền có queue riêng `GET /api/admin/payments/refunds`, đọc từ
   `invoices.refund_status=Required`; route chưa ghi nhận hoàn tiền.
   Evidence là URL file Admin upload qua `POST /api/media/uploads`, optional.

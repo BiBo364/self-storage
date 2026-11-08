@@ -65,6 +65,22 @@ public class PaymentReconciliationCaseService {
     }
 
     @Transactional(readOnly = true)
+    public PendingPaymentCasePageView listHistory(int page, int size) {
+        validatePage(page, size);
+        long total = repository.countResolved();
+        Instant now = Instant.now();
+        List<PendingPaymentCaseView> items = repository.findHistoryPage((long) page * size, size)
+                .stream()
+                .map(row -> new PendingPaymentCaseView(row.id(), row.transactionId(), row.invoiceId(),
+                        row.vnpTxnRef(), row.amount(), row.transactionCreatedAt(), row.detectedAt(),
+                        row.notifiedAt(), ageMinutes(row.transactionCreatedAt(), now), row.status(),
+                        row.resolution(), row.gatewayTransactionNo(), row.paidAt(), row.note(),
+                        row.evidenceUrl(), row.resolvedAt(), row.resolvedByEmail()))
+                .toList();
+        return new PendingPaymentCasePageView(items, page, size, total, totalPages(total, size));
+    }
+
+    @Transactional(readOnly = true)
     public RefundCasePageView listRefundRequired(int page, int size) {
         validatePage(page, size);
         long total = repository.countRefundRequired();
