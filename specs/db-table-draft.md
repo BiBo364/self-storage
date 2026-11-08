@@ -169,6 +169,8 @@ Bảng `facility_unit_type` (V4).
 - expires_at (nullable)
   - Hạn hoàn thành của đơn, set một lần khi tạo đơn (`now + order.expiry_days`); quá hạn mà chưa `Done` → `Canceled`
   - Mọi hạn con gắn với đơn (hóa đơn, lịch hẹn, `due_at`) không được vượt `expires_at`
+- canceled_at (Timestamptz, nullable, V23) - lúc đơn chuyển `Canceled`; mốc ghi nhận cọc bị giữ lại trong báo cáo doanh
+  thu. Đơn huỷ trước V23 lấy từ audit `RENTAL_ORDER_CANCELED`
 - needs_reproposal (BOOLEAN, default false): Flow 2 bật khi khách từ chối khoang tại check-in; gate đề xuất lại
   của Flow 1.3 đọc cờ này và clear khi proposal mới được tạo
 
@@ -302,6 +304,8 @@ Các bước:
 - status (Pending/Agreed/Rejected/Canceled)
 - note
 - created_at
+- agreed_at (Timestamptz, nullable, V23) - lúc khách đồng ý; mốc tính lại cửa sổ đặt lịch check-in khi đơn đã cọc phải
+  đổi khoang
 
 **Constraints**
 - Mọi lần đề xuất lại đều tạo bản ghi mới cho cùng `RentalOrder`; bản ghi cũ giữ nguyên (lịch sử). Khoang hiệu lực = proposal `Agreed` mới nhất.
@@ -419,6 +423,7 @@ Các bước:
 - assigned_staff_id (N - 1: Account, nullable) - FS được FM phân công
 - appointment_id (N - 1: Appointment, nullable) - lịch `RETURN` hiện tại
 - cancel_reason (nullable)
+- no_show_count (Int, default 0, V23) - số lần khách không đến buổi trả kho; chạm `return.max_no_shows` → huỷ yêu cầu
 - created_at, assigned_at, completed_at, updated_at
 
 **CONSTRAINTS:**
@@ -547,12 +552,13 @@ giao. Bảng `checkout_records` (V20) theo dạng rút gọn của Flow 2.a (quy
 | `PROPOSAL_CREATED` | Tạo proposal đầu tiên khi convert | `ProposalFeedback` | FM/System |
 | `CONTRACT_EXTENDED` | Hoá đơn gia hạn `Paid` → cộng kỳ thuê | `RentalContract` | System |
 | `CONTRACT_ACCESS_SUSPENDED` | Cron tạm khoá truy cập (thu hồi mã khoá số) do quá hạn kéo dài | `RentalContract` | System |
-| `CONTRACT_ACCESS_RESTORED` | Cron mở lại truy cập khi hợp đồng hết quá hạn và không còn phí quá hạn chưa trả | `RentalContract` | System |
+| `CONTRACT_ACCESS_RESTORED` | Cron mở lại truy cập khi không còn phí quá hạn chưa trả và hợp đồng hết quá hạn hoặc có yêu cầu trả kho mở | `RentalContract` | System |
 | `OVERDUE_FEE_ACCRUED` | Cron tạo / cập nhật hoá đơn phí quá hạn | `Invoice` | System |
 | `RETURN_REQUESTED` | Khách gửi yêu cầu trả kho | `ReturnRequest` | Customer |
 | `RETURN_ASSIGNED` | FM phân công FS, tạo lịch `RETURN` | `ReturnRequest` | FM |
 | `RETURN_CANCELED` | Khách huỷ yêu cầu trả kho | `ReturnRequest` | Customer |
 | `RETURN_COMPLETED` | Trả kho hoàn tất | `ReturnRequest` | System |
+| `RETURN_NO_SHOW` | Cron: khách không đến buổi trả kho — yêu cầu về `Pending` hoặc bị huỷ khi chạm ngưỡng | `ReturnRequest` | System |
 | `SUPPORT_REQUEST_CREATED` | Khách gửi yêu cầu hỗ trợ | `SupportRequest` | Customer |
 | `SUPPORT_REQUEST_ASSIGNED` | FM giao FS xử lý | `SupportRequest` | FM |
 | `SUPPORT_REQUEST_RESOLVED` | FS / FM ghi kết quả xử lý | `SupportRequest` | FS/FM |
@@ -622,6 +628,8 @@ giao. Bảng `checkout_records` (V20) theo dạng rút gọn của Flow 2.a (quy
   `order.deposit_expiry_days` (không có code đọc — hạn giữ đơn sau cọc dùng `order.expiry_days`); đổi mô tả
   `appointment.booking_window_days` (chỉ áp cho lần đặt lịch check-in đầu tiên; đặt lại sau khi lịch bị huỷ chỉ cần
   còn trong hạn giữ đơn).
+- V23: thêm `return.no_show_grace_minutes = 120` (lịch trả kho quá giờ kết thúc N phút mà khách chưa đến → no-show),
+  `return.max_no_shows = 2` (no-show N lần → huỷ yêu cầu trả kho).
 - `appointment.checkin_reschedule_enabled` không được seed — khách không đổi được lịch check-in `Pending`.
 
 # OrderNotification
@@ -680,8 +688,9 @@ giao. Bảng `checkout_records` (V20) theo dạng rút gọn của Flow 2.a (quy
 | `RENT_INVOICE_ISSUED` | Cron lập hoá đơn tiền thuê tháng kế tiếp (kỳ, số tiền, hạn, link hoá đơn) | Customer |
 | `RENT_UNPAID` | Hoá đơn tiền thuê tháng (không phải tháng đầu) quá hạn chưa trả | FM |
 | `CONTRACT_ACCESS_SUSPENDED` | Hợp đồng quá hạn kéo dài, mã khoá số tạm khoá | Customer, FM |
-| `CONTRACT_ACCESS_RESTORED` | Hợp đồng hết quá hạn, quyền truy cập mở lại (khách lấy mã mới) | Customer |
+| `CONTRACT_ACCESS_RESTORED` | Quyền truy cập mở lại (khách lấy mã mới): hợp đồng hết quá hạn, hoặc mở để dọn đồ khi đã gửi yêu cầu trả kho | Customer |
 | `RETURN_DATE_SHIFTED` | Ngày trả kho khách chọn đã kín, lịch được dời sang ngày giờ khác | Customer |
+| `RETURN_NO_SHOW` | Khách không đến buổi trả kho — chờ phân công lại hoặc yêu cầu bị huỷ | Customer, FM |
 | `CHECKOUT_SHORTFALL_UNPAID` | Trả kho đã đóng nhưng hoá đơn phần còn thiếu quá hạn chưa trả — cần thu thủ công | FM |
 | `OTHER` | Thông báo khẩn cấp thủ công khi chưa có type phù hợp | Recipient do người tạo chọn |
 

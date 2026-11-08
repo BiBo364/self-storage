@@ -29,10 +29,13 @@ import vn.lemar.selfstorage.tenancy.application.TenancyService;
 /**
  * Flow 6 — quá hạn hợp đồng.
  * <ul>
- *   <li>Nhắc {@code CONTRACT_EXPIRING_SOON} khi còn {@code contract.expiry_reminder_days}, mỗi đơn một lần.</li>
- *   <li>Qua {@code end_date}: báo khách + FM {@code CONTRACT_OVERDUE} một lần; sau {@code overdue.grace_days} ngày
- *       ân hạn, phí cộng dồn {@code số ngày × overdue.fee_per_day} trên đúng một hoá đơn {@code INV-OVD} còn mở.</li>
- *   <li>Ngừng tính từ ngày khách gửi yêu cầu trả kho; gia hạn phủ kỳ quá hạn → hoá đơn đang mở bị huỷ.</li>
+ *   <li>Nhắc {@code CONTRACT_EXPIRING_SOON} khi còn {@code contract.expiry_reminder_days}, một lần mỗi kỳ (mỗi
+ *       {@code end_date}).</li>
+ *   <li>Qua {@code end_date}: báo khách + FM {@code CONTRACT_OVERDUE} một lần mỗi kỳ; sau
+ *       {@code overdue.grace_days} ngày ân hạn, phí cộng dồn {@code số ngày × overdue.fee_per_day} trên đúng một
+ *       hoá đơn {@code INV-OVD} còn mở.</li>
+ *   <li>Ngừng tính ở ngày buổi trả kho khách đã đến (FS xác nhận); gia hạn phủ kỳ quá hạn → hoá đơn đang mở bị
+ *       huỷ.</li>
  * </ul>
  * Mỗi hợp đồng một transaction; thứ tự khoá đơn → hợp đồng → hoá đơn.
  */
@@ -43,6 +46,9 @@ public class OverdueService {
     static final String POLICY_FEE = "overdue.fee_per_day";
     static final String POLICY_REMINDER = "contract.expiry_reminder_days";
     static final String POLICY_ESCALATION = "overdue.escalation_days";
+    static final String RESTORE_NOTE_CLEARED = "không còn quá hạn.";
+    static final String RESTORE_NOTE_MOVING_OUT = "được mở lại để bạn dọn đồ trả kho; phí quá hạn vẫn tính tới ngày "
+            + "bạn đến buổi trả kho.";
     static final String PERM_READ = "rental_order.read";
     static final int INVOICE_DUE_DAYS = 7;
 
@@ -89,8 +95,10 @@ public class OverdueService {
     @Transactional
     public boolean remindExpiring(Long contractId) {
         ContractSnapshot c = contracts.find(contractId).orElse(null);
-        if (c == null || !c.active()
-                || notificationService.hasOrderNotification(c.orderId(), NotificationType.CONTRACT_EXPIRING_SOON)) {
+        // Một lần mỗi kỳ: chỉ tính nhắc gửi từ đầu cửa sổ nhắc của end_date hiện tại — gia hạn xong thì nhắc lại.
+        if (c == null || !c.active() || notificationService.hasOrderNotificationSince(c.orderId(),
+                NotificationType.CONTRACT_EXPIRING_SOON,
+                startOf(c.endDate().minusDays(pricingQuery.intPolicy(POLICY_REMINDER))))) {
             return false;
         }
         long daysLeft = ChronoUnit.DAYS.between(LocalDate.now(ZONE), c.endDate());
@@ -119,7 +127,8 @@ public class OverdueService {
         ContractSnapshot c = contracts.lock(contractId).orElseThrow();
         Calc calc = calc(c);
         if (c.active() && calc.daysOverdue() > 0
-                && !notificationService.hasOrderNotification(c.orderId(), NotificationType.CONTRACT_OVERDUE)) {
+                && !notificationService.hasOrderNotificationSince(c.orderId(), NotificationType.CONTRACT_OVERDUE,
+                        startOf(c.endDate().plusDays(1)))) {
             Map<String, String> values = Map.of("contractCode", c.code(), "unitCode", unitCode(c),
                     "endDate", DATE.format(c.endDate()),
                     "feePerDay", pricingQuery.decimalPolicy(POLICY_FEE).toPlainString(),
@@ -152,11 +161,15 @@ public class OverdueService {
         boolean overdue = c.endDate().isBefore(LocalDate.now(ZONE));
         boolean feeOpen = invoices.bills(c.id()).stream()
                 .anyMatch(b -> b.unpaid() && b.code().startsWith("INV-" + ContractInvoiceService.OVERDUE_KIND));
-        if (overdue || feeOpen || !contracts.restoreAccess(c.id(), null)) {
+        // Còn quá hạn nhưng đã gửi yêu cầu trả kho và trả hết phí tới nay → mở để khách dọn đồ. Phí vẫn tính tới buổi
+        // trả kho khách đến; escalate bỏ qua hợp đồng có yêu cầu trả kho mở nên không khoá lại.
+        boolean movingOut = overdue && tenancy.openReturnOf(c.id()).isPresent();
+        if ((overdue && !movingOut) || feeOpen || !contracts.restoreAccess(c.id(), null)) {
             return false;
         }
         notifications.notifyCustomer(c.orderId(), NotificationType.CONTRACT_ACCESS_RESTORED,
-                Map.of("contractCode", c.code(), "unitCode", unitCode(c)));
+                Map.of("contractCode", c.code(), "unitCode", unitCode(c), "restoreNote",
+                        movingOut ? RESTORE_NOTE_MOVING_OUT : RESTORE_NOTE_CLEARED));
         return true;
     }
 
@@ -218,6 +231,10 @@ public class OverdueService {
         long charged = Math.max(0, ChronoUnit.DAYS.between(c.endDate(), stop) - pricingQuery.intPolicy(POLICY_GRACE));
         BigDecimal accrued = pricingQuery.decimalPolicy(POLICY_FEE).multiply(BigDecimal.valueOf(charged));
         return new Calc(daysOverdue, charged, accrued, open.isPresent());
+    }
+
+    private static java.time.Instant startOf(LocalDate date) {
+        return date.atStartOfDay(ZONE).toInstant();
     }
 
     private String unitCode(ContractSnapshot c) {

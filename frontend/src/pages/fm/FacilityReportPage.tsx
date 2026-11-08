@@ -151,6 +151,7 @@ function ReportBody({
       value: formatMoney(kpis.unpaidAmount),
       path: "/fm/invoices",
     },
+    { label: "Cọc đang giữ", value: formatMoney(kpis.depositHeld), path: "/fm/invoices" },
   ];
   const months = groupRevenue(report);
   const maxMonth = Math.max(0, ...months.map(([, bucket]) => bucket.total));

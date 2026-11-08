@@ -25,8 +25,10 @@ FS xác nhận khách đã đến; không body.
      | không `needs_reproposal` | "Đơn đang chờ FM đề xuất lại khoang — chưa thể check-in" |
      | không còn hoá đơn `Deposit`/`DepositSupplement` `Unpaid` | "Khách còn hoá đơn cọc chưa thanh toán — chưa thể check-in" |
      | khoang của đơn đang `Reserved` | "Khoang của đơn không ở trạng thái giữ chỗ — liên hệ FM" |
-3. Lịch `RETURN` (trả kho): không có no-show — khách đến trễ sau `end_at` vẫn xác nhận đến được; không kiểm điều
-   kiện đơn ở trên.
+3. Lịch `RETURN` (trả kho): route không huỷ no-show — khách đến trễ sau `end_at` vẫn xác nhận đến được chừng nào lịch
+   còn `Pending`; quá `end_at + return.no_show_grace_minutes` thì cron no-show trả kho huỷ lịch
+   ([tenancy/rentals.md](../../tenancy/rentals.md#khách-không-đến-buổi-trả-kho)) và route trả 409 như lịch đã đóng.
+   Không kiểm điều kiện đơn ở trên.
 4. `status = Done`, `arrived_at = now`; audit `APPOINTMENT_ARRIVED` (actor FS); phát event
    `AppointmentArrived`.
 5. Module handover nghe event để set `HandoverRecord.due_at` (lịch `CHECKIN`); route này không biết `due_days`. Với

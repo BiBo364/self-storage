@@ -61,6 +61,8 @@ class RentBillingAndRefundIntegrationTest {
     @Autowired
     private HandoverWorkflowService handoverWorkflow;
     @Autowired
+    private vn.lemar.selfstorage.tenancy.application.TenancyService tenancy;
+    @Autowired
     private JdbcTemplate jdbc;
 
     private long customerId;
@@ -165,6 +167,31 @@ class RentBillingAndRefundIntegrationTest {
                 + "and entity_id = ?", String.valueOf(seed.contractId))).isEqualTo(1);
     }
 
+    @Test
+    void suspendedContractReopensForMoveOutOncePaidAndReturnRequested() {
+        LocalDate end = LocalDate.now(VN).minusDays(31);
+        Seed seed = seedActive(end.minusMonths(3), 3);
+        overdue.accrue(seed.contractId);
+        assertThat(suspended(seed.contractId)).isTrue();
+
+        tenancy.requestReturn(seed.contractId, customerId, LocalDate.now(VN).plusDays(1), null);
+        // Còn INV-OVD chưa trả → chưa mở.
+        assertThat(overdue.restoreIfCleared(seed.contractId)).isFalse();
+
+        jdbc.update("update invoices set status = 'Paid' where contract_id = ? and code like 'INV-OVD-%'",
+                seed.contractId);
+        assertThat(overdue.restoreIfCleared(seed.contractId)).isTrue();
+        assertThat(suspended(seed.contractId)).isFalse();
+        assertThat(jdbc.queryForObject("select n.body from notifications n join order_notifications o on "
+                + "o.notification_id = n.id where n.type = 'CONTRACT_ACCESS_RESTORED' and o.order_id = ?",
+                String.class, seed.orderId)).contains("dọn đồ trả kho");
+
+        // Phí vẫn tính tiếp tới buổi trả kho, nhưng đang có yêu cầu trả kho mở nên không khoá lại.
+        jdbc.update("update rental_contracts set end_date = end_date - 1 where id = ?", seed.contractId);
+        overdue.accrue(seed.contractId);
+        assertThat(suspended(seed.contractId)).isFalse();
+    }
+
     // ------------------------------------------------------------------ hoàn tiền thủ công
 
     @Test
@@ -218,6 +245,11 @@ class RentBillingAndRefundIntegrationTest {
         return id("insert into invoices (contract_id, customer_id, code, title, type, status, amount, due_date) "
                 + "values (" + seed.contractId + ", " + customerId + ", 'INV-" + kind + "-T-" + System.nanoTime()
                 + "', 'Test', '" + type + "', '" + status + "', " + amount + ", now()) returning id");
+    }
+
+    private Boolean suspended(long contractId) {
+        return jdbc.queryForObject("select access_suspended_at is not null from rental_contracts where id = ?",
+                Boolean.class, contractId);
     }
 
     private long id(String sql) {

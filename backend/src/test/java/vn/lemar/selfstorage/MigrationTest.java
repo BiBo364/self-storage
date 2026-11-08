@@ -153,8 +153,10 @@ class MigrationTest {
             // 18 = 6 key baseline + order.expiry_days (V5) + invoice.deposit_months (V8)
             // + fee.unit_change (V9) + handover.due_days (V16) + 7 key Flow 1.5/2.3 (V18)
             // + contract.start_date_rule (V19) + 9 key Flow 3/6/trả kho (V20)
-            // − order.deposit_expiry_days (V22, không code nào đọc) + rent.invoice_lead_days + overdue.escalation_days.
-            assertThat(count(connection, "policies")).isEqualTo(28);
+            // − order.deposit_expiry_days (V22, không code nào đọc) + rent.invoice_lead_days + overdue.escalation_days
+            // + return.no_show_grace_minutes + return.max_no_shows (V23).
+            assertThat(count(connection, "policies")).isEqualTo(30);
+            assertThat(countWhere(connection, "policies", "key = 'return.max_no_shows'")).isEqualTo(1);
             // V5 (bug #130): policy key B2 đọc khi tạo RentalOrder.
             assertThat(countWhere(connection, "policies", "key = 'order.expiry_days'")).isEqualTo(1);
             // V8: hệ số tiền cọc của Flow 1.3.

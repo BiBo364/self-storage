@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -418,6 +419,23 @@ class Flow1CompletionIntegrationTest {
     }
 
     @Test
+    void bookingWindowRestartsWhenDepositedOrderAgreesToReplacementUnit() {
+        Seed seed = seedPendingOrder();
+        deposit(seed);
+        jdbc.update("update payment_transactions set paid_at = now() - interval '8 days' where invoice_id = ?",
+                seed.invoiceId);
+        assertThat(bookingService.bookable(seed.orderId)).isFalse();
+
+        // Khoang bị giữ trước → cơ sở đề xuất khoang khác, khách đồng ý hôm qua: cửa sổ tính lại từ lúc đồng ý.
+        jdbc.update("insert into proposal_feedbacks (order_id, customer_id, unit_id, status, agreed_at) values "
+                + "(?, ?, ?, 'Agreed', now() - interval '1 day')", seed.orderId, customerId, seed.unitId);
+
+        assertThat(bookingService.bookable(seed.orderId)).isTrue();
+        SlotWindow window = bookingService.slots(seed.orderId, customerId);
+        assertThat(window.maxDate()).isAfterOrEqualTo(LocalDate.now(VN).plusDays(12));
+    }
+
+    @Test
     void rebookingAfterCanceledCheckinIgnoresBookingWindowAndActionFollowsIt() {
         Seed seed = seedPendingOrder();
         deposit(seed);
@@ -548,6 +566,11 @@ class Flow1CompletionIntegrationTest {
         assertThat(orderStatus(seed.orderId)).isEqualTo("Canceled");
         assertThat(jdbc.queryForObject("select cancel_reason from rental_orders where id = ?", String.class,
                 seed.orderId)).isEqualTo("Quá hạn thanh toán cọc");
+        // Huỷ vì quá hạn → notification ghi "đã hết hạn".
+        assertThat(jdbc.queryForObject("select n.title from notifications n join order_notifications o on "
+                + "o.notification_id = n.id join accounts a on a.id = n.account_id where o.order_id = ? "
+                + "and n.type = 'RENTAL_ORDER_CANCELED' and a.id = ?", String.class, seed.orderId, customerId))
+                .isEqualTo("Đơn thuê kho đã hết hạn");
         assertThat(expiryService.expireInvoice(seed.invoiceId)).isFalse();
     }
 

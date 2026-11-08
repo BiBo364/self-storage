@@ -189,6 +189,12 @@ Schema Flow 1.3 đi bằng migration V8–V11:
   `RENT_INVOICE_ISSUED`, `RENT_UNPAID`, `CONTRACT_ACCESS_SUSPENDED`, `CONTRACT_ACCESS_RESTORED`, `RETURN_DATE_SHIFTED`,
   `CHECKOUT_SHORTFALL_UNPAID` chỉ thêm ở code. Xem [tenancy/rentals.md](tenancy/rentals.md),
   [handover/records.md](handover/records.md), [checkout/return.md](checkout/return.md).
+- V23 thêm cột `rental_orders.canceled_at` (backfill từ audit `RENTAL_ORDER_CANCELED`; mốc cọc bị giữ lại trong báo
+  cáo doanh thu), `proposal_feedbacks.agreed_at` (mốc cửa sổ đặt lịch check-in khi đơn đã cọc đổi khoang),
+  `return_requests.no_show_count`; seed policy `return.no_show_grace_minutes = 120`, `return.max_no_shows = 2`; thêm
+  audit action `RETURN_NO_SHOW`. Notification type `RETURN_NO_SHOW` chỉ thêm ở code. Cron `ReturnNoShowJob`
+  (`tenancy.return-no-show.fixed-delay-ms`, mặc định 10 phút). Xem [tenancy/rentals.md](tenancy/rentals.md),
+  [backoffice/overview.md](backoffice/overview.md), [booking/appointment-booking.md](booking/appointment-booking.md).
 - Policy `appointment.checkin_reschedule_enabled` không được seed: khách không đổi được lịch check-in `Pending`
   ([booking/appointment-booking.md](booking/appointment-booking.md)).
 

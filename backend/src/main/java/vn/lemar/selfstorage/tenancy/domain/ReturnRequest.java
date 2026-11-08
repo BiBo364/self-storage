@@ -70,6 +70,10 @@ public class ReturnRequest {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Số lần khách không đến buổi trả kho (V23). */
+    @Column(name = "no_show_count", nullable = false)
+    private int noShowCount;
+
     public static ReturnRequest open(Long contractId, Long customerId, Long facilityId, LocalDate preferredDate,
                                      String note) {
         ReturnRequest request = new ReturnRequest();
@@ -108,6 +112,27 @@ public class ReturnRequest {
         this.status = CANCELED;
         this.cancelReason = reason;
         this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Khách không đến buổi trả kho đã phân công: bỏ lịch + FS. Chạm {@code maxNoShows} lần → {@code Canceled} với
+     * {@code reason}; chưa chạm → về {@code Pending} chờ FM phân công lại. {@code true} khi yêu cầu bị huỷ.
+     */
+    public boolean recordNoShow(int maxNoShows, String reason) {
+        if (!ASSIGNED.equals(status)) {
+            throw new IllegalStateException("Yêu cầu trả kho " + id + " không ở Assigned: " + status);
+        }
+        this.noShowCount++;
+        this.appointmentId = null;
+        this.assignedStaffId = null;
+        this.updatedAt = Instant.now();
+        if (noShowCount >= maxNoShows) {
+            this.status = CANCELED;
+            this.cancelReason = reason;
+            return true;
+        }
+        this.status = PENDING;
+        return false;
     }
 
     /** Trả kho hoàn tất (checkout). */

@@ -20,8 +20,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class BackofficeReadRepository {
 
-    private static final String INVOICE_FROM = """
-            from invoices i
+    /** Join từ {@code invoices i} ra cơ sở (đơn → yêu cầu, hoặc hợp đồng → khoang). */
+    private static final String INVOICE_JOINS = """
             left join rental_orders o on o.id = i.order_id
             left join rental_requests rq on rq.id = o.request_id
             left join rental_contracts c on c.id = i.contract_id
@@ -30,8 +30,16 @@ public class BackofficeReadRepository {
             join accounts a on a.id = i.customer_id
             join facilities f on f.id = coalesce(rq.facility_id, cu.facility_id)
             """;
+    private static final String INVOICE_FROM = " from invoices i " + INVOICE_JOINS;
+    /** Mốc thu tiền: giao dịch {@code PAY} thành công (không lấy giao dịch hoàn); đối trừ cọc không có → lúc lập. */
     private static final String PAID_AT = "coalesce((select max(t.paid_at) from payment_transactions t "
-            + "where t.invoice_id = i.id and t.status = 'Success'), i.created_at)";
+            + "where t.invoice_id = i.id and t.direction = 'PAY' and t.status = 'Success'), i.created_at)";
+    /** Loại hoá đơn là doanh thu khi đã thu (cọc không phải doanh thu — là khoản giữ hộ khách). */
+    private static final String EARNED_TYPES = "('Rental', 'Extension', 'Penalty', 'Service')";
+    private static final String DEPOSIT_TYPES = "('Deposit', 'DepositSupplement')";
+    private static final String REFUND = "t.direction = 'REFUND' and t.status = 'Success'";
+    /** Loại dòng doanh thu ngoài loại hoá đơn: cọc của đơn bị huỷ mà cơ sở giữ lại. */
+    public static final String FORFEITED_DEPOSIT = "ForfeitedDeposit";
 
     private final JdbcTemplate jdbc;
 
@@ -72,24 +80,55 @@ public class BackofficeReadRepository {
                 args.toArray());
     }
 
-    /** Doanh thu một tháng × loại hoá đơn (hoá đơn {@code Paid}, theo ngày thanh toán). */
+    /**
+     * Doanh thu ghi nhận một tháng × loại: {@code type} là loại hoá đơn ({@code Rental}/{@code Extension}/
+     * {@code Penalty}/{@code Service}) hoặc {@link #FORFEITED_DEPOSIT}; {@code count} = số hoá đơn / số hoá đơn cọc
+     * ghi nhận (dòng hoàn tiền không cộng count).
+     */
     public record RevenueRow(String month, String type, BigDecimal amount, long count) {
     }
 
+    /**
+     * Doanh thu theo kế toán (giờ VN, {@code [from, to]}):
+     * <ol>
+     *   <li>hoá đơn thuê / gia hạn / phí / dịch vụ {@code Paid} — kể cả phí đối trừ vào cọc lúc trả kho — theo mốc
+     *       thu;</li>
+     *   <li>trừ khoản hoàn ghi trên các hoá đơn đó, theo mốc hoàn;</li>
+     *   <li>cọc của đơn {@code Canceled} (cọc bị giữ lại) = cọc − phần đã hoàn trước lúc huỷ, theo
+     *       {@code canceled_at}; hoàn sau lúc huỷ (huỷ do lỗi cơ sở) trừ vào tháng hoàn.</li>
+     * </ol>
+     * Cọc của đơn chưa huỷ không phải doanh thu (xem {@link Kpis#depositHeld()}).
+     */
     public List<RevenueRow> revenue(Long facilityId, LocalDate from, LocalDate to) {
-        String facilityFilter = facilityId == null ? "" : " and f.id = ?";
+        String ff = facilityId == null ? "" : " and f.id = ?";
+        String canceledDeposit = " i.status = 'Paid' and i.type in " + DEPOSIT_TYPES
+                + " and o.status = 'Canceled' and o.canceled_at is not null";
+        String sql = "select to_char(p.at at time zone 'Asia/Ho_Chi_Minh', 'YYYY-MM') as month, p.type, "
+                + "sum(p.amount), sum(p.cnt) from ("
+                + "select i.type, i.amount, " + PAID_AT + " as at, 1 as cnt" + INVOICE_FROM
+                + " where i.status = 'Paid' and i.type in " + EARNED_TYPES + ff
+                + " union all select i.type, -t.amount, t.paid_at, 0 from payment_transactions t "
+                + "join invoices i on i.id = t.invoice_id " + INVOICE_JOINS
+                + " where " + REFUND + " and i.type in " + EARNED_TYPES + ff
+                + " union all select '" + FORFEITED_DEPOSIT + "', i.amount - coalesce((select sum(t.amount) "
+                + "from payment_transactions t where t.invoice_id = i.id and " + REFUND
+                + " and t.paid_at <= o.canceled_at), 0), o.canceled_at, 1" + INVOICE_FROM + " where"
+                + canceledDeposit + ff
+                + " union all select '" + FORFEITED_DEPOSIT + "', -t.amount, t.paid_at, 0 from payment_transactions t "
+                + "join invoices i on i.id = t.invoice_id " + INVOICE_JOINS
+                + " where " + REFUND + " and t.paid_at > o.canceled_at and" + canceledDeposit + ff
+                + ") p where p.at >= ? and p.at < ? group by 1, 2 order by 1, 2";
         List<Object> args = new ArrayList<>();
+        if (facilityId != null) {
+            for (int i = 0; i < 4; i++) {
+                args.add(facilityId);
+            }
+        }
         args.add(Date.valueOf(from));
         args.add(Date.valueOf(to.plusDays(1)));
-        if (facilityId != null) {
-            args.add(facilityId);
-        }
-        return jdbc.query("select to_char(p.paid_at at time zone 'Asia/Ho_Chi_Minh', 'YYYY-MM') as month, p.type, "
-                        + "sum(p.amount), count(*) from (select i.type, i.amount, " + PAID_AT + " as paid_at "
-                        + INVOICE_FROM + " where i.status = 'Paid'" + facilityFilter + ") p "
-                        + "where p.paid_at >= ? and p.paid_at < ? group by 1, 2 order by 1, 2",
+        return jdbc.query(sql,
                 (rs, n) -> new RevenueRow(rs.getString(1), rs.getString(2), rs.getBigDecimal(3), rs.getLong(4)),
-                reorder(args, facilityId));
+                args.toArray());
     }
 
     /** Số khoang theo trạng thái. */
@@ -104,9 +143,13 @@ public class BackofficeReadRepository {
                 (rs, n) -> new OccupancyRow(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getLong(4)), args);
     }
 
-    /** Chỉ số nhanh của một cơ sở (hoặc toàn hệ thống khi {@code facilityId} null). */
+    /**
+     * Chỉ số nhanh của một cơ sở (hoặc toàn hệ thống khi {@code facilityId} null). {@code depositHeld} = cọc đang giữ
+     * hộ khách tại thời điểm xem: cọc đã thu của đơn chưa huỷ − đã hoàn − phần đã đối trừ phí lúc trả kho.
+     */
     public record Kpis(long pendingRequests, long activeOrders, long activeContracts, long overdueContracts,
-                       long openReturnRequests, long openSupportRequests, BigDecimal unpaidAmount) {
+                       long openReturnRequests, long openSupportRequests, BigDecimal unpaidAmount,
+                       BigDecimal depositHeld) {
     }
 
     public Kpis kpis(Long facilityId) {
@@ -128,7 +171,24 @@ public class BackofficeReadRepository {
                         + "where c.status = 'Active' and c.end_date < current_date" + fu),
                 count("select count(*) from return_requests r where r.status in ('Pending', 'Assigned')" + fr),
                 count("select count(*) from support_requests s where s.status in ('Open', 'Assigned')" + fs),
-                unpaid);
+                unpaid, depositHeld(facilityId));
+    }
+
+    /**
+     * Cọc đang giữ: cọc {@code Paid} của đơn chưa huỷ trừ khoản hoàn trên hoá đơn cọc, trừ hoá đơn phí trả kho đã
+     * {@code Paid} mà không có giao dịch thu ({@code settleByDeposit} — đối trừ vào cọc).
+     */
+    private BigDecimal depositHeld(Long facilityId) {
+        String ff = facilityId == null ? "" : " and f.id = ?";
+        String sql = "select coalesce(sum(d.amount), 0) from ("
+                + "select i.amount - coalesce((select sum(t.amount) from payment_transactions t "
+                + "where t.invoice_id = i.id and " + REFUND + "), 0) as amount" + INVOICE_FROM
+                + " where i.status = 'Paid' and i.type in " + DEPOSIT_TYPES + " and o.status <> 'Canceled'" + ff
+                + " union all select -i.amount" + INVOICE_FROM + " where i.status = 'Paid' and i.type = 'Penalty' "
+                + "and not exists (select 1 from payment_transactions t where t.invoice_id = i.id "
+                + "and t.direction = 'PAY' and t.status = 'Success')" + ff + ") d";
+        Object[] args = facilityId == null ? new Object[0] : new Object[] {facilityId, facilityId};
+        return jdbc.queryForObject(sql, BigDecimal.class, args);
     }
 
     /** Hợp đồng của cơ sở cho FM. */
@@ -199,14 +259,6 @@ public class BackofficeReadRepository {
     private long count(String sql) {
         Long value = jdbc.queryForObject(sql, Long.class);
         return value == null ? 0 : value;
-    }
-
-    /** Doanh thu: tham số facility nằm trong subquery nên đứng trước khoảng ngày. */
-    private static Object[] reorder(List<Object> args, Long facilityId) {
-        if (facilityId == null) {
-            return args.toArray();
-        }
-        return new Object[] {facilityId, args.get(0), args.get(1)};
     }
 
     private static Instant instant(ResultSet rs, int column) throws SQLException {

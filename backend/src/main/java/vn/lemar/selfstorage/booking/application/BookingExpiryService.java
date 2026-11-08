@@ -52,6 +52,9 @@ public class BookingExpiryService {
     static final String REASON_CHECKIN_BOOKING_OVERDUE = "Quá hạn đặt lịch check-in";
     static final String REASON_NO_SHOW_HOLD = "Không đến nhận kho quá hạn giữ";
     static final String REASON_HANDOVER_OVERDUE = "Chưa hoàn tất bàn giao trong hạn";
+    /** Lý do huỷ do quá hạn — notification {@code RENTAL_ORDER_CANCELED} ghi "đã hết hạn" thay cho "đã bị hủy". */
+    static final java.util.Set<String> EXPIRY_REASONS = java.util.Set.of(REASON_DEPOSIT_OVERDUE,
+            REASON_PROPOSAL_OVERDUE, REASON_CHECKIN_BOOKING_OVERDUE, REASON_NO_SHOW_HOLD, REASON_HANDOVER_OVERDUE);
     static final String POLICY_REMINDER_DAYS = "order.expiry_reminder_days";
 
     private static final Set<RentalRequestStatus> OPEN_REQUEST = EnumSet.of(RentalRequestStatus.Pending,
@@ -115,7 +118,7 @@ public class BookingExpiryService {
 
     @Transactional
     public boolean expireInvoice(Long invoiceId) {
-        // #117: phiên thanh toán còn mở thì đợi phiên đóng (IPN/querydr chốt) rồi mới xử lý.
+        // Phiên thanh toán còn mở thì đợi phiên đóng (IPN/querydr chốt) rồi mới xử lý.
         if (!paymentService.invoicesWithOpenSession(List.of(invoiceId)).isEmpty()) {
             return false;
         }

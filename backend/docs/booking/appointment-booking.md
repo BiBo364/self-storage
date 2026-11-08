@@ -24,8 +24,16 @@ flowchart LR
 
 - 3 khung cố định mỗi ngày, giờ Việt Nam: `08:00–10:00`, `13:00–15:00`, `17:00–19:00` — hằng số trong code, không
   lưu ở `policies` (`appointment.daily_slot_count = 3` chỉ để BOM đọc).
-- "Lúc cọc" = `paid_at` sớm nhất của giao dịch `Success` thuộc hoá đơn `Deposit` `Paid` của đơn (đọc qua
-  `PaymentService.firstPaidAt`). Không xác định được → 409 "Chưa xác định được mốc đặt cọc của đơn…".
+- "Lúc cọc" = mốc **muộn nhất** trong:
+  - `paid_at` sớm nhất của giao dịch `Success` thuộc hoá đơn `Deposit` `Paid` mới nhất của đơn (đọc qua
+    `PaymentService.firstPaidAt`) — bắt buộc, không xác định được → 409 "Chưa xác định được mốc đặt cọc của đơn…";
+  - như trên cho hoá đơn `DepositSupplement` `Paid` (nếu có);
+  - `proposal_feedbacks.agreed_at` của lần khách đồng ý đề xuất khoang gần nhất (V23; đề xuất đồng ý trước V23 không
+    có mốc nên bỏ qua).
+
+  Đơn đã cọc nhưng phải đổi khoang (khoang bị giữ trước, từ chối tại bàn giao) vì vậy tính cửa sổ lại từ lúc đồng ý
+  khoang mới / trả cọc bổ sung, không bị quá hạn vì thời gian chờ cơ sở đề xuất. Đơn thường (đồng ý rồi mới cọc) mốc
+  vẫn là lúc trả cọc.
 - **Lần đặt đầu tiên:** quá `lúc cọc + appointment.booking_window_days` (7) → 409 "Đã quá hạn đặt lịch check-in";
   `maxDate = min(lúc cọc + appointment.max_days_after_deposit (14), ngày của expires_at)`.
 - **Đặt lại** — đơn đã có lịch `CHECKIN` `Canceled` (no-show, FS huỷ lịch, phiên bàn giao quá hạn đưa đơn về

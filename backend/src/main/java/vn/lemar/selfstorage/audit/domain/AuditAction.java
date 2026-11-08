@@ -30,9 +30,9 @@ public enum AuditAction {
     PAYMENT_SUCCEEDED(AuditEntityType.PAYMENT_TRANSACTION),
     PAYMENT_FAILED(AuditEntityType.PAYMENT_TRANSACTION),
     MANUAL_REFUND_RECORDED(AuditEntityType.PAYMENT_TRANSACTION),
-    /** Đổi khoang sau khi cọc dư — FM phải hoàn tiền thủ công (behavior-gap #165). */
+    /** Đổi khoang sau khi cọc dư — FM phải hoàn tiền thủ công. */
     DEPOSIT_REFUND_REQUIRED(AuditEntityType.RENTAL_ORDER),
-    /** Khách đồng ý khoang mới sau khi đã cọc — khoang cũ được nhả (behavior-gap #172). */
+    /** Khách đồng ý khoang mới sau khi đã cọc — khoang cũ được nhả. */
     UNIT_CHANGE_RELEASED(AuditEntityType.STORAGE_UNIT),
     RENTAL_ORDER_DEPOSITED(AuditEntityType.RENTAL_ORDER),
     RENTAL_ORDER_CREATED(AuditEntityType.RENTAL_ORDER),
@@ -70,6 +70,7 @@ public enum AuditAction {
     RETURN_ASSIGNED(AuditEntityType.RETURN_REQUEST),
     RETURN_CANCELED(AuditEntityType.RETURN_REQUEST),
     RETURN_COMPLETED(AuditEntityType.RETURN_REQUEST),
+    RETURN_NO_SHOW(AuditEntityType.RETURN_REQUEST),
     CHECKOUT_INSPECTED(AuditEntityType.CHECKOUT_RECORD),
     CHECKOUT_COMPLETED(AuditEntityType.CHECKOUT_RECORD),
     OVERDUE_FEE_ACCRUED(AuditEntityType.INVOICE),

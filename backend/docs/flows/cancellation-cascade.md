@@ -47,7 +47,10 @@ flowchart TB
 5. Khoang: chỉ nhả `Reserved → Available` khi đơn bị huỷ **thực sự đang giữ khoang**
    (`Deposited`/`Scheduled`/`InProgress`). Đơn `Pending` mới gán `unit_id` chưa cọc nên không nhả.
 6. Khách + FM nhận notification `RENTAL_ORDER_CANCELED`; lý do khách chịu rủi ro (quá ngưỡng từ chối)
-   thì body nêu rõ "Tiền cọc không được hoàn".
+   thì body nêu rõ "Tiền cọc không được hoàn". Tiêu đề / body ghi "đã hết hạn" khi huỷ vì quá hạn — lý do thuộc
+   `BookingExpiryService.EXPIRY_REASONS` (quá hạn cọc, quá hạn xác nhận đề xuất, quá hạn đặt lịch check-in, không đến
+   nhận kho quá hạn giữ, chưa hoàn tất bàn giao trong hạn), hoặc hệ thống (không có actor) đóng đơn đã qua
+   `expires_at`; còn lại ghi "đã bị hủy".
 7. Phát `RentalOrderCanceled(orderId, unitId, reason)` đồng bộ: module handover đóng biên bản đang mở và huỷ hợp
    đồng `Draft`/`Signed` của đơn (`HandoverService.cancelByOrderId`, audit `HANDOVER_CANCELED` /
    `CONTRACT_CANCELED`). Hợp đồng `Signed` bị huỷ thì hoá đơn của hợp đồng (tháng đầu, chỉ gắn `contract_id` nên

@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -25,12 +26,14 @@ import vn.lemar.selfstorage.booking.application.exception.BookingValidationExcep
 import vn.lemar.selfstorage.booking.domain.Appointment;
 import vn.lemar.selfstorage.booking.domain.InvoiceStatus;
 import vn.lemar.selfstorage.booking.domain.InvoiceType;
+import vn.lemar.selfstorage.booking.domain.ProposalStatus;
 import vn.lemar.selfstorage.booking.domain.RentalOrder;
 import vn.lemar.selfstorage.booking.domain.RentalOrderStatus;
 import vn.lemar.selfstorage.booking.repository.AppointmentReadRepository;
 import vn.lemar.selfstorage.booking.repository.AppointmentReadRepository.AppointmentRow;
 import vn.lemar.selfstorage.booking.repository.AppointmentRepository;
 import vn.lemar.selfstorage.booking.repository.InvoiceRepository;
+import vn.lemar.selfstorage.booking.repository.ProposalFeedbackRepository;
 import vn.lemar.selfstorage.booking.repository.RentalOrderRepository;
 import vn.lemar.selfstorage.identity.application.FacilityStaffQuery;
 import vn.lemar.selfstorage.notification.application.NotificationType;
@@ -45,7 +48,8 @@ import vn.lemar.selfstorage.pricing.application.PricingQuery;
  *   <li>capacity 1 lịch {@code CHECKIN} / cơ sở / khung — chống đặt trùng bằng khoá đơn rồi khoá row cơ sở;</li>
  *   <li>cửa sổ ngày: sớm nhất hôm nay, muộn nhất {@code min(lúc cọc + max_days_after_deposit, expires_at)};
  *       quá {@code lúc cọc + booking_window_days} thì không đặt được nữa;</li>
- *   <li>"lúc cọc" = {@code paid_at} của giao dịch {@code Success} của hoá đơn {@code Deposit};</li>
+ *   <li>"lúc cọc" = muộn nhất trong: {@code paid_at} giao dịch {@code Success} của hoá đơn {@code Deposit}, của hoá
+ *       đơn {@code DepositSupplement}, {@code agreed_at} của đề xuất khoang được đồng ý;</li>
  *   <li>đơn phải {@code Deposited}, thuộc khách; đơn người khác → 404.</li>
  * </ul>
  *
@@ -85,6 +89,7 @@ public class AppointmentBookingService {
 
     private final RentalOrderRepository orderRepository;
     private final InvoiceRepository invoiceRepository;
+    private final ProposalFeedbackRepository proposalRepository;
     private final AppointmentRepository appointmentRepository;
     private final AppointmentReadRepository readRepository;
     private final PaymentService paymentService;
@@ -95,12 +100,14 @@ public class AppointmentBookingService {
     private final ApplicationEventPublisher events;
 
     AppointmentBookingService(RentalOrderRepository orderRepository, InvoiceRepository invoiceRepository,
+                              ProposalFeedbackRepository proposalRepository,
                               AppointmentRepository appointmentRepository, AppointmentReadRepository readRepository,
                               PaymentService paymentService, PricingQuery pricingQuery,
                               FacilityStaffQuery facilityStaffQuery, AuditRecorder auditRecorder,
                               OrderNotifier orderNotifier, ApplicationEventPublisher events) {
         this.orderRepository = orderRepository;
         this.invoiceRepository = invoiceRepository;
+        this.proposalRepository = proposalRepository;
         this.appointmentRepository = appointmentRepository;
         this.readRepository = readRepository;
         this.paymentService = paymentService;
@@ -261,10 +268,7 @@ public class AppointmentBookingService {
                         java.util.List.of(InvoiceStatus.UNPAID), java.util.List.of(InvoiceType.DEPOSIT_SUPPLEMENT))) {
             throw new BookingConflictException(MSG_AWAITING_UNIT);
         }
-        Instant depositPaidAt = invoiceRepository
-                .findFirstByOrderIdAndTypeAndStatusOrderByIdDesc(order.getId(), InvoiceType.DEPOSIT, InvoiceStatus.PAID)
-                .flatMap(invoice -> paymentService.firstPaidAt(invoice.getId()))
-                .orElseThrow(() -> new BookingConflictException(MSG_NO_DEPOSIT_TIME));
+        Instant depositPaidAt = bookableSince(order);
         Instant now = Instant.now();
         // Đặt lại sau khi lịch check-in trước bị huỷ (no-show, FS huỷ, quá hạn bàn giao): không áp cửa sổ đặt lịch
         // tính từ lúc cọc — khách được đặt lại trong thời hạn giữ đơn (expires_at).
@@ -288,6 +292,28 @@ public class AppointmentBookingService {
             throw new BookingConflictException(MSG_NO_SLOT_LEFT);
         }
         return new Window(min, max);
+    }
+
+    /**
+     * Mốc tính cửa sổ đặt lịch = muộn nhất trong: lúc trả cọc, lúc trả cọc bổ sung, lúc khách đồng ý đề xuất khoang.
+     * Đơn đã cọc nhưng phải đổi khoang (khoang bị giữ trước / từ chối tại bàn giao) được tính lại từ lúc đồng ý khoang
+     * mới, không bị quá hạn vì thời gian chờ cơ sở đề xuất.
+     */
+    private Instant bookableSince(RentalOrder order) {
+        Instant since = invoiceRepository
+                .findFirstByOrderIdAndTypeAndStatusOrderByIdDesc(order.getId(), InvoiceType.DEPOSIT, InvoiceStatus.PAID)
+                .flatMap(invoice -> paymentService.firstPaidAt(invoice.getId()))
+                .orElseThrow(() -> new BookingConflictException(MSG_NO_DEPOSIT_TIME));
+        Optional<Instant> supplement = invoiceRepository.findFirstByOrderIdAndTypeAndStatusOrderByIdDesc(order.getId(),
+                        InvoiceType.DEPOSIT_SUPPLEMENT, InvoiceStatus.PAID)
+                .flatMap(invoice -> paymentService.firstPaidAt(invoice.getId()));
+        Optional<Instant> agreed = proposalRepository.findLatestAgreedAt(order.getId(), ProposalStatus.AGREED);
+        for (Optional<Instant> later : List.of(supplement, agreed)) {
+            if (later.isPresent() && later.get().isAfter(since)) {
+                since = later.get();
+            }
+        }
+        return since;
     }
 
     /** Spec Appointment › CONSTRAINTS: lịch check-in phải kết thúc trước {@code RentalOrder.expires_at}. */

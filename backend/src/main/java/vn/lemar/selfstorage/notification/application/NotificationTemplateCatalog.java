@@ -186,8 +186,16 @@ public class NotificationTemplateCatalog {
                         + "quy trình của cơ sở.");
         put(NotificationType.CONTRACT_ACCESS_RESTORED, NotificationRecipient.CUSTOMER,
                 "Quyền truy cập khoang đã mở lại",
-                "Hợp đồng {{contractCode}} (khoang {{unitCode}}) không còn quá hạn. Lấy mã khoá số mới trong trang kho "
+                "Hợp đồng {{contractCode}} (khoang {{unitCode}}) {{restoreNote}} Lấy mã khoá số mới trong trang kho "
                         + "đang thuê.");
+        put(NotificationType.RETURN_NO_SHOW, NotificationRecipient.CUSTOMER,
+                "Bạn đã lỡ buổi trả kho",
+                "Bạn không đến buổi trả kho {{appointmentTime}} (khoang {{unitCode}}, hợp đồng {{contractCode}}). "
+                        + "{{customerNote}}");
+        put(NotificationType.RETURN_NO_SHOW, NotificationRecipient.FM,
+                "Khách không đến buổi trả kho",
+                "Khách không đến buổi trả kho {{appointmentTime}} (khoang {{unitCode}}, hợp đồng {{contractCode}}). "
+                        + "{{fmNote}}");
         put(NotificationType.RETURN_DATE_SHIFTED, NotificationRecipient.CUSTOMER,
                 "Ngày trả kho được dời",
                 "Ngày bạn chọn đã kín lịch — buổi trả khoang {{unitCode}} được dời sang {{appointmentTime}}.");

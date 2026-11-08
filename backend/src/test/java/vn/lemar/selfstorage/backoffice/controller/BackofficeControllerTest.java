@@ -214,8 +214,9 @@ class BackofficeControllerTest {
     }
 
     private static Report report() {
-        return new Report(LocalDate.now(), LocalDate.now(), new Kpis(1, 2, 3, 0, 0, 0, BigDecimal.ZERO),
-                new BigDecimal("1000"), List.of(), List.of());
+        return new Report(LocalDate.now(), LocalDate.now(),
+                new Kpis(1, 2, 3, 0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO), new BigDecimal("1000"), List.of(),
+                List.of());
     }
 
     private static FacilityRow facility() {

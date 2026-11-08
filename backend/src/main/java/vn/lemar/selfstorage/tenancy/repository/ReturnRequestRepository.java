@@ -25,4 +25,7 @@ public interface ReturnRequestRepository extends JpaRepository<ReturnRequest, Lo
     List<ReturnRequest> findByFacilityIdAndStatusInOrderByIdAsc(Long facilityId, Collection<String> statuses);
 
     List<ReturnRequest> findByAssignedStaffIdAndStatusOrderByIdAsc(Long staffId, String status);
+
+    /** Yêu cầu đang giữ lịch trả kho này — cron no-show trả kho. */
+    Optional<ReturnRequest> findByAppointmentIdAndStatus(Long appointmentId, String status);
 }

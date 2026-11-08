@@ -28,7 +28,7 @@ Mọi route cần bearer token + `ACCOUNT_ACTIVE` và đúng role theo prefix (`
 |---|---|---|
 | GET | `/api/fm/invoices?facilityId=&status=&type=` | hoá đơn của cơ sở (500 mới nhất). Hoá đơn gắn đơn thuộc cơ sở của yêu cầu đặt kho; hoá đơn gắn hợp đồng thuộc cơ sở của khoang |
 | GET | `/api/fm/contracts?facilityId=&status=` | hợp đồng của cơ sở + tổng hoá đơn `Unpaid` |
-| GET | `/api/fm/reports?facilityId=&from=&to=` | KPI, doanh thu theo tháng × loại hoá đơn, số khoang theo trạng thái. Mặc định 6 tháng gần nhất |
+| GET | `/api/fm/reports?facilityId=&from=&to=` | KPI (gồm cọc đang giữ), doanh thu theo tháng × loại (bên dưới), số khoang theo trạng thái. Mặc định 6 tháng gần nhất |
 | POST | `/api/fm/storage-units` `{facilityId, code, unitTypeId, monthlyPrice?}` | thêm khoang `Available`; mã trùng trong cơ sở → 400; cơ sở tự "cung cấp" loại khoang đó (`facility_unit_type`) |
 | PATCH | `/api/fm/storage-units/{id}` `{unitTypeId?, monthlyPrice?}` | đổi loại / giá riêng (`monthlyPrice` null = giá loại khoang) |
 | POST | `/api/fm/storage-units/{id}/maintenance` `{maintenance}` | bảo trì tay: `Available ↔ Maintenance`. Khoang đang có đơn chưa hoàn tất trỏ tới → 409. Mở lại tay xoá `maintenance_started_at` |
@@ -36,18 +36,29 @@ Mọi route cần bearer token + `ACCOUNT_ACTIVE` và đúng role theo prefix (`
 | GET | `/api/fm/facilities/{id}/access-options` | thông tin cơ sở kèm hình thức truy cập đang bật (`keyAccess`, `codeAccess`) — màn cấu hình truy cập của FM đọc từ đây |
 | PUT | `/api/fm/facilities/{id}/access-options` `{keyAccess, codeAccess}` | bật / tắt khóa cơ, mã số; tắt cả hai → 400 |
 
-Doanh thu — luật hiện tại: cộng **mọi** hoá đơn `Paid` của cơ sở, không phân biệt loại:
-- theo ngày thanh toán (`max(paid_at)` của giao dịch `Success` của hoá đơn, không có thì `created_at` của hoá đơn);
-- gồm cả hoá đơn cọc (`Deposit`, `DepositSupplement`) và các hoá đơn quyết toán trả kho đối trừ vào cọc (`INV-CLN` /
-  `INV-DMG` / `INV-KEY` / `INV-PEN` `Paid`, `settledBy = deposit` trong audit) — tiền cọc vì vậy có thể được tính hai
-  lần (lúc thu cọc và lúc đối trừ);
-- khoản hoàn tiền FM ghi nhận thủ công (giao dịch `REFUND`) **không** bị trừ.
+Doanh thu — theo **kế toán** (`BackofficeReadRepository.revenue`, nhóm theo tháng giờ VN × loại). Tiền cọc là khoản
+giữ hộ khách, **không** phải doanh thu khi thu; chỉ thành doanh thu khi bị đối trừ phí hoặc bị giữ lại.
+
+| Dòng | Loại (`type`) | Số tiền | Mốc tháng |
+|---|---|---|---|
+| Hoá đơn `Rental` / `Extension` / `Penalty` / `Service` `Paid` — gồm cả phí trả kho đối trừ vào cọc (`INV-CLN` / `INV-DMG` / `INV-KEY` / `INV-PEN`) và phí quá hạn | loại hoá đơn | `amount` | `max(paid_at)` giao dịch `PAY` `Success`; không có giao dịch thu (đối trừ cọc) → `created_at` hoá đơn |
+| Khoản hoàn FM ghi trên các hoá đơn trên (giao dịch `REFUND` `Success`, vd hoàn tháng đầu) | loại hoá đơn | `−amount` | `paid_at` của giao dịch hoàn |
+| Cọc bị giữ lại: hoá đơn `Deposit` / `DepositSupplement` `Paid` của đơn `Canceled` | `ForfeitedDeposit` | `amount` − khoản hoàn ghi trước lúc huỷ | `rental_orders.canceled_at` (V23) |
+| Hoàn cọc sau lúc huỷ (huỷ do lỗi cơ sở) | `ForfeitedDeposit` | `−amount` | `paid_at` của giao dịch hoàn |
+
+- `count` = số hoá đơn được ghi nhận; dòng hoàn tiền không cộng `count`. `totalRevenue` = tổng `amount` mọi dòng.
+- Đơn huỷ trước V23 lấy `canceled_at` từ audit `RENTAL_ORDER_CANCELED`; đơn không có audit thì `canceled_at` `NULL`
+  và cọc của đơn không vào báo cáo.
+- Tiền vào sau khi hoá đơn đã đóng (giao dịch `PAY` trên hoá đơn không `Paid`) không phải doanh thu — FM hoàn thủ công.
 
 KPI:
 - yêu cầu đặt kho `Pending`, đơn đang mở;
 - hợp đồng `Active`, hợp đồng quá hạn;
 - yêu cầu trả kho / hỗ trợ đang mở;
-- tổng hoá đơn `Unpaid`.
+- tổng hoá đơn `Unpaid`;
+- `depositHeld` — **cọc đang giữ** tại lúc xem: hoá đơn `Deposit` / `DepositSupplement` `Paid` của đơn chưa `Canceled`
+  (trừ khoản hoàn ghi trên hoá đơn cọc), trừ hoá đơn `Penalty` `Paid` không có giao dịch thu (phần đã đối trừ vào cọc
+  lúc trả kho). Cọc dư FM chưa ghi nhận hoàn vẫn nằm trong số này.
 
 Màn "Hoá đơn cơ sở" của FM có panel "Hoàn tiền" trên từng hoá đơn, gọi `GET` / `POST
 /api/fm/invoices/{invoiceId}/refunds` (quyền `payment_transaction.refund`, không phải `facility.access` —

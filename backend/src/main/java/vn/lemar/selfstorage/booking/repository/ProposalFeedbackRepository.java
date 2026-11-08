@@ -26,6 +26,11 @@ public interface ProposalFeedbackRepository extends JpaRepository<ProposalFeedba
 
     List<ProposalFeedback> findByOrderIdAndStatusIn(Long orderId, List<ProposalStatus> statuses);
 
+    /** Lần khách đồng ý đề xuất gần nhất của đơn (không có → empty). */
+    @Query("select max(p.agreedAt) from ProposalFeedback p where p.orderId = :orderId and p.status = :status")
+    Optional<java.time.Instant> findLatestAgreedAt(@Param("orderId") Long orderId,
+                                                   @Param("status") ProposalStatus status);
+
     /** Các khoang khách đã từ chối trong cùng đơn — mặc định không được đề xuất lại. */
     @Query("select distinct p.unitId from ProposalFeedback p where p.orderId = :orderId and p.status = :status")
     List<Long> findUnitIdsByOrderIdAndStatus(@Param("orderId") Long orderId, @Param("status") ProposalStatus status);

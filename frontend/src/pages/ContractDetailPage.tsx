@@ -350,11 +350,20 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
               }}
             />
           )}
-          {!contract.canExtend && !contract.canRequestReturn && (
-            <div className="bg-surface-subtle p-4 text-small text-muted">
-              Hợp đồng hiện không có thao tác gia hạn hoặc trả kho.
-            </div>
-          )}
+          {!contract.canExtend &&
+            !contract.canRequestReturn &&
+            (contract.invoices.some(
+              (bill) => bill.type === "Extension" && bill.status === "Unpaid",
+            ) ? (
+              <div className="bg-surface-subtle p-4 text-small text-muted">
+                Đang có hoá đơn gia hạn chờ thanh toán. Thanh toán hoặc đợi hoá đơn hết hạn rồi mới
+                gửi yêu cầu trả kho.
+              </div>
+            ) : (
+              <div className="bg-surface-subtle p-4 text-small text-muted">
+                Hợp đồng hiện không có thao tác gia hạn hoặc trả kho.
+              </div>
+            ))}
           <div className="bg-[var(--dark)] p-4 text-[var(--on-dark-ink)]">
             <h2 className="text-small font-semibold">Cần hỗ trợ?</h2>
             <p className="mt-1.5 text-small text-[rgba(233,234,230,.7)]">

@@ -52,7 +52,8 @@ public class TenancyController {
                 tenancyService.requestExtension(contractId, me(), body.months())));
     }
 
-    @Operation(summary = "Yêu cầu trả kho", description = "Ngày mong muốn trong 30 ngày tới; FM sẽ phân công FS.")
+    @Operation(summary = "Yêu cầu trả kho", description = "Ngày mong muốn trong 30 ngày tới; FM sẽ phân công FS. "
+            + "409 khi đã có yêu cầu đang xử lý hoặc còn hoá đơn gia hạn `Unpaid`.")
     @PostMapping("/api/customer/rentals/{contractId}/return-request")
     public ResponseEntity<ApiEnvelope<ReturnRequestView>> requestReturn(@PathVariable Long contractId,
                                                                         @Valid @RequestBody ReturnBody body) {

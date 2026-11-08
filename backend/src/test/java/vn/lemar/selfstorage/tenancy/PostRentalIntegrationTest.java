@@ -84,6 +84,10 @@ class PostRentalIntegrationTest {
     @Autowired
     private vn.lemar.selfstorage.checkout.application.CheckoutJobs checkoutJobs;
     @Autowired
+    private vn.lemar.selfstorage.booking.application.ContractInvoiceService contractInvoices;
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+    @Autowired
     private JdbcTemplate jdbc;
 
     private long customerId;
@@ -128,8 +132,13 @@ class PostRentalIntegrationTest {
         assertThatThrownBy(() -> tenancy.requestExtension(seed.contractId, customerId, 1))
                 .isInstanceOf(TenancyException.class).hasMessageContaining("chờ thanh toán");
         assertThat(tenancy.rental(seed.contractId, customerId).canExtend()).isFalse();
+        // Hoá đơn gia hạn đang chờ → chưa được gửi yêu cầu trả kho (hợp đồng không được cộng kỳ khi đang trả kho).
+        assertThat(tenancy.rental(seed.contractId, customerId).canRequestReturn()).isFalse();
+        assertThatThrownBy(() -> tenancy.requestReturn(seed.contractId, customerId, LocalDate.now(VN).plusDays(1),
+                null)).isInstanceOf(TenancyException.class).hasMessageContaining("hoá đơn gia hạn");
 
         pay(bill);
+        assertThat(tenancy.rental(seed.contractId, customerId).canRequestReturn()).isTrue();
 
         assertThat(jdbc.queryForObject("select end_date from rental_contracts where id = ?", LocalDate.class,
                 seed.contractId)).isEqualTo(seed.endDate.plusMonths(2));
@@ -180,6 +189,39 @@ class PostRentalIntegrationTest {
         assertThatThrownBy(() -> tenancy.cancelReturn(request.id(), customerId)).isInstanceOf(TenancyException.class);
     }
 
+    @Test
+    void missedReturnAppointmentGoesBackToPendingThenCancelsAtThreshold() {
+        Seed seed = seedActive(LocalDate.now(VN).plusMonths(1));
+        ReturnRequestView request = tenancy.requestReturn(seed.contractId, customerId, LocalDate.now(VN).plusDays(1),
+                null);
+        loginAs(FM);
+        ReturnRequestView first = tenancy.assign(request.id(), fsId);
+        assertThat(tenancy.missedReturnAppointmentIds()).doesNotContain(first.appointmentId());
+
+        moveAppointment(first.appointmentId(), LocalDate.now(VN).minusDays(1));
+        assertThat(tenancy.missedReturnAppointmentIds()).contains(first.appointmentId());
+        assertThat(tenancy.handleReturnNoShow(first.appointmentId())).isTrue();
+        assertThat(tenancy.handleReturnNoShow(first.appointmentId())).isFalse();
+
+        assertThat(appointmentStatus(first.appointmentId())).isEqualTo("Canceled");
+        assertThat(jdbc.queryForObject("select status || ':' || no_show_count || ':' || (appointment_id is null) "
+                + "from return_requests where id = ?", String.class, request.id())).isEqualTo("Pending:1:true");
+        assertThat(auditCount("RETURN_NO_SHOW", "ReturnRequest", request.id())).isEqualTo(1);
+        assertThat(auditCount("APPOINTMENT_CANCELED_NO_SHOW", "Appointment", first.appointmentId())).isEqualTo(1);
+        assertThat(notifications(CUSTOMER, "RETURN_NO_SHOW", seed.orderId)).isEqualTo(1);
+        assertThat(notifications(FM, "RETURN_NO_SHOW", seed.orderId)).isEqualTo(1);
+
+        // Lần thứ hai (return.max_no_shows = 2) → huỷ yêu cầu trả kho.
+        ReturnRequestView second = tenancy.assign(request.id(), fsId);
+        moveAppointment(second.appointmentId(), LocalDate.now(VN).minusDays(1));
+        assertThat(tenancy.handleReturnNoShow(second.appointmentId())).isTrue();
+        assertThat(jdbc.queryForObject("select status || ':' || no_show_count || ':' || cancel_reason "
+                + "from return_requests where id = ?", String.class, request.id()))
+                .isEqualTo("Canceled:2:Khách không đến buổi trả kho 2 lần");
+        assertThat(tenancy.openReturnOf(seed.contractId)).isEmpty();
+        assertThat(tenancy.rental(seed.contractId, customerId).canRequestReturn()).isTrue();
+    }
+
     // ------------------------------------------------------------------ trả kho
 
     @Test
@@ -211,7 +253,7 @@ class PostRentalIntegrationTest {
     @Test
     void chargesAndUnpaidInvoicesAreDeductedFromDeposit() {
         Seed seed = seedActive(LocalDate.now(VN).plusMonths(1));
-        ContractBill extension = tenancy.requestExtension(seed.contractId, customerId, 1);
+        ContractBill rent = unpaidRent(seed);
         ReturnRequestView request = assignedAndArrived(seed);
 
         loginAs(FS);
@@ -222,11 +264,11 @@ class PostRentalIntegrationTest {
         assertThat(view.keysIssued()).isEqualTo(2);
         CheckoutView done = checkout.confirm(request.id());
 
-        // 100.000 vệ sinh + 100.000 hư hỏng + 200.000 mất 1 chìa + 100.000 gia hạn chưa trả = 500.000 = cọc.
+        // 100.000 vệ sinh + 100.000 hư hỏng + 200.000 mất 1 chìa + 100.000 tiền thuê chưa trả = 500.000 = cọc.
         assertThat(done.totalCharges()).isEqualByComparingTo("500000");
         assertThat(done.refundAmount()).isEqualByComparingTo("0");
         assertThat(done.result()).isEqualTo("COMPLETED");
-        assertThat(invoiceStatus(extension.invoiceId())).isEqualTo("Canceled");
+        assertThat(invoiceStatus(rent.invoiceId())).isEqualTo("Canceled");
         // Quyết toán tách mỗi loại phí một hoá đơn Penalty (trước đây gộp một INV-PEN 500.000), cọc phủ hết → Paid.
         assertThat(paidPenalty(seed.contractId, "CLN")).isEqualByComparingTo("100000");
         assertThat(paidPenalty(seed.contractId, "DMG")).isEqualByComparingTo("100000");
@@ -243,7 +285,7 @@ class PostRentalIntegrationTest {
     @Test
     void penaltiesAreSplitPerCategoryAndUncoveredPartGoesIntoOneShortfall() {
         Seed seed = seedActive(LocalDate.now(VN).plusMonths(1));
-        tenancy.requestExtension(seed.contractId, customerId, 1);
+        unpaidRent(seed);
         ReturnRequestView request = assignedAndArrived(seed);
 
         loginAs(FS);
@@ -251,7 +293,7 @@ class PostRentalIntegrationTest {
                 List.of(), null));
         CheckoutView awaiting = checkout.confirm(request.id());
 
-        // 100.000 vệ sinh + 300.000 hư hỏng + 200.000 mất 1 chìa + 100.000 gia hạn chưa trả = 700.000; cọc 500.000
+        // 100.000 vệ sinh + 300.000 hư hỏng + 200.000 mất 1 chìa + 100.000 tiền thuê chưa trả = 700.000; cọc 500.000
         // phủ lần lượt CLN (100.000) → DMG (300.000) → KEY (100.000/200.000); còn thiếu 200.000 vào một INV-PEN.
         assertThat(awaiting.result()).isEqualTo("AWAITING_PAYMENT");
         assertThat(awaiting.totalCharges()).isEqualByComparingTo("700000");
@@ -434,6 +476,31 @@ class PostRentalIntegrationTest {
     }
 
     @Test
+    void remindersRepeatOncePerContractTermAfterExtension() {
+        Seed seed = seedActive(LocalDate.now(VN).plusDays(3));
+        assertThat(overdue.remindExpiring(seed.contractId)).isTrue();
+        // Nhắc đã gửi trước cửa sổ nhắc của kỳ mới (gia hạn 1 tháng) → kỳ mới nhắc lại một lần.
+        jdbc.update("update notifications set created_at = now() - interval '10 days' where id in (select "
+                + "notification_id from order_notifications where order_id = ?)", seed.orderId);
+        pay(tenancy.requestExtension(seed.contractId, customerId, 1));
+        jdbc.update("update rental_contracts set end_date = current_date + 2 where id = ?", seed.contractId);
+        assertThat(overdue.remindExpiring(seed.contractId)).isTrue();
+        assertThat(overdue.remindExpiring(seed.contractId)).isFalse();
+        assertThat(notifications(CUSTOMER, "CONTRACT_EXPIRING_SOON", seed.orderId)).isEqualTo(2);
+
+        jdbc.update("update rental_contracts set end_date = current_date - 5 where id = ?", seed.contractId);
+        overdue.accrue(seed.contractId);
+        overdue.accrue(seed.contractId);
+        assertThat(notifications(CUSTOMER, "CONTRACT_OVERDUE", seed.orderId)).isEqualTo(1);
+        // Kỳ quá hạn mới (end_date mới đã qua sau lần báo trước) → báo lại.
+        jdbc.update("update notifications set created_at = now() - interval '10 days' where type = 'CONTRACT_OVERDUE' "
+                + "and id in (select notification_id from order_notifications where order_id = ?)", seed.orderId);
+        jdbc.update("update rental_contracts set end_date = current_date - 2 where id = ?", seed.contractId);
+        overdue.accrue(seed.contractId);
+        assertThat(notifications(CUSTOMER, "CONTRACT_OVERDUE", seed.orderId)).isEqualTo(2);
+    }
+
+    @Test
     void overdueStopsAtAttendedReturnAppointmentDateOtherwiseCountsToToday() {
         LocalDate today = LocalDate.now(VN);
         Seed attended = seedActive(today.minusDays(10));
@@ -553,6 +620,15 @@ class PostRentalIntegrationTest {
         ipn.put("vnp_SecureHash", "mocked");
         assertThat(paymentService.handleIpn(ipn).rspCode()).isEqualTo("00");
         assertThat(invoiceStatus(bill.invoiceId())).isEqualTo("Paid");
+    }
+
+    /** Hoá đơn tiền thuê 100.000 {@code Unpaid} của hợp đồng — hoá đơn còn nợ được gộp khi quyết toán trả kho. */
+    private ContractBill unpaidRent(Seed seed) {
+        // issue() là Propagation.MANDATORY — caller production luôn đang trong transaction.
+        return new org.springframework.transaction.support.TransactionTemplate(transactionManager).execute(status ->
+                contractInvoices.issue(seed.orderId, seed.contractId, customerId, "Rental", "RNT", "Tiền thuê",
+                "Tiền thuê tháng kế tiếp.", new BigDecimal("100000"), java.time.Instant.now().plusSeconds(86400),
+                null));
     }
 
     /** Tổng hoá đơn Penalty {@code Paid} mã {@code INV-<kind>-…} của hợp đồng. */

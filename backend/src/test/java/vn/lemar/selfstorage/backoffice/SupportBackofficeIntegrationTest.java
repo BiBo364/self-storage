@@ -370,6 +370,43 @@ class SupportBackofficeIntegrationTest {
     }
 
     @Test
+    void revenueIsAccrualBasedAndDepositIsHeldNotEarned() {
+        Map<String, BigDecimal> before = revenueThisMonth();
+        BigDecimal heldBefore = readRepository.kpis(facilityId).depositHeld();
+
+        long contractId = seedActiveContract();
+        long rentId = id("select id from invoices where contract_id = " + contractId + " and type = 'Rental'");
+        // Thu qua cổng rồi hoàn một phần: mốc thu là giao dịch PAY, khoản hoàn trừ vào doanh thu tháng hoàn.
+        jdbc.update("insert into payment_transactions (invoice_id, vnp_txn_ref, amount, direction, status, paid_at) "
+                + "values (?, ?, 100000, 'PAY', 'Success', now())", rentId, "PY" + System.nanoTime());
+        refund(rentId, "40000", "now()");
+        // Phí trả kho đối trừ vào cọc (Paid, không có giao dịch thu): doanh thu + giảm cọc đang giữ.
+        jdbc.update("insert into invoices (contract_id, customer_id, code, title, type, status, amount) values "
+                + "(?, ?, ?, 'Vệ sinh (đối trừ cọc)', 'Penalty', 'Paid', 100000)", contractId, customerId,
+                "INV-CLN-Q7-S" + System.nanoTime());
+        // Đơn bị huỷ sau khi cọc 300.000: cọc bị giữ lại; hoàn 100.000 sau lúc huỷ (lỗi cơ sở) trừ lại.
+        long requestId = id("insert into rental_requests (facility_id, customer_name, normalized_customer_email, "
+                + "customer_phone, unit_type_id, start_date, period, status) values (" + facilityId
+                + ", 'Khách Huỷ', '" + CUSTOMER + "', '0900000000', (select id from unit_types where name = "
+                + "'Small'), current_date, 3, 'Converted') returning id");
+        long canceledOrder = id("insert into rental_orders (request_id, customer_id, status, cancel_reason, "
+                + "canceled_at) values (" + requestId + ", " + customerId
+                + ", 'Canceled', 'Khách hủy đơn', now() - interval '1 minute') returning id");
+        long depositId = id("insert into invoices (order_id, customer_id, code, title, type, status, amount) values ("
+                + canceledOrder + ", " + customerId + ", 'INV-DEP-Q7-C" + System.nanoTime() + "', 'Cọc', 'Deposit', "
+                + "'Paid', 300000) returning id");
+        refund(depositId, "100000", "now()");
+
+        Map<String, BigDecimal> after = revenueThisMonth();
+        assertThat(delta(after, before, "Deposit")).isEqualByComparingTo("0");
+        assertThat(delta(after, before, "Rental")).isEqualByComparingTo("60000");
+        assertThat(delta(after, before, "Penalty")).isEqualByComparingTo("100000");
+        assertThat(delta(after, before, "ForfeitedDeposit")).isEqualByComparingTo("200000");
+        // Cọc 500.000 của đơn đang thuê − 100.000 đã đối trừ; cọc đơn huỷ không còn tính là đang giữ.
+        assertThat(readRepository.kpis(facilityId).depositHeld().subtract(heldBefore)).isEqualByComparingTo("400000");
+    }
+
+    @Test
     void backofficeFiltersAndValidation() {
         seedActiveContract();
         loginAs(FM);
@@ -423,7 +460,10 @@ class SupportBackofficeIntegrationTest {
 
     // ------------------------------------------------------------------ helpers
 
-    /** Hợp đồng Active: 1 bộ chìa (2), hoá đơn cọc Paid để báo cáo có doanh thu. */
+    /**
+     * Hợp đồng Active: 1 bộ chìa (2), hoá đơn cọc 500.000 Paid (cọc đang giữ) và tiền thuê tháng đầu 100.000 Paid
+     * (doanh thu).
+     */
     private long seedActiveContract() {
         String suffix = SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000;
         long unitId = id("insert into storage_units (code, facility_id, unit_type_id, status) values ('S-" + suffix
@@ -443,7 +483,27 @@ class SupportBackofficeIntegrationTest {
                 + end.minusMonths(3) + "', '" + end + "', now(), 'Active') returning id");
         jdbc.update("insert into unit_access_keys (unit_id, contract_id, access_type, quantity) values (?, ?, "
                 + "'PhysicalKey', 2)", unitId, contractId);
+        jdbc.update("insert into invoices (contract_id, customer_id, code, title, type, status, amount) values "
+                + "(?, ?, ?, 'Tháng đầu', 'Rental', 'Paid', 100000)", contractId, customerId, "INV-RNT-Q7-S" + suffix);
         return contractId;
+    }
+
+    private Map<String, BigDecimal> revenueThisMonth() {
+        LocalDate today = LocalDate.now(VN);
+        Map<String, BigDecimal> byType = new java.util.HashMap<>();
+        readRepository.revenue(facilityId, today.withDayOfMonth(1), today)
+                .forEach(r -> byType.merge(r.type(), r.amount(), BigDecimal::add));
+        return byType;
+    }
+
+    private static BigDecimal delta(Map<String, BigDecimal> after, Map<String, BigDecimal> before, String type) {
+        return after.getOrDefault(type, BigDecimal.ZERO).subtract(before.getOrDefault(type, BigDecimal.ZERO));
+    }
+
+    private void refund(long invoiceId, String amount, String paidAt) {
+        jdbc.update("insert into payment_transactions (invoice_id, vnp_txn_ref, amount, direction, status, paid_at) "
+                + "values (?, ?, " + amount + ", 'REFUND', 'Success', " + paidAt + ")", invoiceId,
+                "RF" + SEQ.incrementAndGet() + System.nanoTime() % 100000);
     }
 
     private long id(String sql) {

@@ -180,6 +180,7 @@ export function BomDashboardPage({ navigate }: { navigate: Navigate }) {
     ? [
         { label: "Doanh thu trong kỳ", value: formatMoney(report.totalRevenue) },
         { label: "Hoá đơn chưa thanh toán", value: formatMoney(report.kpis.unpaidAmount) },
+        { label: "Cọc đang giữ", value: formatMoney(report.kpis.depositHeld) },
         { label: "Yêu cầu đặt kho chờ duyệt", value: report.kpis.pendingRequests },
         { label: "Đơn đang mở", value: report.kpis.activeOrders },
         { label: "Hợp đồng hiệu lực", value: report.kpis.activeContracts },

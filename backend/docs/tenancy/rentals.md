@@ -27,7 +27,7 @@ Mọi route cần bearer token + `ACCOUNT_ACTIVE`; prefix quyết role (`/api/cu
 | GET | `/api/customer/rentals` | khách — hợp đồng `Active` của chính mình | — (không có thì `data: []`) |
 | GET | `/api/customer/rentals/{contractId}` | khách chủ hợp đồng (mọi trạng thái hợp đồng) | 404 "Không tìm thấy hợp đồng thuê" (không có / của khách khác) |
 | POST | `/api/customer/rentals/{contractId}/extensions` body `{months}` | khách chủ hợp đồng | 400 thiếu `months` / ngoài 1–`extension.max_months`; 404; 409 hợp đồng không `Active`, đang có yêu cầu trả kho mở, đã có hoá đơn gia hạn `Unpaid` |
-| POST | `/api/customer/rentals/{contractId}/return-request` body `{preferredDate, note?}` | khách chủ hợp đồng | 400 `preferredDate` trước hôm nay / quá 30 ngày tới, `note` > 1000 ký tự; 404; 409 hợp đồng không `Active`, đã có yêu cầu đang xử lý |
+| POST | `/api/customer/rentals/{contractId}/return-request` body `{preferredDate, note?}` | khách chủ hợp đồng | 400 `preferredDate` trước hôm nay / quá 30 ngày tới, `note` > 1000 ký tự; 404; 409 hợp đồng không `Active`, đã có yêu cầu đang xử lý, còn hoá đơn gia hạn `Unpaid` |
 | GET | `/api/customer/return-requests` | khách — mọi yêu cầu trả kho của mình, mới nhất trước | — |
 | POST | `/api/customer/return-requests/{id}/cancel` | khách chủ yêu cầu | 404 "Không tìm thấy yêu cầu trả kho"; 409 yêu cầu đã đóng, FS đã xác nhận khách đến |
 | GET | `/api/fm/return-requests?facilityId=` | FM có `rental_order.read` tại cơ sở — yêu cầu `Pending`/`Assigned`, cũ nhất trước | 403 thiếu quyền / ngoài phạm vi cơ sở |
@@ -45,7 +45,7 @@ Route trả kho tại cơ sở (`…/checkout`) thuộc [checkout/return.md](../
 - yêu cầu trả kho (`ReturnRequestView`) có `appointmentStart` và `appointmentArrivedAt` (mốc FS xác nhận khách đến
   buổi trả kho; `null` = chưa đến / chưa có lịch);
 - `canExtend`: hợp đồng `Active`, không có yêu cầu trả kho mở, không có hoá đơn gia hạn chờ trả;
-- `canRequestReturn`: hợp đồng `Active`, không có yêu cầu trả kho mở.
+- `canRequestReturn`: hợp đồng `Active`, không có yêu cầu trả kho mở, không có hoá đơn gia hạn chờ trả.
 
 ## Gia hạn
 
@@ -64,9 +64,10 @@ Route trả kho tại cơ sở (`…/checkout`) thuộc [checkout/return.md](../
    - `end_date += months`, `period += months`;
    - audit `CONTRACT_EXTENDED`; khách nhận `CONTRACT_EXTENDED`.
 5. Hoá đơn gia hạn quá hạn → cron booking chuyển `Expired`; hợp đồng không đổi, khách tạo lại.
-6. Hoá đơn gia hạn đã tạo trước khi khách gửi yêu cầu trả kho **vẫn thanh toán được** sau khi yêu cầu được gửi:
-   `onExtensionPaid` chỉ kiểm hợp đồng còn `Active`, nên trả xong thì `end_date` vẫn được cộng. Còn `Unpaid` lúc FS
-   chốt trả kho thì hoá đơn bị gộp vào quyết toán ([checkout/return.md](../checkout/return.md)).
+6. Gia hạn và trả kho loại trừ nhau theo cả hai chiều: đang có yêu cầu trả kho mở thì không tạo được hoá đơn gia
+   hạn, còn hoá đơn gia hạn `Unpaid` thì không gửi được yêu cầu trả kho (409 "Đang có hoá đơn gia hạn chờ thanh
+   toán…"). Khách thanh toán hoá đơn hoặc đợi nó `Expired` rồi mới gửi yêu cầu trả kho, nên hợp đồng không bị cộng kỳ
+   trong lúc đang trả kho.
 
 ## Yêu cầu trả kho
 
@@ -76,14 +77,31 @@ Route trả kho tại cơ sở (`…/checkout`) thuộc [checkout/return.md](../
 | Phân công | FM (`appointment.assign` + facility scope), FS đang hoạt động của cơ sở | lịch `RETURN` (`Pending`, có `staff_id`) ở khung trống đầu tiên từ `preferred_date`, tìm tối đa 14 ngày; `Assigned`; khách + FS nhận `RETURN_SCHEDULED`; ngày khách chọn đã kín và lịch bị dời sang ngày khác → khách nhận thêm `RETURN_DATE_SHIFTED` (ngày giờ mới); audit `RETURN_ASSIGNED` |
 | Phân công lại | FM | lịch cũ chưa có khách đến → `Canceled`, tạo lịch mới |
 | Huỷ | Khách | chỉ khi FS chưa xác nhận khách đến; lịch `Pending` → `Canceled`; audit `RETURN_CANCELED` |
+| Khách không đến | cron `ReturnNoShowJob` | [bên dưới](#khách-không-đến-buổi-trả-kho) |
 | Hoàn tất | checkout | `Completed` + `completed_at`; audit `RETURN_COMPLETED` |
 
 - Lịch `RETURN` dùng chung ba khung cố định với `CHECKIN`: một lịch mỗi khung mỗi cơ sở, tính cả hai loại.
-- Lịch `RETURN` không có no-show: khách đến trễ sau `end_at` FS vẫn xác nhận đến được; FS không huỷ được lịch `RETURN`
-  qua route huỷ lịch (409) — FM phân công lại hoặc khách huỷ yêu cầu
+- Khách đến trễ sau `end_at` nhưng trong `return.no_show_grace_minutes` (120) FS vẫn xác nhận đến được; quá mốc đó cron
+  no-show huỷ lịch. FS không huỷ được lịch `RETURN` qua route huỷ lịch (409) — FM phân công lại hoặc khách huỷ yêu cầu
   ([staff-appointment-arrive.md](../routes/booking/staff-appointment-arrive.md)).
 - Mỗi hợp đồng chỉ có một yêu cầu `Pending`/`Assigned` (partial unique index V20).
 - Thứ tự khoá: đơn → hợp đồng → yêu cầu trả kho.
+
+### Khách không đến buổi trả kho
+
+`ReturnNoShowJob` chạy mỗi 10 phút (`tenancy.return-no-show.fixed-delay-ms`), mỗi lịch một transaction, khoá đơn → hợp
+đồng → yêu cầu → lịch. Lịch `RETURN` còn `Pending` (FS chưa xác nhận khách đến) đã quá
+`end_at + return.no_show_grace_minutes` và đang gắn với yêu cầu `Assigned`:
+- lịch → `Canceled` lý do "Khách không đến buổi trả kho", audit `APPOINTMENT_CANCELED_NO_SHOW` (actor = System);
+- `no_show_count += 1`, bỏ `appointment_id` / `assigned_staff_id`;
+- chưa chạm `return.max_no_shows` (2) → yêu cầu về `Pending` — FM phân công lại như lần đầu;
+- chạm ngưỡng → yêu cầu `Canceled` (`cancel_reason` "Khách không đến buổi trả kho 2 lần"); hợp đồng không còn yêu cầu
+  trả kho mở nên quá hạn kéo dài lại bị tạm khoá theo điều kiện thường;
+- audit `RETURN_NO_SHOW` (một bản ghi cho yêu cầu); khách + FM nhận `RETURN_NO_SHOW` (nội dung nêu rõ chờ phân công
+  lại hay đã huỷ).
+
+Phí quá hạn không cần xử lý thêm: khách không đến thì ngày dừng vẫn là hôm nay. Idempotent — lịch đã huỷ / đã có khách
+đến thì bỏ qua.
 
 Trả kho tại cơ sở: xem [checkout/return.md](../checkout/return.md).
 
@@ -116,13 +134,18 @@ lập hoá đơn tiền thuê ([trên](#thu-tiền-thuê-hằng-tháng)).
 
 | Điều kiện | Kết quả |
 |---|---|
-| `end_date` trong `contract.expiry_reminder_days` (7) ngày tới | khách nhận `CONTRACT_EXPIRING_SOON`, mỗi đơn một lần |
-| Hợp đồng `Active`, `end_date < hôm nay` | lần đầu: khách + FM nhận `CONTRACT_OVERDUE` (mỗi đơn một lần) |
+| `end_date` trong `contract.expiry_reminder_days` (7) ngày tới | khách nhận `CONTRACT_EXPIRING_SOON`, một lần mỗi kỳ |
+| Hợp đồng `Active`, `end_date < hôm nay` | lần đầu: khách + FM nhận `CONTRACT_OVERDUE` (một lần mỗi kỳ) |
 | Như trên, sau `overdue.grace_days` (3) ngày | phí = `ngày tính phí × overdue.fee_per_day` (20.000đ), trừ phần phí quá hạn đã `Paid` |
 | Quá hạn ≥ `overdue.escalation_days` (30) ngày, chưa có yêu cầu trả kho | tạm khoá truy cập — [bên dưới](#quá-hạn-kéo-dài--tạm-khoá-truy-cập) |
 
-`CONTRACT_EXPIRING_SOON` và `CONTRACT_OVERDUE` gửi **một lần mỗi đơn** (dedup qua `OrderNotification` theo đơn + type):
-khách gia hạn rồi lại sắp hết hạn / lại quá hạn thì không nhận nhắc lần nữa.
+`CONTRACT_EXPIRING_SOON` và `CONTRACT_OVERDUE` gửi **một lần mỗi kỳ** — kỳ xác định bằng `end_date` hiện tại (dedup
+qua `OrderNotification` theo đơn + type, chỉ tính notification tạo từ đầu cửa sổ của kỳ):
+- `CONTRACT_EXPIRING_SOON`: đã có nhắc tạo từ ngày `end_date − contract.expiry_reminder_days` thì bỏ qua;
+- `CONTRACT_OVERDUE`: đã có báo tạo từ ngày `end_date + 1` thì bỏ qua.
+
+Gia hạn dời `end_date` nên kỳ mới có cửa sổ mới: khách gia hạn rồi lại sắp hết hạn / lại quá hạn thì nhận nhắc lại một
+lần. Gia hạn không phủ hết kỳ quá hạn (`end_date` mới vẫn trong quá khứ) cũng là kỳ mới → báo quá hạn lại một lần.
 
 Phí cộng dồn nằm trên đúng một hoá đơn `Penalty` mã `INV-OVD-…` còn `Unpaid`:
 - **Tạo / cập nhật:** cron tạo mới hoặc cập nhật số tiền (audit `OVERDUE_FEE_ACCRUED`), hạn `now + 7 ngày`.
@@ -152,10 +175,16 @@ Trong bước đồng bộ phí (`OverdueService.accrue` → `escalate`): hợp 
 Chìa cơ (`PhysicalKey`) không thu hồi từ xa được — FM xử lý tại chỗ. Trong lúc khoá, khách lấy mã mới
 (`POST /api/customer/contracts/{id}/access-code`) bị 409.
 
-**Mở lại** (`OverdueService.restoreIfCleared`, cùng lượt cron, quét hợp đồng `Active` đang khoá): hợp đồng không còn
-quá hạn (`end_date` ≥ hôm nay — gia hạn đã phủ kỳ quá hạn) **và** không còn hoá đơn `INV-OVD` `Unpaid` → xoá
-`access_suspended_at`, audit `CONTRACT_ACCESS_RESTORED`, khách nhận `CONTRACT_ACCESS_RESTORED`. Mã cũ đã thu hồi nên
-khách tự lấy mã mới trong trang kho đang thuê.
+**Mở lại** (`OverdueService.restoreIfCleared`, cùng lượt cron, quét hợp đồng `Active` đang khoá). Điều kiện chung:
+không còn hoá đơn `INV-OVD` `Unpaid`; thêm **một trong hai**:
+- hợp đồng không còn quá hạn (`end_date` ≥ hôm nay — gia hạn đã phủ kỳ quá hạn);
+- hợp đồng còn quá hạn nhưng có yêu cầu trả kho đang mở — mở để khách dọn đồ. Phí vẫn tính tiếp tới buổi trả kho
+  khách đến (hoá đơn `INV-OVD` mới chỉ thu phần chênh) và gộp vào quyết toán; `escalate` bỏ qua hợp đồng có yêu cầu
+  trả kho mở nên không khoá lại. Khách huỷ yêu cầu trả kho thì lượt cron sau khoá lại theo điều kiện thường.
+
+Kết quả: xoá `access_suspended_at`, audit `CONTRACT_ACCESS_RESTORED`, khách nhận `CONTRACT_ACCESS_RESTORED` (nội dung
+nêu rõ "không còn quá hạn" hay "mở lại để dọn đồ trả kho"). Mã cũ đã thu hồi nên khách tự lấy mã mới trong trang kho
+đang thuê.
 
 FM xem danh sách hợp đồng quá hạn của cơ sở (`GET /api/fm/overdue-contracts?facilityId=`), gồm:
 - số ngày quá hạn và số ngày tính phí;
@@ -173,6 +202,8 @@ FM xem danh sách hợp đồng quá hạn của cơ sở (`GET /api/fm/overdue-
 | `overdue.fee_per_day` | 20000 | V20 |
 | `rent.invoice_lead_days` | 5 | V22 |
 | `overdue.escalation_days` | 30 | V22 |
+| `return.no_show_grace_minutes` | 120 | V23 |
+| `return.max_no_shows` | 2 | V23 |
 
 ## Test
 

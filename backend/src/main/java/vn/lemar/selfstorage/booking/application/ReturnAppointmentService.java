@@ -19,6 +19,7 @@ import vn.lemar.selfstorage.audit.domain.AuditEntityType;
 import vn.lemar.selfstorage.booking.application.exception.BookingConflictException;
 import vn.lemar.selfstorage.booking.domain.Appointment;
 import vn.lemar.selfstorage.booking.domain.AppointmentStatus;
+import vn.lemar.selfstorage.booking.domain.AppointmentType;
 import vn.lemar.selfstorage.booking.repository.AppointmentRepository;
 import vn.lemar.selfstorage.booking.repository.RentalOrderRepository;
 import vn.lemar.selfstorage.facility.application.StorageUnitQuery;
@@ -125,14 +126,42 @@ public class ReturnAppointmentService {
                 });
     }
 
-    /** Trạng thái lịch (Pending/Done/Canceled) và mốc khách đến. */
-    public record AppointmentState(String status, Instant arrivedAt, Long staffId, Instant startAt) {
+    /** Lịch trả kho khách chưa đến ({@code Pending}) đã kết thúc trước {@code cutoff}. */
+    @Transactional(readOnly = true)
+    public java.util.List<Long> missedIds(Instant cutoff) {
+        return appointmentRepository.findReturnMissedIds(cutoff);
+    }
+
+    /**
+     * Huỷ lịch trả kho khách không đến: chỉ khi lịch còn {@code Pending} và kết thúc trước {@code cutoff}; audit
+     * {@code APPOINTMENT_CANCELED_NO_SHOW}, actor = System. {@code true} khi thực sự huỷ.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean cancelMissed(Long appointmentId, Instant cutoff, String reason) {
+        return appointmentRepository.findByIdForUpdate(appointmentId)
+                .filter(a -> a.getType() == AppointmentType.RETURN && a.getStatus() == AppointmentStatus.Pending
+                        && a.getEndAt().isBefore(cutoff))
+                .map(a -> {
+                    a.cancel(reason);
+                    Map<String, Object> newValue = new HashMap<>();
+                    newValue.put("status", AppointmentStatus.Canceled.name());
+                    newValue.put("cancelReason", reason);
+                    auditRecorder.record(new AuditEntry(AuditAction.APPOINTMENT_CANCELED_NO_SHOW,
+                            AuditEntityType.APPOINTMENT, String.valueOf(appointmentId),
+                            Map.of("status", AppointmentStatus.Pending.name()), newValue, reason, null));
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    /** Trạng thái lịch (Pending/Done/Canceled), mốc khách đến, khung giờ. */
+    public record AppointmentState(String status, Instant arrivedAt, Long staffId, Instant startAt, Instant endAt) {
     }
 
     @Transactional(readOnly = true)
     public java.util.Optional<AppointmentState> state(Long appointmentId) {
         return appointmentRepository.findById(appointmentId)
                 .map(a -> new AppointmentState(a.getStatus().name(), a.getArrivedAt(), a.getStaffId(),
-                        a.getStartedAt()));
+                        a.getStartedAt(), a.getEndAt()));
     }
 }

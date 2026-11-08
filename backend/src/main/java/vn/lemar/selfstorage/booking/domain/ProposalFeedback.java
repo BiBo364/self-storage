@@ -48,6 +48,10 @@ public class ProposalFeedback {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /** Lúc khách đồng ý — mốc mở lại cửa sổ đặt lịch check-in khi đơn đã cọc phải đổi khoang (V23). */
+    @Column(name = "agreed_at")
+    private Instant agreedAt;
+
     private ProposalFeedback(Long orderId, Long customerId, Long unitId) {
         this.orderId = orderId;
         this.customerId = customerId;
@@ -68,6 +72,7 @@ public class ProposalFeedback {
     public void agree() {
         requirePending();
         this.status = ProposalStatus.AGREED;
+        this.agreedAt = Instant.now();
     }
 
     public void reject(String rejectNote) {
@@ -82,7 +87,7 @@ public class ProposalFeedback {
     }
 
     /**
-     * Chốt #113: {@code Canceled} (thay {@code Expired} của spec) khi khoang hết {@code Available} lúc
+     * {@code Canceled} (thay {@code Expired} của spec) khi khoang hết {@code Available} lúc
      * khách đồng ý, hoặc khi đơn chạy Cancellation Cascade.
      */
     public void cancel() {

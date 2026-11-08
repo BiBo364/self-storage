@@ -23,4 +23,10 @@ public interface OrderNotificationRepository extends JpaRepository<OrderNotifica
     @Query("select count(n) > 0 from OrderNotification o, Notification n "
             + "where o.notificationId = n.id and o.orderId = :orderId and n.type = :type")
     boolean existsForOrderAndType(@Param("orderId") Long orderId, @Param("type") String type);
+
+    /** Như trên nhưng chỉ tính notification tạo từ {@code since} — dedup nhắc theo từng kỳ hợp đồng. */
+    @Query("select count(n) > 0 from OrderNotification o, Notification n "
+            + "where o.notificationId = n.id and o.orderId = :orderId and n.type = :type and n.createdAt >= :since")
+    boolean existsForOrderAndTypeSince(@Param("orderId") Long orderId, @Param("type") String type,
+                                       @Param("since") java.time.Instant since);
 }

@@ -93,4 +93,11 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             + "and a.status = vn.lemar.selfstorage.booking.domain.AppointmentStatus.Pending "
             + "and a.endAt < :now order by a.id")
     List<Long> findNoShowDueIds(@Param("now") Instant now);
+
+    /** Id các lịch trả kho Pending (khách chưa đến) đã kết thúc trước {@code cutoff} — cron no-show trả kho. */
+    @Query("select a.id from Appointment a "
+            + "where a.type = vn.lemar.selfstorage.booking.domain.AppointmentType.RETURN "
+            + "and a.status = vn.lemar.selfstorage.booking.domain.AppointmentStatus.Pending "
+            + "and a.endAt < :cutoff order by a.id")
+    List<Long> findReturnMissedIds(@Param("cutoff") Instant cutoff);
 }

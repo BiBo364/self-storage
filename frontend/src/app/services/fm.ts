@@ -462,9 +462,13 @@ export type ReportKpis = {
   openReturnRequests: number;
   openSupportRequests: number;
   unpaidAmount: number;
+  /** Cọc đang giữ hộ khách (không phải doanh thu). */
+  depositHeld: number;
 };
 
-/** `BackofficeService.Report`; `revenue.month` dạng `yyyy-MM`. */
+/**
+ * `BackofficeService.Report`; `revenue.month` dạng `yyyy-MM`, `revenue.type` là loại hoá đơn hoặc `ForfeitedDeposit`.
+ */
 export type FacilityReport = {
   from: string;
   to: string;
@@ -628,6 +632,7 @@ export const INVOICE_TYPE_LABEL: Record<string, string> = {
   Extension: "Gia hạn",
   Penalty: "Phí phạt",
   Service: "Phí dịch vụ",
+  ForfeitedDeposit: "Cọc bị giữ lại",
 };
 
 export const CONTRACT_STATUS_LABEL: Record<string, string> = {

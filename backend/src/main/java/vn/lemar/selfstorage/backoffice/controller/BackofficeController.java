@@ -72,7 +72,9 @@ public class BackofficeController {
         return ok("Hợp đồng của cơ sở", backoffice.facilityContracts(facilityId, status));
     }
 
-    @Operation(summary = "Báo cáo cơ sở", description = "KPI, doanh thu theo tháng × loại hoá đơn, lấp đầy khoang.")
+    @Operation(summary = "Báo cáo cơ sở", description = "KPI (gồm `depositHeld` — cọc đang giữ), doanh thu kế toán "
+            + "theo tháng × loại (hoá đơn thuê/gia hạn/phí/dịch vụ đã thu trừ hoàn, `ForfeitedDeposit` = cọc đơn huỷ "
+            + "bị giữ lại; cọc chưa huỷ không phải doanh thu), lấp đầy khoang.")
     @GetMapping("/api/fm/reports")
     public ResponseEntity<ApiEnvelope<Report>> fmReport(@RequestParam Long facilityId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

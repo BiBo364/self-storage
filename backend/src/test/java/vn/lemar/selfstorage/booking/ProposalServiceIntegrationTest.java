@@ -388,6 +388,7 @@ class ProposalServiceIntegrationTest {
             assertThat(row.get("type")).isEqualTo("RENTAL_ORDER_CANCELED");
             assertThat((String) row.get("body")).contains("Từ chối quá số khoang cho phép");
             assertThat((String) row.get("body")).contains("Tiền cọc không được hoàn");
+            assertThat((String) row.get("body")).contains("đã bị hủy");
         });
         assertThat(notificationsOf(fmId)).extracting(row -> row.get("type"))
                 .containsExactly("RENTAL_ORDER_CANCELED");

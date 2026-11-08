@@ -121,6 +121,12 @@ public class NotificationService {
         return orderNotificationRepository.existsForOrderAndType(orderId, type.name());
     }
 
+    /** Đơn đã nhận notification loại này từ {@code since} chưa (dedup nhắc theo kỳ hợp đồng). */
+    @Transactional(readOnly = true)
+    public boolean hasOrderNotificationSince(Long orderId, NotificationType type, java.time.Instant since) {
+        return orderNotificationRepository.existsForOrderAndTypeSince(orderId, type.name(), since);
+    }
+
     /** Map notificationId → orderId cho các notification có liên kết đơn. */
     @Transactional(readOnly = true)
     public Map<Long, Long> orderIdsOf(Collection<Long> notificationIds) {

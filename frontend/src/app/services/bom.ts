@@ -11,9 +11,14 @@ export type BomKpis = {
   openReturnRequests: number;
   openSupportRequests: number;
   unpaidAmount: number;
+  /** Cọc đang giữ hộ khách (không phải doanh thu). */
+  depositHeld: number;
 };
 
-/** `BackofficeReadRepository.RevenueRow` — `month` dạng `YYYY-MM`. */
+/**
+ * `BackofficeReadRepository.RevenueRow` — `month` dạng `YYYY-MM`; `type` là loại hoá đơn hoặc `ForfeitedDeposit`
+ * (cọc của đơn bị huỷ mà cơ sở giữ lại). Khoản hoàn đã trừ vào `amount`.
+ */
 export type RevenueRow = { month: string; type: string; amount: number; count: number };
 
 /** `BackofficeReadRepository.OccupancyRow` */
@@ -194,6 +199,7 @@ export const INVOICE_TYPE_LABEL: Record<string, string> = {
   Extension: "Gia hạn",
   Penalty: "Phí / quyết toán",
   Service: "Dịch vụ",
+  ForfeitedDeposit: "Cọc bị giữ lại",
 };
 
 export const INVOICE_STATUS_LABEL: Record<string, string> = {

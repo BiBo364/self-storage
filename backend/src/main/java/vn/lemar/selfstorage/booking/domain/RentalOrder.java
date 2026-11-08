@@ -48,6 +48,10 @@ public class RentalOrder {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    /** Lúc huỷ đơn (V23) — mốc ghi nhận cọc bị giữ lại trong báo cáo doanh thu. */
+    @Column(name = "canceled_at")
+    private Instant canceledAt;
+
     /**
      * FM cần đề xuất lại dù đơn đã qua {@code Pending} (vd khách từ chối khoang tại check-in). Flow 2 bật/tắt cờ;
      * Flow 1.3 chỉ đọc trong điều kiện đề xuất lại.
@@ -161,5 +165,6 @@ public class RentalOrder {
         }
         this.status = RentalOrderStatus.CANCELED;
         this.cancelReason = reason;
+        this.canceledAt = Instant.now();
     }
 }

@@ -50,9 +50,14 @@ public class TenancyService {
     static final String POLICY_INVOICE_DUE_DAYS = "extension.invoice_due_days";
     static final String PERM_ASSIGN = "appointment.assign";
     static final String PERM_READ = "rental_order.read";
+    static final String POLICY_NO_SHOW_GRACE = "return.no_show_grace_minutes";
+    static final String POLICY_MAX_NO_SHOWS = "return.max_no_shows";
+    static final String REASON_NO_SHOW = "Khách không đến buổi trả kho";
     static final int MAX_PREFERRED_DAYS = 30;
     static final String MSG_NOT_FOUND = "Không tìm thấy hợp đồng thuê";
     static final String MSG_RETURN_NOT_FOUND = "Không tìm thấy yêu cầu trả kho";
+    static final String MSG_EXTENSION_PENDING =
+            "Đang có hoá đơn gia hạn chờ thanh toán — thanh toán hoặc đợi hoá đơn hết hạn rồi mới gửi yêu cầu trả kho";
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -178,6 +183,10 @@ public class TenancyService {
         if (returnRequests.findOpenByContractId(contractId).isPresent()) {
             throw TenancyException.conflict("Hợp đồng đã có yêu cầu trả kho đang xử lý");
         }
+        // Chiều ngược của chặn gia hạn khi đang trả kho: không để hợp đồng được cộng kỳ trong lúc trả kho.
+        if (invoices.hasUnpaid(contractId, "Extension")) {
+            throw TenancyException.conflict(MSG_EXTENSION_PENDING);
+        }
         ReturnRequest request = returnRequests.save(ReturnRequest.open(contractId, customerId, contract.facilityId(),
                 preferredDate, note == null || note.isBlank() ? null : note.trim()));
         audit(AuditAction.RETURN_REQUESTED, request.getId(), null,
@@ -278,6 +287,65 @@ public class TenancyService {
         return returnView(request, contract);
     }
 
+    // ------------------------------------------------------------------ cron no-show trả kho
+
+    /** Lịch trả kho khách chưa đến đã quá {@code end_at + return.no_show_grace_minutes}. */
+    @Transactional(readOnly = true)
+    public List<Long> missedReturnAppointmentIds() {
+        return returnAppointments.missedIds(noShowCutoff());
+    }
+
+    /**
+     * Khách không đến buổi trả kho: huỷ lịch (no-show), yêu cầu về {@code Pending} chờ FM phân công lại; đủ
+     * {@code return.max_no_shows} lần thì huỷ yêu cầu (quá hạn kéo dài lại bị tạm khoá như thường). Phí quá hạn không
+     * đổi gì — vốn đã tính tới hôm nay khi khách không đến. Idempotent; {@code true} khi thực sự xử lý.
+     */
+    @Transactional
+    public boolean handleReturnNoShow(Long appointmentId) {
+        ReturnRequest peek = returnRequests.findByAppointmentIdAndStatus(appointmentId, ReturnRequest.ASSIGNED)
+                .orElse(null);
+        if (peek == null) {
+            return false;
+        }
+        ContractSnapshot contract = lockContractWithOrder(peek.getContractId());
+        ReturnRequest request = returnRequests.findByIdForUpdate(peek.getId()).orElseThrow();
+        if (!ReturnRequest.ASSIGNED.equals(request.getStatus()) || !appointmentId.equals(request.getAppointmentId())) {
+            return false;
+        }
+        AppointmentState slot = returnAppointments.state(appointmentId).orElse(null);
+        if (slot == null || !returnAppointments.cancelMissed(appointmentId, noShowCutoff(), REASON_NO_SHOW)) {
+            return false;
+        }
+        String before = request.getStatus();
+        int max = pricingQuery.intPolicy(POLICY_MAX_NO_SHOWS);
+        boolean canceled = request.recordNoShow(max, REASON_NO_SHOW + " " + max + " lần");
+        Map<String, Object> newValue = new HashMap<>();
+        newValue.put("status", request.getStatus());
+        newValue.put("noShowCount", request.getNoShowCount());
+        newValue.put("appointmentId", appointmentId);
+        audit(AuditAction.RETURN_NO_SHOW, request.getId(), Map.of("status", before), newValue,
+                canceled ? request.getCancelReason() : REASON_NO_SHOW, null);
+
+        Map<String, Object> values = new HashMap<>();
+        values.put("unitCode", unitCode(contract));
+        values.put("contractCode", contract.code());
+        values.put("appointmentTime", TIME.format(slot.startAt()));
+        values.put("customerNote", canceled
+                ? "Yêu cầu trả kho đã bị huỷ sau " + max + " lần không đến; gửi yêu cầu mới khi bạn sẵn sàng. "
+                        + "Phí quá hạn (nếu có) vẫn tiếp tục tính."
+                : "Cơ sở sẽ xếp lại lịch trả kho và báo bạn. Phí quá hạn (nếu có) vẫn tính tới ngày bạn đến.");
+        values.put("fmNote", canceled
+                ? "Yêu cầu trả kho đã bị huỷ sau " + max + " lần khách không đến."
+                : "Yêu cầu trả kho quay về chờ phân công — phân công lại FS.");
+        orderNotifications.notifyCustomer(contract.orderId(), NotificationType.RETURN_NO_SHOW, values);
+        orderNotifications.notifyFacilityManager(contract.orderId(), NotificationType.RETURN_NO_SHOW, values);
+        return true;
+    }
+
+    private Instant noShowCutoff() {
+        return Instant.now().minus(Duration.ofMinutes(pricingQuery.intPolicy(POLICY_NO_SHOW_GRACE)));
+    }
+
     // ------------------------------------------------------------------ public API cho checkout / overdue
 
     /** Yêu cầu trả kho đang mở của hợp đồng (overdue: ngừng tính phí ở ngày buổi trả kho khách đã đến). */
@@ -335,7 +403,7 @@ public class TenancyService {
         return new RentalView(c.id(), c.code(), c.orderId(), c.unitId(), unitCode(c), c.facilityId(), c.status(),
                 c.monthlyPrice(), c.depositAmount(), c.period(), c.startDate(), c.endDate(), daysLeft, daysLeft < 0,
                 bills, contracts.accessKeys(c.id()), open, c.active() && open == null && !extensionPending,
-                c.active() && open == null);
+                c.active() && open == null && !extensionPending);
     }
 
     private ReturnRequestView returnView(ReturnRequest r) {
