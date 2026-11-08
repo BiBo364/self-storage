@@ -105,4 +105,26 @@ class BookingDomainTest {
         assertThat(invoice.getStatus()).isEqualTo(InvoiceStatus.CANCELED);
         assertThatThrownBy(invoice::cancel).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void onlyExpiredRentIsFoldedIntoSettlement() {
+        Invoice rent = Invoice.forContract(1L, 2L, InvoiceType.RENTAL, "INV-RNT-T", "Tiền thuê", null,
+                new BigDecimal("100000"), Instant.now());
+        Invoice extension = Invoice.forContract(1L, 2L, InvoiceType.EXTENSION, "INV-EXT-T", "Gia hạn", null,
+                new BigDecimal("100000"), Instant.now());
+
+        // Còn Unpaid thì đi nhánh gộp hoá đơn Unpaid, không phải nợ thuê quá hạn.
+        assertThat(rent.isExpiredRent()).isFalse();
+        assertThatThrownBy(rent::foldExpiredRent).isInstanceOf(IllegalStateException.class);
+        // Gia hạn quá hạn chỉ là khách không gia hạn — không phải nợ.
+        extension.expire();
+        assertThat(extension.isExpiredRent()).isFalse();
+        assertThatThrownBy(extension::foldExpiredRent).isInstanceOf(IllegalStateException.class);
+
+        rent.expire();
+        assertThat(rent.isExpiredRent()).isTrue();
+        rent.foldExpiredRent();
+        assertThat(rent.getStatus()).isEqualTo(InvoiceStatus.CANCELED);
+        assertThat(rent.isExpiredRent()).isFalse();
+    }
 }

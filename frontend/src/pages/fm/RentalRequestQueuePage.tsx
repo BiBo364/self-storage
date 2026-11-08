@@ -276,6 +276,9 @@ function RequestPanel({
   const [unitId, setUnitId] = useState("");
   const [reason, setReason] = useState<RentalRequestRejectReason | "">("");
   const [note, setNote] = useState("");
+  // Khoang vừa bị từ chối khi duyệt (vd đang gán cho đơn khác của cùng khách) — vẫn Available nên danh sách trả về
+  // lại; ẩn đi để FM không chọn trúng lần nữa.
+  const [rejectedUnitIds, setRejectedUnitIds] = useState<number[]>([]);
   const action = useFmAction();
   const isPending = request.status === "Pending";
 
@@ -284,11 +287,13 @@ function RequestPanel({
   );
 
   // Khoang đúng loại khách chọn xếp lên đầu; FM vẫn được chọn khoang khác, backend quyết định.
-  const unitOptions = [...(units.data ?? [])].sort(
-    (left, right) =>
-      Number(right.unitTypeId === request.unitTypeId) -
-      Number(left.unitTypeId === request.unitTypeId),
-  );
+  const unitOptions = (units.data ?? [])
+    .filter((unit) => !rejectedUnitIds.includes(unit.id))
+    .sort(
+      (left, right) =>
+        Number(right.unitTypeId === request.unitTypeId) -
+        Number(left.unitTypeId === request.unitTypeId),
+    );
 
   async function approve() {
     const outcome = await action.run("approve", () =>
@@ -302,6 +307,7 @@ function RequestPanel({
       );
     } else {
       // Khoang vừa chọn có thể đã bị giữ (409) — bỏ chọn để FM chọn lại từ danh sách mới.
+      if (unitId) setRejectedUnitIds((ids) => [...ids, Number(unitId)]);
       setUnitId("");
       units.reload();
     }

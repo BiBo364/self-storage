@@ -45,6 +45,16 @@ class StorageUnitStatusTest {
     }
 
     @Test
+    void releaseByOrderIsANoOpUnlessUnitIsReserved() {
+        StorageUnit unit = new StorageUnit();
+        org.springframework.test.util.ReflectionTestUtils.setField(unit, "status", StorageUnitStatus.RENTED);
+
+        assertThat(unit.releaseIfReservedBy(7L)).isFalse();
+        assertThat(unit.reserveIfAvailable(7L)).isFalse();
+        assertThat(unit.getStatus()).isEqualTo(StorageUnitStatus.RENTED);
+    }
+
+    @Test
     void unitReservedBeforeOwnerTrackingReleasesForAnyOrder() {
         StorageUnit unit = new StorageUnit();
         org.springframework.test.util.ReflectionTestUtils.setField(unit, "status", StorageUnitStatus.RESERVED);

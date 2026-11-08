@@ -269,7 +269,7 @@ function App() {
         </FmShell>
       ) : isFsShellView ? (
         <FsShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
-          {view === "fs-schedule" && <DailySchedulePage />}
+          {view === "fs-schedule" && <DailySchedulePage navigate={navigate} />}
           {view === "fs-handover" && <HandoverChecklistPage navigate={navigate} />}
           {view === "fs-handovers" && <HandoverQueuePage navigate={navigate} />}
           {view === "fs-returns" && <ReturnQueuePage navigate={navigate} />}

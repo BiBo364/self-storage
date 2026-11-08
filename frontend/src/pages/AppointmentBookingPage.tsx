@@ -152,7 +152,8 @@ function SlotBooking({ orderId, navigate }: { orderId: number; navigate: Navigat
           {booked.facilityAddress ? ` · ${booked.facilityAddress}` : ""}
         </p>
         <DemoNotice tone="success">
-          Đã đặt lịch hẹn check-in. Cơ sở sẽ phân công nhân viên phụ trách và thông báo cho bạn.
+          Đã đặt lịch hẹn check-in. Vui lòng đến đúng giờ hẹn — nhân viên cơ sở sẽ tiếp đón và bàn
+          giao kho cho bạn.
         </DemoNotice>
         <div className="mt-5">
           <Button variant="secondary" size="sm" onClick={() => navigate("/my-storage")}>

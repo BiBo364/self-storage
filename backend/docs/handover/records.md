@@ -117,7 +117,8 @@ kiện chung: record `IN_PROGRESS`, đơn `InProgress`, khách đã đến (`arr
 | Giao chìa | FS, `unit_access_key.issue` | khách đã chọn `PhysicalKey`/`Both` | chốt bàn giao | — |
 
 Xác minh danh tính: FS đối chiếu giấy tờ thật khách mang tới với thông tin tài khoản của đơn (tên, email, số điện
-thoại hiển thị trong phiên). Hệ thống không so ảnh giấy tờ — tài khoản không lưu ảnh giấy tờ tuỳ thân; kết quả chỉ là
+thoại hiển thị trong phiên — tài khoản chưa có số điện thoại thì hiển thị số ghi trên yêu cầu thuê, cũng là số hợp
+đồng in ra). Hệ thống không so ảnh giấy tờ — tài khoản không lưu ảnh giấy tờ tuỳ thân; kết quả chỉ là
 `Verified` / `Failed` kèm ghi chú.
 
 Ảnh hiện trạng và bản scan hợp đồng phải là file FS đang thao tác đã upload qua `POST /api/media/uploads` — đối chiếu

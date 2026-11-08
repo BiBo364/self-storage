@@ -435,6 +435,8 @@ export type ReturnRequestView = {
   assignedStaffId: number | null;
   appointmentId: number | null;
   appointmentStart: string | null;
+  /** FS đã xác nhận khách đến buổi trả kho — từ lúc này khách không huỷ yêu cầu được nữa. */
+  appointmentArrivedAt: string | null;
   cancelReason: string | null;
   createdAt: string;
 };

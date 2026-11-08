@@ -100,7 +100,9 @@ function hasUnsavedChanges(form: Form, photos: PickedFile[], view: CheckoutView)
 function estimate(view: CheckoutView) {
   const cleaning = view.cleaningRequired ? Number(view.cleaningFee ?? 0) : 0;
   const damage = Number(view.damageAmount ?? 0);
-  const missingKeys = Math.max(0, view.keysIssued - (view.returnedKeys ?? 0));
+  // Chưa lưu biên bản thì chưa biết số chìa thu lại — không coi là mất hết chìa.
+  const missingKeys =
+    view.returnedKeys == null ? 0 : Math.max(0, view.keysIssued - view.returnedKeys);
   const lostKeys = missingKeys * Number(view.lostKeyFee ?? 0);
   const unpaid = Number(view.unpaidContractInvoices ?? 0);
   const total = cleaning + damage + lostKeys + unpaid;
@@ -279,7 +281,11 @@ export function ReturnCheckoutPage({ navigate }: { navigate: Navigate }) {
           </div>
 
           <div className="bg-surface p-5">
-            <span className="text-label text-muted">Phí dự kiến (theo biên bản đã lưu)</span>
+            <span className="text-label text-muted">
+              {current.inspectedAt
+                ? "Phí dự kiến (theo biên bản đã lưu)"
+                : "Phí dự kiến — chưa lưu biên bản, mới tính hoá đơn chưa thanh toán"}
+            </span>
             <dl className="mb-0 mt-3 grid gap-2 text-small">
               <Row term="Vệ sinh">
                 {current.cleaningRequired ? formatMoney(fees.cleaning) : "Không áp dụng"}

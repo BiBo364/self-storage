@@ -13,6 +13,7 @@ import { DetailPanel } from "../../components/ui/DetailPanel";
 import { FilterSelect } from "../../components/ui/FilterSelect";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
+import type { Navigate } from "../../app/types";
 
 const TIME_FORMAT = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
@@ -58,7 +59,7 @@ function statusOf(status: string) {
   return STATUS[status] ?? { label: status, tone: "neutral" as const };
 }
 
-export function DailySchedulePage() {
+export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
   const [date, setDate] = useState(todayIso);
   const [statusFilter, setStatusFilter] = useState("all");
   const [action, setAction] = useState<{
@@ -286,6 +287,25 @@ export function DailySchedulePage() {
                         </Button>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {/* Khách đã đến: đi tiếp sang danh sách việc đang mở của buổi hẹn. Lịch không mang trạng thái phiên — phiên
+                    có thể đã hoàn tất, nên dẫn tới danh sách (chỉ gồm phiên còn mở) thay vì một phiên cụ thể. */}
+                {appointment.status === "Done" && (
+                  <div className="mt-4 flex justify-end pt-4">
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        navigate(
+                          appointment.type === "CHECKIN" ? "/staff/handovers" : "/staff/returns",
+                        )
+                      }
+                    >
+                      {appointment.type === "CHECKIN"
+                        ? "Xem đơn đang bàn giao"
+                        : "Xem yêu cầu trả kho"}
+                    </Button>
                   </div>
                 )}
               </article>

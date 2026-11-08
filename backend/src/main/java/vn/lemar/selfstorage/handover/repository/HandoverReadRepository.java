@@ -26,12 +26,14 @@ public class HandoverReadRepository {
                    h.reject_reason, h.due_at, h.completed_at, h.requested_access, h.customer_confirmed_at,
                    a.date, a.started_at, a.end_at, a.arrived_at, a.staff_id, a.facility_id,
                    o.status as order_status, o.customer_id, o.expires_at,
-                   acc.name as customer_name, acc.email as customer_email, acc.phone as customer_phone,
+                   acc.name as customer_name, acc.email as customer_email,
+                   coalesce(acc.phone, rr.customer_phone) as customer_phone,
                    u.code as unit_code, t.name as unit_type, f.name as facility_name, f.address as facility_address
             from handover_records h
             join appointments a on a.id = h.appointment_id
             join rental_orders o on o.id = h.order_id
             join accounts acc on acc.id = o.customer_id
+            join rental_requests rr on rr.id = o.request_id
             join storage_units u on u.id = h.unit_id
             join unit_types t on t.id = u.unit_type_id
             join facilities f on f.id = a.facility_id
@@ -93,7 +95,8 @@ public class HandoverReadRepository {
         return jdbc.query("""
                 select c.id, c.code, c.status, c.terms_version, c.monthly_price, c.deposit_amount, c.period,
                        c.start_date, c.end_date, c.start_date_override_status, c.signed_at, c.order_id, c.customer_id,
-                       acc.name, acc.email, acc.phone, u.code as unit_code, t.name as unit_type, t.area,
+                       acc.name, acc.email, coalesce(acc.phone, rr.customer_phone) as phone,
+                       u.code as unit_code, t.name as unit_type, t.area,
                        f.id as facility_id, f.name as facility_name, f.address,
                        (select a.staff_id from handover_records h join appointments a on a.id = h.appointment_id
                          where h.order_id = c.order_id order by h.id desc limit 1) as staff_id,
@@ -102,6 +105,8 @@ public class HandoverReadRepository {
                        c.document_html
                 from rental_contracts c
                 join accounts acc on acc.id = c.customer_id
+                join rental_orders ro on ro.id = c.order_id
+                join rental_requests rr on rr.id = ro.request_id
                 join storage_units u on u.id = c.unit_id
                 join unit_types t on t.id = u.unit_type_id
                 join facilities f on f.id = u.facility_id

@@ -35,6 +35,14 @@ import { SectionTitle } from "../components/ui/SectionTitle";
 import { StatusTag } from "../components/ui/StatusTag";
 import { SurfaceState } from "../components/ui/SurfaceState";
 
+const CONTRACT_STATUS_LABEL: Record<string, string> = {
+  Draft: "Bản nháp",
+  Signed: "Đã ký",
+  Active: "Đang hiệu lực",
+  Ended: "Đã kết thúc",
+  Canceled: "Đã huỷ",
+};
+
 type Notice = { tone: "success" | "error"; message: string } | null;
 
 export function ContractDetailPage({ navigate }: { navigate: Navigate }) {
@@ -178,9 +186,7 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
           >
             {contract.overdue
               ? "Quá hạn"
-              : contract.status === "Active"
-                ? "Đang hiệu lực"
-                : contract.status}
+              : (CONTRACT_STATUS_LABEL[contract.status] ?? contract.status)}
           </StatusTag>
           <Button variant="secondary" pending={docPending} onClick={openDocument}>
             {!docPending && <FileText size={16} />} Xem bản hợp đồng
@@ -195,10 +201,15 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
           label="Hiệu lực"
           value={`${formatDate(contract.startDate)} → ${formatDate(contract.endDate)}`}
         />
-        <Summary
-          label={contract.overdue ? "Đã quá hạn" : "Còn lại"}
-          value={`${Math.abs(contract.daysLeft)} ngày · kỳ ${contract.period} tháng`}
-        />
+        {contract.status === "Active" ? (
+          <Summary
+            label={contract.overdue ? "Đã quá hạn" : "Còn lại"}
+            value={`${Math.abs(contract.daysLeft)} ngày · kỳ ${contract.period} tháng`}
+          />
+        ) : (
+          // Hợp đồng đã kết thúc/huỷ: số ngày còn lại tính theo end_date cũ không còn ý nghĩa.
+          <Summary label="Kỳ thuê" value={`${contract.period} tháng`} />
+        )}
       </div>
 
       {contract.overdue && (
@@ -467,7 +478,10 @@ function ReturnRow({
     label: request.status,
     tone: "neutral" as const,
   };
-  const open = request.status === "Pending" || request.status === "Assigned";
+  // Khách huỷ được tới khi FS xác nhận khách đến buổi trả kho (sau đó backend trả 409).
+  const open =
+    (request.status === "Pending" || request.status === "Assigned") &&
+    !request.appointmentArrivedAt;
   return (
     <div className="mt-3 bg-surface-subtle p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
