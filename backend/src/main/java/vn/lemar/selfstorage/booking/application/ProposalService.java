@@ -38,8 +38,8 @@ import vn.lemar.selfstorage.payment.application.PaymentSessionCloser;
 import vn.lemar.selfstorage.pricing.application.PricingQuery;
 
 /**
- * Flow 1.3 — khách đồng ý / từ chối đề xuất khoang, FM đề xuất lại ({@code specs/draft.md} › 1.3), theo
- * các điểm chốt ở issue #113 (lệch spec có chủ đích, spec sẽ cập nhật sau review):
+ * Flow 1.3 — khách đồng ý / từ chối đề xuất khoang, FM đề xuất lại ({@code specs/draft.md} › 1.3). Khác spec có
+ * chủ đích (hành vi ghi ở {@code backend/docs/booking/}):
  * <ul>
  *   <li>Proposal dùng {@code Canceled} thay {@code Expired}.</li>
  *   <li>Tiền cọc = giá thuê hiệu lực × {@code invoice.deposit_months}.</li>
@@ -170,7 +170,7 @@ public class ProposalService {
     }
 
     /**
-     * Đơn chưa cọc: hoá đơn cọc đầy đủ. Đơn đã cọc (đổi khoang sau khi cọc, behavior-gap #165): so chênh
+     * Đơn chưa cọc: hoá đơn cọc đầy đủ. Đơn đã cọc (đổi khoang sau khi cọc): so chênh
      * lệch với tiền cọc đã thu — thiếu thì hoá đơn bổ sung, dư thì báo FM hoàn thủ công, bằng thì không tạo gì.
      */
     private Invoice issueDeposit(RentalOrder order, StorageUnitView unit, Long actorAccountId) {
@@ -235,7 +235,7 @@ public class ProposalService {
                 Map.of("orderCode", OrderNotifier.orderCode(order)));
     }
 
-    /** Guard trạng thái đơn khi khách đồng ý (behavior-gap #165). */
+    /** Guard trạng thái đơn khi khách đồng ý. */
     private void requireAgreeable(RentalOrder order) {
         if (order.getStatus().isClosed()) {
             throw new ProposalConflictException("Đơn thuê đã đóng, không thể đồng ý khoang");
@@ -296,7 +296,7 @@ public class ProposalService {
         access.can(PERMISSION_REPROPOSE, facilityId);
 
         RentalOrder order = orderRepository.findByIdForUpdate(orderId).orElseThrow(RentalOrderNotFoundException::new);
-        // Chốt PR #136: !đóng && !có proposal Pending && (Pending || needs_reproposal).
+        // Điều kiện đề xuất lại: !đóng && !có proposal Pending && (Pending || needs_reproposal).
         if (order.getStatus().isClosed()) {
             throw new ProposalConflictException("Đơn thuê đã đóng, không thể đề xuất khoang");
         }
@@ -343,7 +343,7 @@ public class ProposalService {
     }
 
     /**
-     * Chốt PR #136: khách đã đồng ý nhưng chưa trả cọc mà FM đổi khoang → hoá đơn Deposit {@code Unpaid} của đơn
+     * Khách đã đồng ý nhưng chưa trả cọc mà FM đổi khoang → hoá đơn Deposit {@code Unpaid} của đơn
      * chuyển {@code Canceled}, tránh khách thanh toán nhầm cho khoang cũ. Proposal cũ giữ nguyên làm lịch sử.
      */
     private void cancelUnpaidDepositInvoices(RentalOrder order, Long actorAccountId) {

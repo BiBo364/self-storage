@@ -6,8 +6,7 @@ import vn.lemar.selfstorage.payment.application.dto.GatewayQueryResult;
 import vn.lemar.selfstorage.payment.application.dto.PaymentRequest;
 
 /**
- * Cổng thanh toán, tách khỏi nghiệp vụ để đổi nhà cung cấp không phải sửa flow nào
- * (issue #15 mục 6).
+ * Cổng thanh toán, tách khỏi nghiệp vụ để đổi nhà cung cấp không phải sửa flow nào.
  */
 public interface PaymentGateway {
 

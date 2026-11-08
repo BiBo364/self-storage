@@ -36,11 +36,9 @@ import vn.lemar.selfstorage.identity.repository.PermissionRepository;
  * role + permission trong cùng 1 session với lúc load account, nếu không sẽ gặp
  * LazyInitializationException.
  */
-// TODO(flow-5): khi số endpoint tăng, cân nhắc guard bằng annotation (Spring @PreAuthorize gọi
-// bean, hoặc annotation riêng + interceptor) để khỏi quên ở call site. Chưa làm trong PR này vì
-// @PreAuthorize cần hàm boolean — mất semantics hiện tại (403 theo message, 404 facility không
-// tồn tại, IllegalStateException khi gọi sai dạng) và tạo cơ chế guard thứ hai cạnh can().
-// Xem review PR #97.
+// Guard gọi tường minh ở service, không dùng @PreAuthorize: annotation cần hàm boolean nên mất semantics hiện tại
+// (403 theo message, 404 facility không tồn tại, IllegalStateException khi gọi sai dạng) và tạo cơ chế guard thứ hai
+// cạnh can().
 @Component
 public class Access {
 

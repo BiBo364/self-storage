@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Public API của pricing cho module khác kiểm tra unit_types tồn tại.
- * Ràng buộc facility cung cấp loại nào nằm ở bảng facility_unit_type (V4, #126).
+ * Ràng buộc facility cung cấp loại nào nằm ở bảng facility_unit_type (V4).
  */
 @Service
 public class UnitTypeQueryService {
@@ -34,7 +34,7 @@ public class UnitTypeQueryService {
     }
 
     /**
-     * Các loại khoang một cơ sở cung cấp (V4, #126) — cho form public lọc dropdown.
+     * Các loại khoang một cơ sở cung cấp (V4) — cho form public lọc dropdown.
      */
     @Transactional(readOnly = true)
     public List<UnitTypeOption> listByFacility(Long facilityId) {

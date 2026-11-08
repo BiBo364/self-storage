@@ -2,7 +2,7 @@ package vn.lemar.selfstorage.identity.application;
 
 /**
  * Đăng ký chưa hoàn tất: email + hash mật khẩu giữ trong Redis tới khi mã xác minh hết hạn.
- * `Account` chỉ được tạo sau khi khách nhập đúng mã (proposal #152).
+ * `Account` chỉ được tạo sau khi khách nhập đúng mã.
  */
 record PendingRegistration(String email, String passwordHash, String name, String phone) {
 

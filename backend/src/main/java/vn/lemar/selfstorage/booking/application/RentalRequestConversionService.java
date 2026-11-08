@@ -104,7 +104,7 @@ public class RentalRequestConversionService {
         // Đọc email bằng query scalar, chưa load entity: entity chỉ load sau khi đã khoá, nên không
         // dùng trạng thái cũ. Khoá email TRƯỚC khi tra account và giữ tới commit kể cả khi chưa có
         // account xác minh: claim của một lần xác minh đang chạy song song phải chờ duyệt commit rồi
-        // mới select, nên không bỏ sót request vừa duyệt (review #149).
+        // mới select, nên không bỏ sót request vừa duyệt.
         String email = requestRepository.findEmailById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy RentalRequest " + requestId));
         conversionGuard.lockCustomerEmail(email);
@@ -202,7 +202,7 @@ public class RentalRequestConversionService {
 
     /**
      * {@code order.expiry_days} theo spec — không có fallback: thiếu key hoặc sai kiểu là lỗi cấu
-     * hình (bug #130), convert rollback.
+     * hình, convert rollback.
      */
     /** "Small (1 × 2 × 2,2 m)" cho nội dung thông báo duyệt (spec 1.1). */
     private String unitTypeLabel(Long unitTypeId) {

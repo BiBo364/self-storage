@@ -1,7 +1,7 @@
 /**
- * TÃ i khoáº£n, xÃ¡c thá»±c vÃ  phÃ¢n quyá»n RBAC.
+ * Tài khoản, xác thực và phân quyền RBAC.
  *
- * <p>Module ná»n, khÃ´ng phá»¥ thuá»™c ngÆ°á»£c láº¡i module nghiá»‡p vá»¥ nÃ o (issue #15 má»¥c 1).
+ * <p>Module nền, không phụ thuộc ngược lại module nghiệp vụ nào.
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Identity", allowedDependencies = {"facility::application", "audit::application"})

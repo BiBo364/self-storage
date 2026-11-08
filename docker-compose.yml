@@ -51,7 +51,5 @@ services:
     ports:
       - "8080:8080"
 
-  # frontend: React app (issue #15 mục 9) - thêm khi FE có code
-
 volumes:
   postgres-data:

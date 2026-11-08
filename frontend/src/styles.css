@@ -1,8 +1,7 @@
 /*
  * Runtime design tokens and base reset.
  *
- * Everything else moved to Tailwind utilities during the styling migration
- * (issue #25). Tailwind's @theme in tailwind.css bridges these variables into
+ * Everything else lives in Tailwind utilities. Tailwind's @theme in tailwind.css bridges these variables into
  * utilities like `bg-surface` / `text-ink`, so dark/light switching still
  * happens here in one place.
  */

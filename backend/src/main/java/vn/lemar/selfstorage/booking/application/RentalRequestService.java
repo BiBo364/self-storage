@@ -166,7 +166,7 @@ public class RentalRequestService {
      *
      * <p>Guard {@code rental_request.approve} đặt trong service (thay vì controller) vì cần
      * {@code facilityId} từ entity mới guard được theo cơ sở — controller không có sẵn.
-     * Thứ tự đúng spec + #126: 404 nếu request không tồn tại, 403 chéo cơ sở, 409 nếu request
+     * Thứ tự kiểm: 404 nếu request không tồn tại, 403 chéo cơ sở, 409 nếu request
      * không còn Pending, 404 nếu khoang không tồn tại hoặc thuộc cơ sở khác, 409 nếu khoang mất
      * Available, 409 nếu khoang đã gán cho request khác của cùng email (giữ Pending, không noti).
      *
@@ -266,8 +266,8 @@ public class RentalRequestService {
     }
 
     /**
-     * Mail duyệt cho nhánh email chưa có account (template draft.md:156, #126) — after-commit,
-     * lỗi mail chỉ log, không rollback. Nhánh đã có account để B2 thông báo kèm proposal link.
+     * Mail duyệt cho nhánh email chưa có account (template draft.md:156) — after-commit,
+     * lỗi mail chỉ log, không rollback. Nhánh đã có account nhận thông báo kèm link đề xuất ở bước đề xuất khoang.
      */
     private void sendApprovalEmail(RentalRequest request, Instant expiresAt) {
         // findIdByEmail (không throw) thay requireIdByEmail: throw từ @Transactional proxy sẽ mark

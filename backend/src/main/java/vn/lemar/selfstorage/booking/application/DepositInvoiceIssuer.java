@@ -26,9 +26,9 @@ import vn.lemar.selfstorage.pricing.application.PricingQuery;
 /**
  * Lập hoá đơn đặt cọc khi khách đồng ý proposal ({@code specs/draft.md} › 1.3 › Đồng ý).
  *
- * <p>Số tiền theo chốt #113: giá thuê hiệu lực × {@code invoice.deposit_months}. Hạn thanh toán
+ * <p>Số tiền: giá thuê hiệu lực × {@code invoice.deposit_months}. Hạn thanh toán
  * {@code due_date = min(now + invoice.deposit_due_days, RentalOrder.expires_at)}. Đổi khoang sau khi đã cọc
- * dùng {@link #issueSupplemental} cho phần chênh lệch (behavior-gap #165).
+ * dùng {@link #issueSupplemental} cho phần chênh lệch.
  */
 @Component
 class DepositInvoiceIssuer {

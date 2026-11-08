@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import vn.lemar.selfstorage.identity.application.exception.TooManyLoginAttemptsException;
 
 /**
- * Đếm số lần đăng nhập sai trên Redis (behavior-gap #140): tối đa
+ * Đếm số lần đăng nhập sai trên Redis: tối đa
  * {@code security.login-rate-limit.email-max-attempts} lần / {@code window} theo email và
  * {@code security.login-rate-limit.ip-max-attempts} lần / {@code window} theo IP. Vượt ngưỡng
  * → 429. Đăng nhập thành công reset bộ đếm của email (bộ đếm IP không reset).

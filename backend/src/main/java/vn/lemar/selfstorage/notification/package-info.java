@@ -1,5 +1,5 @@
 /**
- * Gửi email và thông báo web. Đọc account qua public API của identity (issue #15: mọi module
+ * Gửi email và thông báo web. Đọc account qua public API của identity (mọi module
  * đọc được từ facility, pricing, identity).
  */
 @org.springframework.modulith.ApplicationModule(
