@@ -186,7 +186,8 @@ class FmAppointmentControllerTest {
     private static FmAppointmentResponse appointment(Long staffId) {
         return new FmAppointmentResponse(1L, "CHECKIN", "Pending", DAY, Instant.parse("2026-11-02T01:00:00Z"),
                 Instant.parse("2026-11-02T03:00:00Z"), 5L, staffId == null ? "Scheduled" : "InProgress", "A-01",
-                "Khách Demo", "customer1@lemar.vn", staffId, staffId == null ? null : "fs1@lemar.vn");
+                "Khách Demo", "customer1@lemar.vn", staffId, staffId == null ? null : "fs1@lemar.vn",
+                1, false, null, null);
     }
 
     private MockHttpServletRequestBuilder as(MockHttpServletRequestBuilder request, String email) {

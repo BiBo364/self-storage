@@ -22,6 +22,13 @@ khoang và FS phụ trách.
 - Mỗi dòng: `id`, `type`, `status`, `date`, `startedAt`, `endAt`, `orderId`, `orderStatus`, `unitCode`,
   `customerName`, `customerEmail`, `staffId`, `staffEmail` (`staffId`/`staffEmail` null khi chưa phân
   công). `started_at`/`end_at` NOT NULL từ V15 — lịch luôn có giờ.
+- `attempt` (1-based): lần đặt `CHECKIN` thứ mấy của đơn, tính trên **toàn bộ lịch sử** — không phụ
+  thuộc filter `date`. `rebooked = attempt > 1`. `rebookReason` lấy `handover_records.reject_reason`
+  gần nhất, fallback `appointments.cancel_reason` của lần trước; null ở lần đầu.
+- `previousCancelReason`: đúng `appointments.cancel_reason` của lịch trước, tách khỏi `rebookReason`
+  để tra cứu khi handover cũng có lý do riêng. FE hiển thị một lý do chính: `rebookReason`,
+  fallback `previousCancelReason`.
+- Các field đặt lại chỉ để hiển thị; không đổi schema, không đổi quyền/status code.
 
 ## Ghi chú nghiệp vụ
 
@@ -37,7 +44,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login -H 'Content-Type: a
 
 # 200 — lịch check-in 08:00–10:00 (giờ VN) của đơn 1, chưa có FS
 curl -s "http://localhost:8080/api/fm/appointments?facilityId=1&date=2026-11-06" -H "Authorization: Bearer $TOKEN"
-# {"message":"Lấy danh sách lịch hẹn thành công","data":[{"id":1,"type":"CHECKIN","status":"Pending","date":"2026-11-06","startedAt":"2026-11-06T01:00:00Z","endAt":"2026-11-06T03:00:00Z","orderId":1,"orderStatus":"Scheduled","unitCode":"A-01","customerName":"Khách Demo","customerEmail":"customer1@lemar.vn","staffId":null,"staffEmail":null}]}
+# {"message":"Lấy danh sách lịch hẹn thành công","data":[{"id":1,"type":"CHECKIN","status":"Pending","date":"2026-11-06","startedAt":"2026-11-06T01:00:00Z","endAt":"2026-11-06T03:00:00Z","orderId":1,"orderStatus":"Scheduled","unitCode":"A-01","customerName":"Khách Demo","customerEmail":"customer1@lemar.vn","staffId":null,"staffEmail":null,"attempt":2,"rebooked":true,"rebookReason":"Quá giờ và khách không đến","previousCancelReason":"Quá giờ và khách không đến"}]}
 
 # 200 — ngày không có lịch
 curl -s "http://localhost:8080/api/fm/appointments?facilityId=1&date=2026-10-28" -H "Authorization: Bearer $TOKEN"

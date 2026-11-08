@@ -19,12 +19,18 @@ public record FmAppointmentResponse(
         @Schema(description = "Tên khách", example = "Khách Demo") String customerName,
         @Schema(description = "Email khách") String customerEmail,
         @Schema(description = "Id FS phụ trách, null khi chưa phân công") Long staffId,
-        @Schema(description = "Email FS phụ trách") String staffEmail
+        @Schema(description = "Email FS phụ trách") String staffEmail,
+        @Schema(description = "Lần đặt lịch CHECKIN thứ mấy của đơn (1-based, tính cả lịch sử)")
+        int attempt,
+        @Schema(description = "Đây có phải lịch đặt lại (attempt > 1)") boolean rebooked,
+        @Schema(description = "Lý do lần đặt trước thất bại, null nếu lần đầu") String rebookReason,
+        @Schema(description = "Lý do huỷ của lịch trước, null nếu lần đầu") String previousCancelReason
 ) {
 
     public static FmAppointmentResponse from(AppointmentRow row) {
         return new FmAppointmentResponse(row.id(), row.type(), row.status(), row.date(), row.startedAt(),
                 row.endAt(), row.orderId(), row.orderStatus(), row.unitCode(), row.customerName(),
-                row.customerEmail(), row.staffId(), row.staffEmail());
+                row.customerEmail(), row.staffId(), row.staffEmail(), row.attempt(), row.attempt() > 1,
+                row.rebookReason(), row.previousCancelReason());
     }
 }

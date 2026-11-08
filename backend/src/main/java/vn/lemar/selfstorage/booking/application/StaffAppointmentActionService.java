@@ -60,7 +60,12 @@ public class StaffAppointmentActionService {
     public ActionResult arrive(Long appointmentId) {
         Appointment appointment = lockAssigned(appointmentId);
         requirePending(appointment);
-        if (appointment.getEndAt().isBefore(Instant.now())) {
+        Instant now = Instant.now();
+        if (appointment.isTooEarlyToArrive(now)) {
+            throw new AppointmentConflictException(
+                    "Chưa tới giờ hẹn. Chỉ có thể xác nhận khách đến sớm tối đa 15 phút.");
+        }
+        if (appointment.getEndAt().isBefore(now)) {
             boolean noShow = noShowService.cancelIfDue(appointmentId);
             return new ActionResult(response(appointmentId), true, noShow);
         }

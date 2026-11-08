@@ -260,6 +260,10 @@ class AppointmentServiceIntegrationTest {
             assertThat(row.customerName()).isEqualTo("Khách Demo");
             assertThat(row.customerEmail()).isEqualTo("customer1@lemar.vn");
             assertThat(row.staffId()).isNull();
+            assertThat(row.attempt()).isEqualTo(1);
+            assertThat(row.rebooked()).isFalse();
+            assertThat(row.rebookReason()).isNull();
+            assertThat(row.previousCancelReason()).isNull();
         });
         assertThat(after).singleElement().satisfies(row -> assertThat(row.staffEmail()).isEqualTo("fs1@lemar.vn"));
         assertThat(queryService.listForFacility(q7, day.plusDays(1))).isEmpty();
@@ -292,6 +296,55 @@ class AppointmentServiceIntegrationTest {
 
         assertThat(queryService.listForFacility(q7, day)).extracting(FmAppointmentResponse::id)
                 .containsExactly(appointmentId);
+    }
+
+    @Test
+    void dayListMarksRebookFromPreviousCanceledAppointmentOnAnotherDay() {
+        long customerId = accountId("customer1@lemar.vn");
+        LocalDate previousDay = day.minusDays(2);
+        long previousId = jdbc.queryForObject("""
+                insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status,
+                    cancel_reason)
+                values (?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Canceled',
+                    'Quá giờ và khách không đến') returning id""",
+                Long.class, customerId, q7, previousDay, previousDay + "T08:00:00+07:00",
+                previousDay + "T10:00:00+07:00");
+        jdbc.update("insert into rental_appointments (appointment_id, order_id) values (?, ?)", previousId, orderId);
+        loginAs("fm1@lemar.vn");
+
+        FmAppointmentResponse row = queryService.listForFacility(q7, day).get(0);
+
+        assertThat(row.attempt()).isEqualTo(2);
+        assertThat(row.rebooked()).isTrue();
+        assertThat(row.rebookReason()).isEqualTo("Quá giờ và khách không đến");
+        assertThat(row.previousCancelReason()).isEqualTo("Quá giờ và khách không đến");
+    }
+
+    @Test
+    void dayListPrefersHandoverRejectReasonOverAppointmentCancelReason() {
+        long customerId = accountId("customer1@lemar.vn");
+        long unitId = jdbc.queryForObject("select id from storage_units where code = 'A-01'", Long.class);
+        LocalDate previousDay = day.minusDays(1);
+        long previousId = jdbc.queryForObject("""
+                insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status,
+                    cancel_reason)
+                values (?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Canceled',
+                    'Lý do cũ') returning id""",
+                Long.class, customerId, q7, previousDay, previousDay + "T08:00:00+07:00",
+                previousDay + "T10:00:00+07:00");
+        jdbc.update("insert into rental_appointments (appointment_id, order_id) values (?, ?)", previousId, orderId);
+        jdbc.update("""
+                insert into handover_records (order_id, appointment_id, unit_id, result, reject_reason)
+                values (?, ?, ?, 'CANCELED', 'Chưa hoàn tất bàn giao trong hạn')""",
+                orderId, previousId, unitId);
+        loginAs("fm1@lemar.vn");
+
+        FmAppointmentResponse row = queryService.listForFacility(q7, day).get(0);
+
+        assertThat(row.attempt()).isEqualTo(2);
+        assertThat(row.rebooked()).isTrue();
+        assertThat(row.rebookReason()).isEqualTo("Chưa hoàn tất bàn giao trong hạn");
+        assertThat(row.previousCancelReason()).isEqualTo("Lý do cũ");
     }
 
     @Test

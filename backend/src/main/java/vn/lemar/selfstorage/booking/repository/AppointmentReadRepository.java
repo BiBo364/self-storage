@@ -24,7 +24,27 @@ public class AppointmentReadRepository {
                    c.email as customer_email,
                    coalesce(c.phone, r.customer_phone) as customer_phone,
                    a.staff_id, s.email as staff_email,
-                   f.name as facility_name, f.address as facility_address
+                   f.name as facility_name, f.address as facility_address,
+                   1 + (
+                       select count(*)
+                       from rental_appointments ra2
+                       join appointments a2 on a2.id = ra2.appointment_id
+                       where ra2.order_id = ra.order_id
+                         and a2.type = 'CHECKIN'
+                         and (a2.date, a2.id) < (a.date, a.id)
+                   ) as attempt,
+                   coalesce(
+                       (
+                           select h.reject_reason
+                           from handover_records h
+                           where h.order_id = ra.order_id
+                             and h.reject_reason is not null
+                           order by h.updated_at desc, h.id desc
+                           limit 1
+                       ),
+                       prev.cancel_reason
+                   ) as rebook_reason,
+                   prev.cancel_reason as previous_cancel_reason
             from appointments a
             join facilities f on f.id = a.facility_id
             join accounts c on c.id = a.customer_id
@@ -33,6 +53,17 @@ public class AppointmentReadRepository {
             left join rental_orders o on o.id = ra.order_id
             left join rental_requests r on r.id = o.request_id
             left join storage_units u on u.id = o.unit_id
+            left join lateral (
+                select a2.cancel_reason
+                from rental_appointments ra2
+                join appointments a2 on a2.id = ra2.appointment_id
+                where ra2.order_id = ra.order_id
+                  and a2.type = 'CHECKIN'
+                  and (a2.date, a2.id) < (a.date, a.id)
+                  and a2.cancel_reason is not null
+                order by a2.date desc, a2.id desc
+                limit 1
+            ) prev on true
             """;
 
     private final JdbcTemplate jdbc;
@@ -72,7 +103,8 @@ public class AppointmentReadRepository {
                 (Long) rs.getObject("order_id"), rs.getString("order_status"), rs.getString("unit_code"),
                 rs.getLong("facility_id"), rs.getString("customer_name"), rs.getString("customer_email"),
                 rs.getString("customer_phone"), (Long) rs.getObject("staff_id"), rs.getString("staff_email"),
-                rs.getString("facility_name"), rs.getString("facility_address"), rs.getString("cancel_reason"));
+                rs.getString("facility_name"), rs.getString("facility_address"), rs.getString("cancel_reason"),
+                rs.getInt("attempt"), rs.getString("rebook_reason"), rs.getString("previous_cancel_reason"));
     }
 
     private static Instant instant(Timestamp timestamp) {
@@ -84,6 +116,7 @@ public class AppointmentReadRepository {
                                  Instant endAt, Instant arrivedAt, Long orderId, String orderStatus,
                                  String unitCode, Long facilityId, String customerName, String customerEmail,
                                  String customerPhone, Long staffId, String staffEmail, String facilityName,
-                                 String facilityAddress, String cancelReason) {
+                                 String facilityAddress, String cancelReason, int attempt, String rebookReason,
+                                 String previousCancelReason) {
     }
 }

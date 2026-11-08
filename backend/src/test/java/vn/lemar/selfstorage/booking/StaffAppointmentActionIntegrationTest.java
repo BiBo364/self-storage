@@ -95,6 +95,7 @@ class StaffAppointmentActionIntegrationTest {
 
     @Test
     void arriveMarksDoneAuditsAndPublishesEvent() {
+        scheduleStartingNow();
         loginAs("fs1@lemar.vn");
 
         StaffAppointmentActionService.ActionResult result = service.arrive(appointmentId);
@@ -246,13 +247,48 @@ class StaffAppointmentActionIntegrationTest {
     }
 
     @Test
+    void arrivingEarlierThanTheFifteenMinuteGraceConflicts() {
+        jdbc.update("update appointments set started_at = now() + interval '1 hour', "
+                + "end_at = now() + interval '2 hours' where id = ?", appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        assertThatThrownBy(() -> service.arrive(appointmentId))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessageContaining("15 phút");
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
+                .isEqualTo("Pending");
+        assertThat(events.stream(AppointmentArrived.class)).isEmpty();
+        assertThat(jdbc.queryForObject("select count(*) from audit_logs where action = 'APPOINTMENT_ARRIVED' "
+                + "and entity_id = ?", Long.class, String.valueOf(appointmentId))).isZero();
+    }
+
+    @Test
+    void arrivingWithinTheFifteenMinuteGraceSucceeds() {
+        jdbc.update("update appointments set started_at = now() + interval '10 minutes', "
+                + "end_at = now() + interval '2 hours' where id = ?", appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        StaffAppointmentActionService.ActionResult result = service.arrive(appointmentId);
+
+        assertThat(result.appointment().status()).isEqualTo("Done");
+        assertThat(jdbc.queryForObject("select arrived_at from appointments where id = ?", Object.class,
+                appointmentId)).isNotNull();
+    }
+
+    @Test
     void arrivingTwiceConflicts() {
+        scheduleStartingNow();
         loginAs("fs1@lemar.vn");
         service.arrive(appointmentId);
 
         assertThatThrownBy(() -> service.arrive(appointmentId))
                 .isInstanceOf(AppointmentConflictException.class)
                 .hasMessage("Lịch hẹn không còn ở trạng thái chờ");
+    }
+
+    private void scheduleStartingNow() {
+        jdbc.update("update appointments set started_at = now() - interval '5 minutes', "
+                + "end_at = now() + interval '1 hour' where id = ?", appointmentId);
     }
 
     private long accountId(String email) {

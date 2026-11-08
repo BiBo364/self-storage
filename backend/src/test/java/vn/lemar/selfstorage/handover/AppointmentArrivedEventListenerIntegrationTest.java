@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.within;
 
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -105,12 +104,11 @@ class AppointmentArrivedEventListenerIntegrationTest {
                 insert into rental_orders (request_id, customer_id, unit_id, status, expires_at)
                 values (?, ?, ?, 'InProgress', now() + interval '30 days') returning id""",
                 Long.class, requestId, customerId, unitId);
-        LocalDate day = LocalDate.now().plusDays(3);
         long appointmentId = jdbc.queryForObject("""
                 insert into appointments (customer_id, facility_id, staff_id, type, date, started_at, end_at, status)
-                values (?, ?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
-                Long.class, customerId, facilityId, fsId, day, day + "T08:00:00+07:00",
-                day + "T10:00:00+07:00");
+                values (?, ?, ?, 'CHECKIN', current_date, now() - interval '5 minutes',
+                    now() + interval '1 hour', 'Pending') returning id""",
+                Long.class, customerId, facilityId, fsId);
         jdbc.update("insert into rental_appointments (appointment_id, order_id) values (?, ?)",
                 appointmentId, orderId);
         return new Fixture(orderId, appointmentId, unitId);

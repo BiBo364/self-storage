@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import lombok.AccessLevel;
@@ -24,6 +25,9 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Appointment {
+
+    /** FS được xác nhận khách đến sớm tối đa 15 phút trước khung hẹn. */
+    public static final Duration ARRIVE_EARLY_GRACE = Duration.ofMinutes(15);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -88,6 +92,11 @@ public class Appointment {
     /** Lịch check-in Pending đã quá end_at — guard dùng chung cron no-show và action FS. */
     public boolean isNoShowDue(Instant now) {
         return AppointmentNoShowPolicy.isDue(type, status, endAt, now);
+    }
+
+    /** Chưa tới cửa sổ cho phép xác nhận khách đến (sớm hơn {@link #ARRIVE_EARLY_GRACE}). */
+    public boolean isTooEarlyToArrive(Instant now) {
+        return now.isBefore(startedAt.minus(ARRIVE_EARLY_GRACE));
     }
 
     /** Flow 2.1: FS xác nhận khách đã đến; lịch chỉ đổi từ {@code Pending}. */
