@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
 import vn.lemar.selfstorage.media.application.MediaService;
+import vn.lemar.selfstorage.media.application.UploadRateLimiter;
 import vn.lemar.selfstorage.media.application.dto.MediaBatchAttachResult;
 import vn.lemar.selfstorage.media.application.dto.MediaBatchDeleteResult;
 import vn.lemar.selfstorage.media.application.dto.MediaUploadResult;
@@ -30,10 +31,13 @@ public class MediaController {
 
     private final MediaService mediaService;
     private final AccountQueryService accountQueryService;
+    private final UploadRateLimiter uploadRateLimiter;
 
-    public MediaController(MediaService mediaService, AccountQueryService accountQueryService) {
+    public MediaController(MediaService mediaService, AccountQueryService accountQueryService,
+                           UploadRateLimiter uploadRateLimiter) {
         this.mediaService = mediaService;
         this.accountQueryService = accountQueryService;
+        this.uploadRateLimiter = uploadRateLimiter;
     }
 
     @Operation(summary = "Upload file",
@@ -52,7 +56,9 @@ public class MediaController {
                                              "batchId":"0f8b9a3c-2e6e-4e80-9f5d-2d4f9a3b1c77"}}"""))),
             @ApiResponse(responseCode = "400",
                     description = "Thiếu file / file rỗng / sai định dạng / không đọc được / quá 10MB"),
-            @ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+            @ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @ApiResponse(responseCode = "429",
+                    description = "Vượt `media.upload-rate-limit.max-per-window` lần upload / `window` của account")
     })
     @PostMapping(value = "/uploads", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiEnvelope<MediaUploadResult> upload(
@@ -60,6 +66,7 @@ public class MediaController {
             @RequestParam(value = "batchId", required = false) UUID batchId,
             Authentication authentication) throws IOException {
         Long accountId = accountQueryService.requireIdByEmail(authentication.getName());
+        uploadRateLimiter.acquire(accountId);
         return ApiEnvelope.ok("Tải file lên thành công",
                 mediaService.upload(file.getBytes(), file.getOriginalFilename(), file.getContentType(),
                         accountId, batchId));

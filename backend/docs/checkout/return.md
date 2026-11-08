@@ -51,7 +51,8 @@ flowchart TB
   - yêu cầu ở `Assigned`, lịch `RETURN` đã có `arrived_at`;
   - hợp đồng `Active`.
 - **Body:** `unitEmptied`, `cleaningRequired`, `damageAmount` (≥ 0, FS nhập), `damages`, `returnedKeys`,
-  `photos` (≤ 20), `note`.
+  `photos` (≤ 20), `note`. Ảnh là upload `Pending` của FS thì được attach phía server (`media.MediaAttachments`) để
+  cron dọn upload bỏ ngang không xoá; URL không khớp upload của FS vẫn lưu, chỉ không attach.
 - **Biên bản:** tạo mới ở lần đầu, các lần sau cập nhật trên cùng bản ghi. `unitEmptied=false` → `PENDING_ITEMS`:
   chưa chốt được, quyền truy cập vẫn `Active`. Kiểm lại khi đã trống thì về `IN_PROGRESS`.
 - **Audit** `CHECKOUT_INSPECTED`.

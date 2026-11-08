@@ -124,7 +124,8 @@ thoại hiển thị trong phiên). Hệ thống không so ảnh giấy tờ —
 với `media_uploads` của FS ở trạng thái `Pending`/`Attached` qua `media.MediaUrlLookup.notUploadedBy` (API chỉ đọc
 module media mở cho handover). URL lạ, URL rỗng hoặc upload đã huỷ/xoá → 400 "Ảnh hiện trạng phải là ảnh bạn đã tải
 lên hệ thống…" / "Bản scan hợp đồng phải là tệp bạn đã tải lên hệ thống…". Ảnh đã có sẵn trên biên bản được giữ,
-không kiểm lại.
+không kiểm lại. Ảnh mới / bản scan hợp lệ được attach phía server (`media.MediaAttachments.attach`, cùng transaction)
+để cron dọn upload bỏ ngang không xoá.
 
 Sửa hiện trạng (`POST /api/staff/handovers/{id}/inspection-correction`, `HandoverWorkflowService.correctInspection`):
 dùng khi khách đã đồng ý hiện trạng mà FS cần ghi lại (sai sót, phát hiện thêm). Chạy được ở mọi bước sau khi khách

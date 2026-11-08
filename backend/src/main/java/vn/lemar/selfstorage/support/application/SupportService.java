@@ -14,16 +14,17 @@ import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.audit.domain.AuditAction;
 import vn.lemar.selfstorage.audit.domain.AuditEntityType;
-import vn.lemar.selfstorage.booking.application.ContractInvoiceService;
 import vn.lemar.selfstorage.booking.application.ContractInvoiceService.ContractBill;
+import vn.lemar.selfstorage.booking.application.ContractInvoiceService;
 import vn.lemar.selfstorage.booking.application.HandoverOrderService;
 import vn.lemar.selfstorage.facility.application.FacilityAccess;
-import vn.lemar.selfstorage.handover.application.RentalContractService;
 import vn.lemar.selfstorage.handover.application.RentalContractService.ContractSnapshot;
-import vn.lemar.selfstorage.identity.application.AccountQueryService;
+import vn.lemar.selfstorage.handover.application.RentalContractService;
 import vn.lemar.selfstorage.identity.application.Access;
+import vn.lemar.selfstorage.identity.application.AccountQueryService;
 import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
 import vn.lemar.selfstorage.identity.application.FacilityStaffQuery;
+import vn.lemar.selfstorage.media.MediaAttachments;
 import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
@@ -66,12 +67,13 @@ public class SupportService {
     private final AuditRecorder auditRecorder;
     private final JdbcTemplate jdbc;
     private final PricingQuery pricingQuery;
+    private final MediaAttachments mediaAttachments;
 
     SupportService(SupportRequestRepository requests, RentalContractService contracts, ContractInvoiceService invoices,
                    HandoverOrderService orders, FacilityAccess facilityAccess, FacilityStaffQuery staffQuery,
                    AccountQueryService accountQuery, NotificationService notificationService, Access access,
                    CurrentAccountProvider currentAccount, AuditRecorder auditRecorder, JdbcTemplate jdbc,
-                   PricingQuery pricingQuery) {
+                   PricingQuery pricingQuery, MediaAttachments mediaAttachments) {
         this.requests = requests;
         this.contracts = contracts;
         this.invoices = invoices;
@@ -85,6 +87,7 @@ public class SupportService {
         this.auditRecorder = auditRecorder;
         this.jdbc = jdbc;
         this.pricingQuery = pricingQuery;
+        this.mediaAttachments = mediaAttachments;
     }
 
     /** Yêu cầu hỗ trợ. */
@@ -140,6 +143,8 @@ public class SupportService {
         SupportRequest request = requests.save(SupportRequest.open(customerId, facilityId,
                 input.contractId(), input.category(), input.title().trim(), input.description().trim(),
                 input.photos()));
+        // Ảnh khách vừa upload gắn vào yêu cầu → attach để cron dọn upload bỏ ngang không xoá.
+        mediaAttachments.attach(customerId, input.photos());
         audit(AuditAction.SUPPORT_REQUEST_CREATED, request.getId(), null,
                 Map.of("status", request.getStatus(), "category", request.getCategory()), null, customerId);
         Long orderId = contract == null ? null : contract.orderId();

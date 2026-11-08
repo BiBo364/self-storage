@@ -7,5 +7,5 @@
         displayName = "Checkout (F2.a)",
         allowedDependencies = {"tenancy::application", "handover::application", "booking::application",
                 "facility::application", "pricing::application", "identity::application",
-                "notification::application", "audit::application"})
+                "notification::application", "audit::application", "media"})
 package vn.lemar.selfstorage.checkout;

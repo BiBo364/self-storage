@@ -5,5 +5,5 @@
         displayName = "Support (F7)",
         allowedDependencies = {"tenancy::application", "handover::application", "booking::application",
                 "facility::application", "identity::application", "notification::application",
-                "pricing::application", "audit::application"})
+                "pricing::application", "audit::application", "media"})
 package vn.lemar.selfstorage.support;

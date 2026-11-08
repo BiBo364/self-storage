@@ -40,6 +40,7 @@ import vn.lemar.selfstorage.handover.repository.RentalContractRepository;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
 import vn.lemar.selfstorage.identity.application.Access;
 import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
+import vn.lemar.selfstorage.media.MediaAttachments;
 import vn.lemar.selfstorage.media.MediaUrlLookup;
 import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
@@ -111,6 +112,7 @@ public class HandoverWorkflowService {
     private final NotificationService notificationService;
     private final AuditRecorder auditRecorder;
     private final MediaUrlLookup mediaUrls;
+    private final MediaAttachments mediaAttachments;
 
     HandoverWorkflowService(HandoverRecordRepository records, RentalContractRepository contracts,
                             HandoverReadRepository readRepository, HandoverOrderService orders,
@@ -118,7 +120,7 @@ public class HandoverWorkflowService {
                             FacilityAccess facilityAccess, PricingQuery pricingQuery, Access access,
                             CurrentAccountProvider currentAccount, AccountQueryService accountQuery,
                             NotificationService notificationService, AuditRecorder auditRecorder,
-                            MediaUrlLookup mediaUrls) {
+                            MediaUrlLookup mediaUrls, MediaAttachments mediaAttachments) {
         this.records = records;
         this.contracts = contracts;
         this.readRepository = readRepository;
@@ -133,6 +135,7 @@ public class HandoverWorkflowService {
         this.notificationService = notificationService;
         this.auditRecorder = auditRecorder;
         this.mediaUrls = mediaUrls;
+        this.mediaAttachments = mediaAttachments;
     }
 
     /** Khách từ chối khoang: chạm ngưỡng mà chưa xác nhận huỷ đơn → {@code requiresConfirmation}. */
@@ -256,6 +259,7 @@ public class HandoverWorkflowService {
         if (!mediaUrls.notUploadedBy(locked.actorId(), List.of(pdfUrl.trim())).isEmpty()) {
             throw new HandoverValidationException(MSG_SCAN_NOT_UPLOADED);
         }
+        mediaAttachments.attach(locked.actorId(), List.of(pdfUrl.trim()));
         RentalContract contract = lockContract(contractId, locked);
         if (contract.getStatus() != RentalContractStatus.DRAFT) {
             throw new HandoverConflictException("Hợp đồng không còn ở bản nháp");
@@ -540,7 +544,10 @@ public class HandoverWorkflowService {
         contract.freezeDocument(html);
     }
 
-    /** Ảnh hiện trạng phải là file FS này đã upload qua media; ảnh đã có sẵn trên biên bản được giữ nguyên. */
+    /**
+     * Ảnh hiện trạng phải là file FS này đã upload qua media; ảnh đã có sẵn trên biên bản được giữ nguyên. Ảnh mới
+     * được attach (cùng transaction) để cron dọn upload bỏ ngang không xoá.
+     */
     private void requireUploadedPhotos(Long actorId, List<String> photos, HandoverRecord record) {
         if (photos == null || photos.isEmpty()) {
             return;
@@ -553,6 +560,7 @@ public class HandoverWorkflowService {
         if (!fresh.isEmpty() && !mediaUrls.notUploadedBy(actorId, fresh).isEmpty()) {
             throw new HandoverValidationException(MSG_PHOTO_NOT_UPLOADED);
         }
+        mediaAttachments.attach(actorId, fresh);
     }
 
     private static Map<String, Object> inspectionSnapshot(HandoverRecord record) {

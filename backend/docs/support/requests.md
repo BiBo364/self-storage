@@ -13,7 +13,7 @@ trong `routes/`; field chi tiết ở Swagger trên `SupportController`). Code:
 
 | Bước | Ai | Điều kiện | Kết quả |
 |---|---|---|---|
-| Gửi | Khách | gắn `contractId` (hợp đồng của mình) hoặc chọn `facilityId`; `LOST_KEY` bắt buộc hợp đồng; tiêu đề ≤ 255, mô tả ≤ 4000, ảnh ≤ 10 | `Open`; FM của cơ sở nhận `SUPPORT_REQUEST_CREATED`; audit `SUPPORT_REQUEST_CREATED` |
+| Gửi | Khách | gắn `contractId` (hợp đồng của mình) hoặc chọn `facilityId`; `LOST_KEY` bắt buộc hợp đồng; tiêu đề ≤ 255, mô tả ≤ 4000, ảnh ≤ 10 (ảnh là upload `Pending` của khách thì attach phía server) | `Open`; FM của cơ sở nhận `SUPPORT_REQUEST_CREATED`; audit `SUPPORT_REQUEST_CREATED` |
 | Giao | FM (`appointment.assign` + facility scope), FS đang hoạt động của cơ sở | yêu cầu còn mở (giao lại được) | `Assigned`; FS và khách nhận `SUPPORT_ASSIGNED`; audit `SUPPORT_REQUEST_ASSIGNED` |
 | Xử lý | FS được giao (`unit_access_key.issue`) hoặc FM của cơ sở | còn mở; kết quả ≤ 2000 ký tự | `Resolved`; khách nhận `SUPPORT_RESOLVED`; audit `SUPPORT_REQUEST_RESOLVED` |
 | Huỷ | Khách | còn mở | `Canceled`; audit `SUPPORT_REQUEST_CANCELED` |

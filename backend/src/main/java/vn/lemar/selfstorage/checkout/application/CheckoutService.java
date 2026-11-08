@@ -13,25 +13,26 @@ import vn.lemar.selfstorage.audit.application.AuditEntry;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.audit.domain.AuditAction;
 import vn.lemar.selfstorage.audit.domain.AuditEntityType;
-import vn.lemar.selfstorage.booking.application.ContractInvoiceService;
 import vn.lemar.selfstorage.booking.application.ContractInvoiceService.ContractBill;
+import vn.lemar.selfstorage.booking.application.ContractInvoiceService;
 import vn.lemar.selfstorage.booking.application.HandoverOrderService;
 import vn.lemar.selfstorage.booking.application.OrderNotificationService;
-import vn.lemar.selfstorage.booking.application.ReturnAppointmentService;
 import vn.lemar.selfstorage.booking.application.ReturnAppointmentService.AppointmentState;
+import vn.lemar.selfstorage.booking.application.ReturnAppointmentService;
 import vn.lemar.selfstorage.checkout.domain.CheckoutRecord;
 import vn.lemar.selfstorage.checkout.repository.CheckoutRecordRepository;
 import vn.lemar.selfstorage.facility.application.StorageUnitService;
-import vn.lemar.selfstorage.handover.application.RentalContractService;
 import vn.lemar.selfstorage.handover.application.RentalContractService.ContractSnapshot;
 import vn.lemar.selfstorage.handover.application.RentalContractService.RevokeResult;
+import vn.lemar.selfstorage.handover.application.RentalContractService;
 import vn.lemar.selfstorage.identity.application.Access;
 import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
+import vn.lemar.selfstorage.media.MediaAttachments;
 import vn.lemar.selfstorage.notification.application.NotificationType;
 import vn.lemar.selfstorage.pricing.application.PricingQuery;
 import vn.lemar.selfstorage.tenancy.application.TenancyException;
-import vn.lemar.selfstorage.tenancy.application.TenancyService;
 import vn.lemar.selfstorage.tenancy.application.TenancyService.ReturnRequestView;
+import vn.lemar.selfstorage.tenancy.application.TenancyService;
 
 /**
  * Trả kho rút gọn (bản nháp Flow 2.a):
@@ -71,12 +72,13 @@ public class CheckoutService {
     private final Access access;
     private final CurrentAccountProvider currentAccount;
     private final AuditRecorder auditRecorder;
+    private final MediaAttachments mediaAttachments;
 
     CheckoutService(CheckoutRecordRepository records, TenancyService tenancy, ReturnAppointmentService appointments,
                     RentalContractService contracts, ContractInvoiceService invoices, HandoverOrderService orders,
                     StorageUnitService storageUnits, OrderNotificationService notifications,
                     PricingQuery pricingQuery, Access access, CurrentAccountProvider currentAccount,
-                    AuditRecorder auditRecorder) {
+                    AuditRecorder auditRecorder, MediaAttachments mediaAttachments) {
         this.records = records;
         this.tenancy = tenancy;
         this.appointments = appointments;
@@ -89,6 +91,7 @@ public class CheckoutService {
         this.access = access;
         this.currentAccount = currentAccount;
         this.auditRecorder = auditRecorder;
+        this.mediaAttachments = mediaAttachments;
     }
 
     /** Kết quả kiểm tra FS nhập. */
@@ -145,6 +148,8 @@ public class CheckoutService {
         record.inspect(input.unitEmptied(), input.cleaningRequired(),
                 input.damageAmount() == null ? BigDecimal.ZERO : input.damageAmount().setScale(2, RoundingMode.HALF_UP),
                 trim(input.damages()), input.returnedKeys(), input.photos(), trim(input.note()), Instant.now());
+        // Ảnh FS vừa upload gắn vào biên bản → attach để cron dọn upload bỏ ngang không xoá.
+        mediaAttachments.attach(locked.actorId(), input.photos());
         records.flush();
         Map<String, Object> newValue = new HashMap<>();
         newValue.put("result", record.getResult());

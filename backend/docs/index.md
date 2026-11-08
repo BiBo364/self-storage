@@ -37,7 +37,7 @@ mỗi package con trực tiếp là một module độc lập (`identity`, `book
 | `chat` | chatbot tư vấn ([chat/assistant.md](chat/assistant.md)) |
 | `notification` | email + thông báo in-app |
 | `audit` | ghi vết thao tác nghiệp vụ ([audit-log.md](audit-log.md)) |
-| `media` | upload file lên Cloudinary, dọn asset theo batch; API chỉ đọc `MediaUrlLookup` cho module khác kiểm URL upload |
+| `media` | upload file lên Cloudinary, dọn asset theo batch + cron dọn upload bỏ ngang; `MediaUrlLookup` (chỉ đọc, kiểm URL upload) và `MediaAttachments` (attach phía server) cho module khác |
 | `scheduler` | module rỗng (chỉ `package-info`); cron nằm trong module nghiệp vụ, `@EnableScheduling` ở `booking/config/BookingSchedulingConfig` |
 
 Phụ thuộc giữa các module khai ở `allowedDependencies` trong `package-info.java` của từng module (`ModuleStructureTest`
@@ -45,7 +45,8 @@ kiểm). Hai phụ thuộc cần biết khi đọc flow sau bàn giao:
 - `support` → `pricing::application` — đọc `fee.lost_key` để tính phí mặc định khi thay chìa do mất chìa
   ([support/requests.md](support/requests.md));
 - `handover` → `media` — `MediaUrlLookup.notUploadedBy` kiểm ảnh hiện trạng / bản scan hợp đồng là file FS đã upload
-  ([handover/records.md](handover/records.md)).
+  ([handover/records.md](handover/records.md)); `handover`, `checkout`, `support` → `media` —
+  `MediaAttachments.attach` khi lưu URL ảnh / scan (bên dưới, [Upload file](#upload-file-module-media)).
 
 Layout trong một module:
 
@@ -97,6 +98,9 @@ Nguồn: `backend/src/main/resources/application.yml`, override qua biến môi 
 | `LOGIN_RATE_LIMIT_EMAIL_MAX` | Số lần đăng nhập sai tối đa theo email / window | `5` |
 | `LOGIN_RATE_LIMIT_IP_MAX` | Số lần đăng nhập sai tối đa theo IP / window | `20` |
 | `LOGIN_RATE_LIMIT_WINDOW` | Cửa sổ đếm lần đăng nhập sai | `PT15M` |
+| `MEDIA_UPLOAD_RATE_MAX` | Số lần upload tối đa mỗi account / window (`POST /api/media/uploads`) | `30` |
+| `MEDIA_ORPHAN_MAX_AGE` | Upload `Uploading`/`Pending` không đổi quá khoảng này thì cron dọn | `P3D` |
+| `MEDIA_UPLOAD_RATE_WINDOW` | Cửa sổ đếm upload | `PT10M` |
 | `DB_URL` / `DB_USER` / `DB_PASSWORD` | Kết nối Postgres (URL JDBC) | `jdbc:postgresql://localhost:5432/self_storage` / `self_storage` / `self_storage` |
 | `REDIS_HOST` / `REDIS_PORT` | Redis cho rate-limit auth / cache | `localhost` / `6379` |
 | `SERVER_PORT` | Cổng HTTP của backend | `8080` |
@@ -189,6 +193,8 @@ Schema Flow 1.3 đi bằng migration V8–V11:
   `RENT_INVOICE_ISSUED`, `RENT_UNPAID`, `CONTRACT_ACCESS_SUSPENDED`, `CONTRACT_ACCESS_RESTORED`, `RETURN_DATE_SHIFTED`,
   `CHECKOUT_SHORTFALL_UNPAID` chỉ thêm ở code. Xem [tenancy/rentals.md](tenancy/rentals.md),
   [handover/records.md](handover/records.md), [checkout/return.md](checkout/return.md).
+- V24 chuyển `Attached` các upload `Pending` đang được biên bản bàn giao / biên bản trả kho / yêu cầu hỗ trợ / bản
+  scan hợp đồng dùng — trước khi bật cron dọn upload bỏ ngang (xem [Upload file](#upload-file-module-media)).
 - V23 thêm cột `rental_orders.canceled_at` (backfill từ audit `RENTAL_ORDER_CANCELED`; mốc cọc bị giữ lại trong báo
   cáo doanh thu), `proposal_feedbacks.agreed_at` (mốc cửa sổ đặt lịch check-in khi đơn đã cọc đổi khoang),
   `return_requests.no_show_count`; seed policy `return.no_show_grace_minutes = 120`, `return.max_no_shows = 2`; thêm
@@ -273,9 +279,19 @@ Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev
   (upload đã huỷ/xoá không tính). Handover dùng cho ảnh hiện trạng và bản scan hợp đồng.
 - Mỗi upload ghi row `media_uploads` (`Uploading` → `Pending`). `DELETE /batch/{batchId}` dọn asset
   chưa attach; `POST /batch/{batchId}/attach` đánh dấu `Attached` để không xoá nữa.
+- **Attach phía server:** flow lưu URL vào entity thì upload `Pending` của account đó chuyển `Attached` trong cùng transaction qua `media.MediaAttachments.attach` — không phụ thuộc FE gọi `/attach`:
+  ảnh hiện trạng + bản scan hợp đồng (handover, sau khi kiểm URL), ảnh biên bản trả kho (`CheckoutService.inspect`),
+  ảnh yêu cầu hỗ trợ (`SupportService.create`). URL không khớp upload `Pending` của account bị bỏ qua (không lỗi).
+- **Cron dọn upload bỏ ngang** (`MediaCleanupJob`, mỗi giờ — `media.orphan-cleanup.fixed-delay-ms`): row
+  `Uploading`/`Pending` không đổi trạng thái quá `media.orphan-cleanup.max-age` (mặc định 3 ngày) → xoá asset trên
+  storage (nếu có `public_id`), row `Deleted`. Mỗi row một transaction, khoá row và kiểm lại trước khi xoá; storage
+  lỗi thì row giữ nguyên cho lượt sau. Row `Attached` không bao giờ bị dọn. V24 chuyển `Attached` các upload `Pending`
+  cũ mà `handover_records.inspection_photos`, `checkout_records.photos`, `support_requests.photos` hoặc
+  `rental_contracts.pdf_url` đang dùng.
 - **Xoá media:** chỉ khi người dùng bấm X trên file đã upload **trong phase hiện tại**. Hủy/rời trang
   không xoá; batch `Pending` được giữ để quay lại. Sau khi phase submit, file `Attached` — delete batch
-  bỏ qua. Order `Canceled` không xoá media (giữ evidence); hệ thống không hard-delete order và không có retention job.
+  bỏ qua. Batch `Pending` bỏ quá `media.orphan-cleanup.max-age` thì cron dọn. Order `Canceled` không xoá media đã
+  attach (giữ evidence); hệ thống không hard-delete order và không có retention job.
 - Creds `CLOUDINARY_NAME/KEY/SECRET` để `@NotBlank` — thiếu là app chết lúc boot; test/CI dùng
   giá trị giả, không gọi mạng.
 - Chi tiết route: [routes/media/upload.md](routes/media/upload.md),

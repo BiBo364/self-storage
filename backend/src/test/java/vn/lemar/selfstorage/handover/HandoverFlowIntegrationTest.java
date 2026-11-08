@@ -766,6 +766,9 @@ class HandoverFlowIntegrationTest {
         String pending = uploaded(fsId, "pending.jpg", "Pending");
         workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of(pending));
         assertThat(view(seed.handoverId).inspectionPhotos()).containsExactly(pending);
+        // Lưu ảnh vào biên bản → upload Pending được attach phía server (cron dọn không xoá).
+        assertThat(jdbc.queryForObject("select status from media_uploads where url = ?", String.class, pending))
+                .isEqualTo("Attached");
 
         // Ảnh đã có trên biên bản giữ nguyên được dù upload gốc sau đó bị dọn.
         jdbc.update("update media_uploads set status = 'Deleted' where url = ?", pending);

@@ -229,8 +229,13 @@ class PostRentalIntegrationTest {
         Seed seed = seedActive(LocalDate.now(VN).plusMonths(1));
         ReturnRequestView request = assignedAndArrived(seed);
 
+        String photo = "https://res.cloudinary.com/test/ret-" + System.nanoTime() + ".jpg";
+        jdbc.update("insert into media_uploads (account_id, batch_id, public_id, url, status) values (?, "
+                + "gen_random_uuid(), 'pub-ret', ?, 'Pending')", fsId, photo);
         loginAs(FS);
-        checkout.inspect(request.id(), new Inspection(true, false, null, null, 2, List.of(), "Sạch sẽ"));
+        checkout.inspect(request.id(), new Inspection(true, false, null, null, 2, List.of(photo), "Sạch sẽ"));
+        assertThat(jdbc.queryForObject("select status from media_uploads where url = ?", String.class, photo))
+                .isEqualTo("Attached");
         CheckoutView done = checkout.confirm(request.id());
 
         assertThat(done.result()).isEqualTo("COMPLETED");

@@ -13,6 +13,7 @@ import vn.lemar.selfstorage.media.application.exception.InvalidUploadException;
 import vn.lemar.selfstorage.media.application.exception.MediaBatchConflictException;
 import vn.lemar.selfstorage.media.application.exception.MediaBatchForbiddenException;
 import vn.lemar.selfstorage.media.application.exception.MediaBatchNotFoundException;
+import vn.lemar.selfstorage.media.application.exception.MediaRateLimitedException;
 
 /** Lỗi upload của module media — 400 với message cụ thể thay vì message chung của tầng khung. */
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -37,6 +38,11 @@ public class MediaExceptionHandler {
     @ExceptionHandler(MediaBatchForbiddenException.class)
     public ResponseEntity<ApiError> handleBatchForbidden(MediaBatchForbiddenException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(MediaRateLimitedException.class)
+    public ResponseEntity<ApiError> handleRateLimited(MediaRateLimitedException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(ApiError.now(ex.getMessage()));
     }
 
     @ExceptionHandler(MediaBatchConflictException.class)

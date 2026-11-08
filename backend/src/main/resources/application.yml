@@ -60,6 +60,15 @@ security:
     ip-max-attempts: ${LOGIN_RATE_LIMIT_IP_MAX:20}
     window: ${LOGIN_RATE_LIMIT_WINDOW:PT15M}
 
+# Giới hạn upload mỗi account (fixed window trên Redis, fail-open khi Redis lỗi).
+media:
+  upload-rate-limit:
+    max-per-window: ${MEDIA_UPLOAD_RATE_MAX:30}
+    window: ${MEDIA_UPLOAD_RATE_WINDOW:PT10M}
+  # Cron dọn upload Uploading/Pending không đổi quá max-age (asset trên storage bị xoá).
+  orphan-cleanup:
+    max-age: ${MEDIA_ORPHAN_MAX_AGE:P3D}
+
 # Cổng thanh toán đang dùng: payos (mặc định) | vnpay. Chỉ cổng đang dùng mới bắt buộc đủ credential.
 payment:
   provider: ${PAYMENT_PROVIDER:payos}
