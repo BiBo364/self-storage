@@ -2,33 +2,54 @@
 
 - **Route:** `/fm/appointments`
 - **Actor:** Facility Manager
-- **Flow tham chiếu:** 2.1 / 5.3 (branch `specs/flow-2-2.5`, `specs/flow-5`)
+- **Flow tham chiếu:** 2.1 / 5.3
 
 ## Mục đích
-FM xem toàn bộ `Appointment` (check-in, trả kho) của cơ sở theo ngày và phân công FS phụ trách từng lịch hẹn.
 
-## Navigation
-
-- **Vào từ:** FM shell hoặc notification.
-- **Đi tới:** `/staff/schedule` sau khi phân công; customer appointment context; `/fm/contracts` hoặc `/fm/return-requests` khi cần xem contract/request liên quan.
+FM xem lịch check-in đang `Pending` của cơ sở theo ngày và phân công FS phụ trách.
 
 ## Dữ liệu hiển thị
-- `Appointment` của facility, theo ngày, gồm `type` (CHECKIN/RETURN), khách hàng, khung giờ, `staff_id` (null nếu chưa phân công)
-- Filter `staff_id IS NULL` để xem nhanh lịch chưa phân công
-- Danh sách FS khả dụng thuộc facility (`AccountFacilityAssignment`)
+
+- Nguồn: `GET /api/fm/appointments?facilityId=&date=`.
+- Chỉ trả `CHECKIN` + `Pending`; `Done`, `Canceled` và lịch `RETURN` không thuộc màn này.
+- Mỗi dòng: khách, khoang, khung giờ (giờ VN), FS phụ trách, trạng thái đơn.
+- `attempt` / `rebooked`: lần đặt check-in thứ mấy của đơn (tính cả lịch sử, không phụ thuộc ngày
+  đang xem). `rebooked = attempt > 1`.
+- `rebookReason`: lý do lần trước; ưu tiên `handover_records.reject_reason`, fallback
+  `appointments.cancel_reason`. `previousCancelReason`: đúng lý do huỷ lịch của lần trước.
+- UI hiển thị badge **Đặt lại lần N** khi `rebooked`; chỉ hiện một lý do chính là `rebookReason`
+  (fallback `previousCancelReason`) để tránh trùng lặp.
+- Filter "Chỉ chưa phân công" (`staffId == null`).
+- Ô chọn ngày, mặc định ngày hiện tại của trình duyệt.
 
 ## Actions
-- Chọn 1 `Appointment` chưa phân công → chọn FS → [Phân công]
-- Xem lịch dạng calendar/list theo ngày
+
+- Chọn row → mở panel chi tiết.
+- Chọn FS từ danh sách `GET /api/fm/facilities/{facilityId}/staff` → `POST
+  /api/fm/appointments/{appointmentId}/staff` body `{staffId}`.
+- Phân công thành công: đóng panel, tải lại ngày; lịch đã gán vẫn hiện với `orderStatus =
+  InProgress`.
+- 409 từ BE: hiện message và tải lại ngày.
 
 ## States / UI trạng thái
-- Badge "Chưa phân công" nổi bật (màu cảnh báo) để FM ưu tiên xử lý trước giờ hẹn
-- Trạng thái `Appointment.status`: Pending/Done/Canceled (no-show)
+
+- Loading: "Đang tải lịch hẹn…".
+- Empty: "Không có lịch check-in ngày dd/MM/yyyy phù hợp bộ lọc".
+- Error: SurfaceState lỗi + "Thử lại".
+- 403/404: forbidden — không có quyền xem cơ sở.
 
 ## API liên quan
-- `GET /api/fm/appointments?date=`
-- `POST /api/fm/appointments/{id}/assign` (body: `staff_id`)
+
+- `GET /api/fm/facility` — cơ sở FM đang phụ trách (lấy `facilityId`).
+- `GET /api/fm/facilities/{facilityId}/staff` — FS đang hoạt động của cơ sở.
+- `GET /api/fm/appointments?facilityId=&date=` — lịch check-in trong ngày.
+- `POST /api/fm/appointments/{appointmentId}/staff` — phân công FS.
 
 ## Edge case / Lưu ý UX
-- `Appointment(type=RETURN)` được **tự động tạo bởi hệ thống** khi FM phân công FS ở `fm/04-return-request-queue.md` (qua `ReturnRequest.assigned_staff_id`) — trang này chỉ cần **đọc** lịch RETURN đã có sẵn `staff_id`, không tự phân công lại ở đây, tránh gây nhầm lẫn 2 nơi phân công cùng 1 việc
-- Validate FS được gán phải thuộc đúng `AccountFacilityAssignment` của facility này — nếu danh sách FS hiển thị sai facility là lỗi nghiêm trọng (rủi ro bảo mật/IDOR), cần kiểm tra kỹ khi tích hợp API
+
+- Lịch `RETURN` và lịch đã `Done`/`Canceled` không hiện ở màn này; không phân công lại.
+- Đổi FS đã gán không được ở MVP; BE trả 409.
+- FS phải thuộc đúng cơ sở (`AccountFacilityAssignment`); sai cơ sở là lỗi quyền.
+- Ngày mặc định theo local browser; giờ hiển thị theo `Asia/Ho_Chi_Minh`.
+- `rebooked` chỉ nói "không phải lần đầu"; lý do cụ thể nằm ở `rebookReason` /
+  `previousCancelReason`.

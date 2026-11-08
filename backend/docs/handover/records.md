@@ -3,8 +3,9 @@ purpose: HandoverRecord + RentalContract as-built — mapping, domain guard, due
 ---
 # Bàn giao — HandoverRecord & RentalContract
 
-Trang này ghi phần **đang có trong code** của module `handover`: data layer, listener Flow 2.1 và
-luật huỷ. Chưa có HTTP, cron, tạo record, tạo hợp đồng hay xác minh danh tính/hiện trạng.
+Trang này ghi phần **đang có trong code** của module `handover`: data layer, listener Flow 2.1,
+cron quá `due_at` và luật huỷ. Chưa có HTTP, tạo record, tạo hợp đồng hay xác minh danh
+tính/hiện trạng.
 
 ## HandoverRecord
 
