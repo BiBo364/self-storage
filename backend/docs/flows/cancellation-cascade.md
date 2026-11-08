@@ -35,10 +35,11 @@ flowchart TB
 
 ## Ranh giới
 
-- `RentalContract` (`Draft`/`Signed → Canceled`) và `HandoverRecord` (`IN_PROGRESS → CANCELED`) đã có
-  luật huỷ trong `handover/application/HandoverService` (`cancelByAppointmentId`/`cancelByOrderId`).
-  Cascade của booking **chưa gọi** hai hàm này — `booking` không được phụ thuộc `handover`; hướng nối
-  là event từ booking. `Appointment` đã nối (bước 4).
+- `RentalContract` (`Draft`/`Signed → Canceled`) và `HandoverRecord` (`IN_PROGRESS → CANCELED`) do
+  `handover/application/HandoverService` xử lý. Cron handover quá hạn gọi
+  `RentalOrderCancellationService.cancel` sau khi đã đóng record/contract, nên cascade từ cron có đủ
+  hai entity đó. Cascade từ các entry point khác của booking chưa gọi handover — `booking` không được
+  phụ thuộc `handover`; hướng nối là event từ booking. `Appointment` đã nối (bước 4).
 - Hoàn cọc theo `cancel_reason` thuộc Flow 4; cascade chỉ dừng ở notification + audit.
 - Các nguyên nhân huỷ khác chưa có entry point: `Khách hủy đơn`, `Khách không còn nhu cầu`,
   `Quá hạn …` (cron).

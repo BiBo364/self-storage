@@ -1,6 +1,7 @@
 package vn.lemar.selfstorage.handover.repository;
 
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -36,4 +37,15 @@ public interface HandoverRecordRepository extends JpaRepository<HandoverRecord, 
     @Query("select r from HandoverRecord r where r.orderId = :orderId "
             + "and r.result = vn.lemar.selfstorage.handover.domain.HandoverResult.IN_PROGRESS")
     Optional<HandoverRecord> findOpenByOrderIdForUpdate(@Param("orderId") Long orderId);
+
+    /** Id các record đang mở đã quá {@code due_at} — cron handover. */
+    @Query("select r.id from HandoverRecord r "
+            + "where r.result = vn.lemar.selfstorage.handover.domain.HandoverResult.IN_PROGRESS "
+            + "and r.dueAt < :now order by r.id")
+    List<Long> findOverdueIds(@Param("now") Instant now);
+
+    /** Khoá record theo id trước khi cron huỷ; phải gọi trong transaction. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from HandoverRecord r where r.id = :id")
+    Optional<HandoverRecord> findByIdForUpdate(@Param("id") Long id);
 }

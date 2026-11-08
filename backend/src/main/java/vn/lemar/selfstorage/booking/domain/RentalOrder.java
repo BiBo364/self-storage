@@ -122,6 +122,17 @@ public class RentalOrder {
         this.status = RentalOrderStatus.IN_PROGRESS;
     }
 
+    /**
+     * Flow 2 cron: phiên bàn giao quá hạn nhưng đơn còn hạn giữ kho — trả đơn về
+     * {@code Deposited} để khách đặt lịch check-in mới.
+     */
+    public void returnToDeposited() {
+        if (status != RentalOrderStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Đơn " + id + " không ở InProgress: " + status);
+        }
+        this.status = RentalOrderStatus.DEPOSITED;
+    }
+
     /** Cancellation Cascade bước 1: {@code status -> Canceled}, ghi {@code cancel_reason}. */
     public void cancel(String reason) {
         if (status.isClosed()) {

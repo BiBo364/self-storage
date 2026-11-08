@@ -65,19 +65,43 @@ Bảng `rental_contracts` (V1). Entity `handover/domain/RentalContract.java`.
 - Idempotent theo trạng thái: record đã đóng không còn `IN_PROGRESS`; contract đã `Canceled` không
   nằm trong `Draft`/`Signed`. Gọi lại không tạo audit mới.
 
-Hai hàm chưa được nối vào HTTP, cron hay cancellation cascade của booking — caller thuộc luồng quá
-`due_at` và no-show.
+HTTP chưa có cho hai hàm này. Cron quá `due_at` gọi `cancelByOrderId`; cron no-show sẽ gọi
+`cancelByAppointmentId` khi luồng đó được nối.
+
+## Cron quá `due_at`
+
+`HandoverOverdueJob` chạy mỗi **5 phút** (lần đầu sau 60 giây), quét `HandoverRecord`
+`result = IN_PROGRESS` và `due_at < now`. Mỗi record xử lý trong transaction riêng; lỗi một record
+chỉ log, không dừng cả lượt. Một instance chạy job — chưa có lock phân tán.
+
+Mỗi record:
+
+1. Khoá row, kiểm lại `IN_PROGRESS` + `due_at < now` (idempotent; lần chạy sau không còn record).
+2. Gọi `HandoverService.cancelByOrderId`: record → `CANCELED` + `reject_reason`, contract
+   `Draft`/`Signed` → `Canceled`; audit `HANDOVER_CANCELED`, `CONTRACT_CANCELED`, actor System.
+3. Đọc `RentalOrder` qua `RentalOrderQuery`:
+   - đơn `Done` → bỏ qua (dữ liệu bất thường, log cảnh báo);
+   - đơn `Canceled` hoặc không `InProgress` → chỉ đóng record/contract, không đổi đơn;
+   - đơn `InProgress` + (`expires_at` null hoặc `now < expires_at`) → đơn về `Deposited`, audit
+     `RENTAL_ORDER_DEPOSITED`, khoang giữ `Reserved`, notification `HANDOVER_OVERDUE` cho khách;
+   - đơn `InProgress` + `now >= expires_at` → `RentalOrderCancellationService.cancel` chạy
+     Cancellation Cascade với lý do `"Chưa hoàn tất bàn giao trong hạn"`; cascade xử lý đơn/khoang/
+     hóa đơn/proposal và gửi `RENTAL_ORDER_CANCELED`.
+
+Thứ tự khoá: `handover_records` → `rental_contracts` → `rental_orders`.
 
 ## Chưa có trong code
 
-- Flow 1 tạo `HandoverRecord` khi đặt lịch; hiện record phải có sẵn thì listener/huỷ mới có tác dụng.
+- Flow 1 tạo `HandoverRecord` khi đặt lịch; hiện record phải có sẵn thì listener/cron mới có tác dụng.
 - HTTP API Flow 2.1/2.2.
-- Cron huỷ record quá `due_at`; mở rộng cron no-show sang handover/order.
+- Mở rộng cron no-show sang handover/order (`cancelByAppointmentId` chưa có caller).
 - Sinh `RentalContract` (Flow 2.3), xác minh danh tính và hiện trạng khoang (Flow 2.2).
-- Notification cho các nhánh trên.
+- Notification cho no-show handover.
 
 ## Test
 
-`backend/src/test/java/vn/lemar/selfstorage/handover/HandoverFoundationIntegrationTest.java` chạy trên
-Postgres (Testcontainers): round-trip mapping hai entity, công thức `due_at`, listener idempotent và
-thiếu record, huỷ theo lịch/đơn, guard trạng thái hợp đồng, audit một bản ghi mỗi entity.
+- `HandoverFoundationIntegrationTest`: mapping, `due_at`, listener, huỷ theo lịch/đơn, audit.
+- `HandoverOverdueServiceIntegrationTest`: boundary `due_at`, hai nhánh `expires_at`, idempotent,
+  record/order bất thường, audit + notification.
+- `HandoverOverdueConcurrencyTest`: hai instance cùng chạy → một bên xử lý, audit/notification
+  không nhân đôi.

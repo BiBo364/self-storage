@@ -8,10 +8,10 @@ import vn.lemar.selfstorage.booking.domain.RentalOrder;
 import vn.lemar.selfstorage.booking.repository.RentalOrderRepository;
 
 /**
- * Public API của booking cho module sau đọc thông tin đơn — hiện chỉ hạn giữ kho.
+ * Public API của booking cho module sau đọc thông tin đơn — hạn giữ kho và trạng thái.
  *
- * <p>{@code handover} dùng để tính {@code HandoverRecord.due_at}; không module nào được gọi
- * thẳng repository của booking.
+ * <p>{@code handover} dùng để tính {@code HandoverRecord.due_at} và quyết định nhánh cron quá hạn;
+ * không module nào được gọi thẳng repository của booking.
  */
 @Service
 public class RentalOrderQuery {
@@ -29,5 +29,24 @@ public class RentalOrderQuery {
     @Transactional(readOnly = true)
     public Optional<Instant> expiresAt(Long orderId) {
         return orderRepository.findById(orderId).map(RentalOrder::getExpiresAt);
+    }
+
+    /** Ảnh chụp đơn cho module khác — trạng thái dạng giá trị DB, không lộ entity/domain. */
+    @Transactional(readOnly = true)
+    public Optional<Snapshot> find(Long orderId) {
+        return orderRepository.findById(orderId)
+                .map(order -> new Snapshot(order.getId(), order.getCustomerId(),
+                        order.getStatus().dbValue(), order.getExpiresAt()));
+    }
+
+    public record Snapshot(Long id, Long customerId, String status, Instant expiresAt) {
+
+        public boolean inProgress() {
+            return "InProgress".equals(status);
+        }
+
+        public boolean done() {
+            return "Done".equals(status);
+        }
     }
 }
