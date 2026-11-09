@@ -47,7 +47,7 @@ import vn.lemar.selfstorage.booking.application.DepositStateRepairJob;
  * {@code AFTER_COMMIT}, nên nếu transaction của test không commit thật thì nó không bao giờ chạy
  * và bài test trở nên vô nghĩa. Dữ liệu dọn tay ở {@link #resetData()}.
  */
-@SpringBootTest
+@SpringBootTest(properties = "payment.provider=vnpay")
 @AutoConfigureMockMvc
 @Testcontainers(disabledWithoutDocker = true)
 class DepositPaymentIntegrationTest {

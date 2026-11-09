@@ -41,7 +41,7 @@ import vn.lemar.selfstorage.booking.application.exception.DepositNotAllowedExcep
  *
  * <p>Không {@code @Transactional}: hai luồng phải nhìn thấy dữ liệu commit của nhau.
  */
-@SpringBootTest
+@SpringBootTest(properties = "payment.provider=vnpay")
 @Testcontainers(disabledWithoutDocker = true)
 class DepositConcurrencyIntegrationTest {
 
