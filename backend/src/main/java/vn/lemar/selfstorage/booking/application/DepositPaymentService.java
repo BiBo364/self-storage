@@ -1,8 +1,6 @@
 package vn.lemar.selfstorage.booking.application;
 
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
-import java.time.ZoneId;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,13 +32,6 @@ import vn.lemar.selfstorage.payment.application.dto.PaymentRequest;
  */
 @Service
 public class DepositPaymentService {
-
-    private static final DateTimeFormatter TXN_SUFFIX =
-            DateTimeFormatter.ofPattern("yyyyMMddHHmmss").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
-
-    private static final String TXN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    private static final int TXN_SUFFIX_LENGTH = 5;
-    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
 
     // Nguyên văn spec §1.4 — FE hiển thị thẳng cho khách nên không được diễn đạt lại.
     private static final String ORDER_EXPIRED =
@@ -175,7 +166,8 @@ public class DepositPaymentService {
 
         // (5) Thông thoáng — mở phiên. Số tiền đọc từ hóa đơn trong DB, không tin tham số caller.
         PaymentRequest request = new PaymentRequest(
-                nextTxnRef(invoice.getId()), invoice.getAmount(), invoice.getTitle(), clientIp);
+                // Mã theo định dạng của cổng đang dùng (payOS chỉ nhận số) — không tự sinh kiểu VNPay.
+                payments.newTxnRef(invoice.getId()), invoice.getAmount(), invoice.getTitle(), clientIp);
         return payments.startPayment(invoice.getId(), request);
     }
 
@@ -203,24 +195,5 @@ public class DepositPaymentService {
                 .map(Invoice::getId)
                 .filter(id -> !id.equals(currentInvoiceId))
                 .toList();
-    }
-
-    /**
-     * VNPay yêu cầu {@code vnp_TxnRef} không trùng trong ngày và chỉ gồm chữ/số.
-     *
-     * <p>Mốc thời gian chỉ tới giây, nên hai lần bấm trong cùng một giây sẽ ra mã y hệt và vỡ
-     * unique constraint — khách nhận 500 thay vì lỗi nghiệp vụ. Thêm hậu tố ngẫu nhiên để mã
-     * duy nhất kể cả khi trùng giây.
-     */
-    private String nextTxnRef(Long invoiceId) {
-        return "INV" + invoiceId + "T" + TXN_SUFFIX.format(Instant.now()) + randomSuffix();
-    }
-
-    private String randomSuffix() {
-        StringBuilder suffix = new StringBuilder(TXN_SUFFIX_LENGTH);
-        for (int i = 0; i < TXN_SUFFIX_LENGTH; i++) {
-            suffix.append(TXN_ALPHABET.charAt(RANDOM.nextInt(TXN_ALPHABET.length())));
-        }
-        return suffix.toString();
     }
 }

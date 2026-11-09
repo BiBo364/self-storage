@@ -1,7 +1,9 @@
 package vn.lemar.selfstorage.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -114,6 +116,39 @@ class PaymentIpnConcurrencyTest {
         assertThat(invoiceStatus(invoiceId)).isEqualTo("Paid");
         assertThat(refundStatus(invoiceId)).isEqualTo("Required");
         assertThat(orderStatus(invoiceId)).isEqualTo("Pending");
+    }
+
+    /**
+     * Trang kết quả gọi payment-check hai lần gần như cùng lúc cho cùng một giao dịch: cả hai đọc Pending trước khi
+     * khoá, hỏi cổng rồi mới chốt. Lượt sau không được tự đánh dấu chính giao dịch đó là thanh toán trùng.
+     */
+    @Test
+    void twoConcurrentPaymentChecksOfSameTransactionSettleOnceWithoutDuplicate() throws Exception {
+        long invoiceId = seedInvoice();
+        repository.saveAndFlush(new PaymentTransaction(invoiceId, "TXNCHECK001", AMOUNT, "coc thue kho"));
+        CountDownLatch bothAsked = new CountDownLatch(2);
+        when(gateway.query(eq("TXNCHECK001"), any(), any(), any())).thenAnswer(invocation -> {
+            // Giữ cả hai lượt ở bước hỏi cổng cho tới khi cùng đã đọc Pending — tái hiện đúng race.
+            bothAsked.countDown();
+            bothAsked.await(10, TimeUnit.SECONDS);
+            return new vn.lemar.selfstorage.payment.application.dto.GatewayQueryResult("00", "00", "GW-CHECK-1",
+                    AMOUNT, null, true, Map.of());
+        });
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> first = pool.submit(() -> service.reconcile("TXNCHECK001", "127.0.0.1"));
+            Future<?> second = pool.submit(() -> service.reconcile("TXNCHECK001", "127.0.0.1"));
+            first.get(30, TimeUnit.SECONDS);
+            second.get(30, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(countStatus(invoiceId, "Success")).isEqualTo(1);
+        assertThat(countStatus(invoiceId, "Duplicate")).isZero();
+        assertThat(invoiceStatus(invoiceId)).isEqualTo("Paid");
+        assertThat(refundStatus(invoiceId)).isEqualTo("None");
     }
 
     @Test

@@ -72,6 +72,8 @@ class DepositPaymentServiceTest {
 
         when(currentAccount.isCurrentAccountVerified()).thenReturn(true);
         when(currentAccount.getCurrentAccountId()).thenReturn(CUSTOMER_ID);
+        // Mã giao dịch do cổng sinh (payOS chỉ nhận số) — giả lập một mã số như payOS.
+        when(payments.newTxnRef(INVOICE_ID)).thenReturn("176270000000042");
 
         invoice = mock(Invoice.class);
         when(invoice.getId()).thenReturn(INVOICE_ID);
@@ -304,13 +306,17 @@ class DepositPaymentServiceTest {
                 .hasMessageContaining("hiện không khả dụng");
     }
 
+    /**
+     * Mã giao dịch lấy từ cổng đang dùng, không tự sinh kiểu VNPay: payOS ép {@code orderCode} về số, mã
+     * {@code INV…T…} làm cổng từ chối và khách nhận 500 khi bấm thanh toán cọc.
+     */
     @Test
-    void txnRefIsAlphanumericAndDerivedFromTheInvoice() {
+    void txnRefComesFromTheActiveGateway() {
         service.startDeposit(INVOICE_ID, "1.2.3.4");
 
+        verify(payments).newTxnRef(INVOICE_ID);
         verify(payments).startPayment(anyLong(), org.mockito.ArgumentMatchers.argThat(request ->
-                request.txnRef().startsWith("INV" + INVOICE_ID + "T")
-                        && request.txnRef().matches("[A-Za-z0-9]{1,100}")));
+                "176270000000042".equals(request.txnRef())));
     }
 
     @Test

@@ -57,6 +57,13 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     boolean existsByInvoiceIdAndDirectionAndStatus(
             Long invoiceId, PaymentDirection direction, PaymentStatus status);
 
+    /**
+     * Trạng thái hiện tại trong DB (truy vấn trực tiếp, không lấy entity đã nạp trong phiên). Đọc sau khi khoá
+     * invoice để biết lượt xác nhận khác đã chốt giao dịch này chưa.
+     */
+    @Query("select t.status from PaymentTransaction t where t.id = :id")
+    PaymentStatus findCurrentStatus(@Param("id") Long id);
+
     /** Mã giao dịch cổng đã được ghi cho giao dịch khác chưa — chặn đối soát thủ công trùng. */
     boolean existsByGatewayTransactionNo(String gatewayTransactionNo);
 

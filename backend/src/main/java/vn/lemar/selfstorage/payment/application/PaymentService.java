@@ -97,7 +97,8 @@ public class PaymentService {
     public enum NotificationResult { ACCEPTED, ALREADY_SETTLED, NOT_FOUND, INVALID_SIGNATURE, INVALID_AMOUNT }
 
     /** Kết quả chốt một xác nhận thành công: giao dịch thành {@code Success} hay {@code Duplicate}. */
-    private enum Confirmation { SUCCESS, DUPLICATE }
+    /** {@code ALREADY_SETTLED}: lượt xác nhận khác đã chốt chính giao dịch này trong lúc lượt này chờ khoá. */
+    private enum Confirmation { SUCCESS, DUPLICATE, ALREADY_SETTLED }
 
     /** Ảnh chụp trạng thái giao dịch cho caller (không lộ entity ra ngoài module). */
     public record PaymentSnapshot(Long invoiceId, String txnRef, String status, String failureReason,
@@ -124,6 +125,14 @@ public class PaymentService {
         String paymentUrl = gateway.buildPaymentUrl(request.withCreatedAt(transaction.getCreatedAt()));
         urlCache.put(invoiceId, paymentUrl);
         return paymentUrl;
+    }
+
+    /**
+     * Mã giao dịch mới theo định dạng của cổng đang dùng: VNPay chữ + số, payOS bắt buộc chuỗi số ({@code orderCode}).
+     * Caller tự dựng {@link PaymentRequest} phải lấy mã ở đây — tự sinh mã kiểu VNPay làm payOS từ chối (500).
+     */
+    public String newTxnRef(Long invoiceId) {
+        return gateway.newTxnRef(invoiceId);
     }
 
     /**
@@ -218,7 +227,7 @@ public class PaymentService {
         if (gatewayReportedSuccess(params)) {
             Confirmation result = confirmSuccess(transaction, params.get("vnp_TransactionNo"),
                     parsePayDate(params.get("vnp_PayDate")), responsePayload, "IPN", null, null, "IPN");
-            return result == Confirmation.DUPLICATE ? IpnResponse.alreadyConfirmed() : IpnResponse.success();
+            return result == Confirmation.SUCCESS ? IpnResponse.success() : IpnResponse.alreadyConfirmed();
         }
         String reason = "vnp_ResponseCode=" + params.get("vnp_ResponseCode")
                 + ", vnp_TransactionStatus=" + params.get("vnp_TransactionStatus");
@@ -472,6 +481,11 @@ public class PaymentService {
                                         String actorEmail, String resolvedBy) {
         repository.lockInvoiceForPayment(transaction.getInvoiceId());
         String previous = transaction.getStatus().dbValue();
+        // Caller kiểm Pending trước khi khoá (và trước khi hỏi cổng): hai lượt payment-check / IPN cùng lúc thì lượt
+        // sau còn cầm bản cũ. Đọc lại sau khi khoá — đã bị chốt thì bỏ qua, không tự đánh dấu chính nó là "trùng".
+        if (changedSinceLoaded(transaction, transaction.getStatus())) {
+            return Confirmation.ALREADY_SETTLED;
+        }
         if (repository.existsByInvoiceIdAndDirectionAndStatus(transaction.getInvoiceId(),
                 PaymentDirection.PAY, PaymentStatus.SUCCESS)) {
             transaction.markDuplicate(gatewayTransactionNo, paidAt,
@@ -498,6 +512,10 @@ public class PaymentService {
         LOG.error("Thanh toán muộn: giao dịch {} đã đóng ({}) nhưng cổng báo đã thu {} — chốt / hoàn thủ công",
                 transaction.getVnpTxnRef(), transaction.getFailureReason(), transaction.getAmount());
         repository.lockInvoiceForPayment(transaction.getInvoiceId());
+        if (changedSinceLoaded(transaction, PaymentStatus.FAILED)) {
+            // Lượt khác (webhook / IPN lặp) đã chốt khoản thu muộn này trong lúc chờ khoá.
+            return;
+        }
         if (repository.existsByInvoiceIdAndDirectionAndStatus(transaction.getInvoiceId(),
                 PaymentDirection.PAY, PaymentStatus.SUCCESS)) {
             transaction.markDuplicate(transactionNo, paidAt, "late duplicate payment - refund required", payload);
@@ -506,6 +524,12 @@ public class PaymentService {
         }
         transaction.markLateSucceeded(transactionNo, paidAt, payload);
         recordSuccess(transaction, PaymentStatus.FAILED.dbValue(), null);
+    }
+
+    /** Trạng thái trong DB đã khác {@code expected} (lượt khác chốt trước); không đọc được → coi như chưa đổi. */
+    private boolean changedSinceLoaded(PaymentTransaction transaction, PaymentStatus expected) {
+        PaymentStatus current = repository.findCurrentStatus(transaction.getId());
+        return current != null && current != expected;
     }
 
     private void fail(PaymentTransaction transaction, String reason, String responsePayload, String auditReason,
