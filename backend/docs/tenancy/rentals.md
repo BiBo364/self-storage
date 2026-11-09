@@ -156,8 +156,10 @@ Phí cộng dồn nằm trên đúng một hoá đơn `Penalty` mã `INV-OVD-…
   - yêu cầu trả kho đang mở có lịch `RETURN` mà FS **đã xác nhận khách đến** (`appointmentArrivedAt`) → ngày bắt đầu
     của buổi đó (`appointmentStart`), kể cả khi biên bản còn chờ (khoang còn đồ / chờ trả phần thiếu);
   - lịch chưa tới hoặc khách không đến → vẫn hôm nay; ngày dừng không bao giờ vượt hôm nay.
-- **Gia hạn phủ kỳ quá hạn** (`end_date` mới ≥ hôm nay): còn phải thu ≤ 0 nên hoá đơn đang mở bị `Canceled`. Cron
-  quét cả các hợp đồng đang có hoá đơn `INV-OVD` mở để bắt trường hợp này.
+- **Gia hạn phủ kỳ quá hạn** (`end_date` mới ≥ hôm nay): phí **ngừng cộng thêm** nhưng hoá đơn đã phát sinh **giữ
+  nguyên `Unpaid`** — đó là công nợ của những ngày đã thực sự quá hạn, thu khi khách trả hoá đơn hoặc trừ vào cọc
+  lúc trả kho. Không huỷ: huỷ sẽ cho phép khách chậm rồi gia hạn để xoá sạch phí. Cron vẫn quét hợp đồng đang có
+  `INV-OVD` mở (kể cả đã gia hạn) để đồng bộ số tiền khi còn quá hạn.
 - **Còn giao dịch `Pending`:** không đổi số tiền, vì cổng đã nhận số cũ — kể cả giao dịch đã quá cửa sổ 15' (không
   còn tính là phiên mở) nhưng chưa được chốt; xác nhận muộn sẽ chốt `Paid` đúng số tiền đã thu.
 - **Khách trả phí quá hạn rồi vẫn tiếp tục quá hạn:** hoá đơn mới chỉ thu phần chênh.
@@ -183,7 +185,8 @@ Chìa cơ (`PhysicalKey`) không thu hồi từ xa được — FM xử lý tạ
 **Mở lại** (`OverdueService.restoreIfCleared`, cùng lượt cron, quét hợp đồng `Active` đang khoá). Điều kiện chung:
 không còn hoá đơn `INV-OVD` `Unpaid` và chưa chốt quyết toán trả kho (chưa có hoá đơn `INV-CLN/DMG/KEY/PEN` khác
 `Canceled` — FS đã thu hồi chìa/mã lúc chốt, không mở lại); thêm **một trong hai**:
-- hợp đồng không còn quá hạn (`end_date` ≥ hôm nay — gia hạn đã phủ kỳ quá hạn);
+- hợp đồng không còn quá hạn (`end_date` ≥ hôm nay — gia hạn đã phủ kỳ quá hạn) **và** không còn `INV-OVD`
+  `Unpaid` của đợt trước: gia hạn chỉ dừng cộng thêm, khoản phí đã phát sinh vẫn phải trả;
 - hợp đồng còn quá hạn nhưng có yêu cầu trả kho đang mở — mở để khách dọn đồ. Phí vẫn tính tiếp tới buổi trả kho
   khách đến (hoá đơn `INV-OVD` mới chỉ thu phần chênh) và gộp vào quyết toán; `escalate` bỏ qua hợp đồng có yêu cầu
   trả kho mở nên không khoá lại. Khách huỷ yêu cầu trả kho thì lượt cron sau khoá lại theo điều kiện thường.

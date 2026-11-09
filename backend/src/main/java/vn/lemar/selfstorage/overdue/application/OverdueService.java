@@ -34,8 +34,8 @@ import vn.lemar.selfstorage.tenancy.application.TenancyService;
  *   <li>Qua {@code end_date}: báo khách + FM {@code CONTRACT_OVERDUE} một lần mỗi kỳ; sau
  *       {@code overdue.grace_days} ngày ân hạn, phí cộng dồn {@code số ngày × overdue.fee_per_day} trên đúng một
  *       hoá đơn {@code INV-OVD} còn mở.</li>
- *   <li>Ngừng tính ở ngày buổi trả kho khách đã đến (FS xác nhận); gia hạn phủ kỳ quá hạn → hoá đơn đang mở bị
- *       huỷ.</li>
+ *   <li>Ngừng tính ở ngày buổi trả kho khách đã đến (FS xác nhận); gia hạn phủ kỳ quá hạn → ngừng cộng thêm
+ *       nhưng hoá đơn đã phát sinh vẫn giữ nguyên (công nợ của những ngày đã quá hạn).</li>
  * </ul>
  * Mỗi hợp đồng một transaction; thứ tự khoá đơn → hợp đồng → hoá đơn.
  */

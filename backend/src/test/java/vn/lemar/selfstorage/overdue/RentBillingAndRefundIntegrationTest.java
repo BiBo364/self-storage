@@ -157,6 +157,8 @@ class RentBillingAndRefundIntegrationTest {
         assertThat(overdue.restoreIfCleared(seed.contractId)).isFalse();
 
         jdbc.update("update rental_contracts set end_date = current_date + 30 where id = ?", seed.contractId);
+        // Gia hạn chỉ dừng cộng thêm; khoản phí đã phát sinh vẫn còn nợ nên chưa mở khoá.
+        assertThat(overdue.restoreIfCleared(seed.contractId)).isFalse();
         jdbc.update("update invoices set status = 'Canceled' where contract_id = ? and code like 'INV-OVD-%'",
                 seed.contractId);
         assertThat(overdue.suspendedIds()).contains(seed.contractId);
@@ -193,6 +195,33 @@ class RentBillingAndRefundIntegrationTest {
     }
 
     // ------------------------------------------------------------------ hoàn tiền thủ công
+
+    @Test
+    void extensionKeepsTheFeeAlreadyAccruedForPastDays() {
+        LocalDate end = LocalDate.now(VN).minusDays(10);
+        Seed seed = seedActive(end.minusMonths(3), 3);
+
+        overdue.accrue(seed.contractId);
+        BigDecimal accrued = jdbc.queryForObject("select amount from invoices where contract_id = ? "
+                + "and code like 'INV-OVD-%' and status = 'Unpaid'", BigDecimal.class, seed.contractId);
+        assertThat(accrued).isPositive();
+
+        // Khách gia hạn phủ kỳ quá hạn: phí ngừng cộng thêm nhưng khoản đã phát sinh không bị xoá.
+        jdbc.update("update rental_contracts set end_date = current_date + 30 where id = ?", seed.contractId);
+        overdue.accrue(seed.contractId);
+
+        assertThat(count("select count(*) from invoices where contract_id = ? and code like 'INV-OVD-%'",
+                seed.contractId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select status from invoices where contract_id = ? "
+                + "and code like 'INV-OVD-%'", String.class, seed.contractId)).isEqualTo("Unpaid");
+        assertThat(jdbc.queryForObject("select amount from invoices where contract_id = ? "
+                + "and code like 'INV-OVD-%'", BigDecimal.class, seed.contractId)).isEqualByComparingTo(accrued);
+
+        // Trả xong thì không còn gì phải thu.
+        jdbc.update("update invoices set status = 'Paid' where contract_id = ? and code like 'INV-OVD-%'",
+                seed.contractId);
+        assertThat(overdue.accrue(seed.contractId)).isFalse();
+    }
 
     @Test
     void fmRecordsRefundUpToTheAmountCollected() {

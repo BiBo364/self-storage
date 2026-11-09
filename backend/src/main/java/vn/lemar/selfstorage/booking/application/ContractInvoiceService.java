@@ -122,8 +122,9 @@ public class ContractInvoiceService {
 
     /**
      * Flow 6 — phí quá hạn cộng dồn: {@code due = accrued − tổng phí quá hạn đã Paid}. Còn phải thu → cập nhật (hoặc
-     * tạo) đúng một hoá đơn {@code INV-OVD} {@code Unpaid}; hết phải thu (gia hạn đã phủ kỳ quá hạn) → huỷ hoá đơn
-     * đang mở. Hoá đơn đang có phiên thanh toán mở thì không đổi số tiền (cổng đã nhận số cũ).
+     * tạo) đúng một hoá đơn {@code INV-OVD} {@code Unpaid}. Hoá đơn của đợt quá hạn trước là công nợ đã chốt: gia hạn
+     * phủ kỳ quá hạn chỉ dừng cộng thêm, <b>không huỷ</b> (khách trả, hoặc trừ vào cọc khi trả kho). Hoá đơn đang có
+     * phiên thanh toán mở thì không đổi số tiền (cổng đã nhận số cũ).
      *
      * @return hoá đơn quá hạn đang mở sau khi đồng bộ, rỗng nếu không còn phải thu
      */
@@ -147,6 +148,17 @@ public class ContractInvoiceService {
         Invoice open = overdue.stream().filter(Invoice::isUnpaid).findFirst().orElse(null);
         if (open != null) {
             open = invoiceRepository.findByIdForUpdate(open.getId()).orElse(open);
+            // Hoá đơn mở của đợt quá hạn trước (hợp đồng đã được gia hạn sau khi phí phát sinh) là công nợ của những
+            // ngày thực sự quá hạn: không reprice, không huỷ — nếu huỷ, khách chỉ cần chậm rồi gia hạn là xoá sạch phí.
+            // Còn đang quá hạn ở đợt mới (due > 0) thì để nhánh dưới lập hoá đơn riêng cho đợt mới.
+            if (open.getCreatedAt().isBefore(periodStart)) {
+                if (due.signum() <= 0) {
+                    return Optional.of(bill(open));
+                }
+                open = null;
+            }
+        }
+        if (open != null) {
             // Còn giao dịch Pending (kể cả phiên quá 24h đã thôi tính là "mở") → giữ số tiền: cổng đã nhận số cũ, đổi
             // giá rồi xác nhận muộn sẽ chốt Paid hoá đơn bằng số tiền khác số đã thu.
             if (!paymentService.pendingTxnRefs(List.of(open.getId())).isEmpty()) {

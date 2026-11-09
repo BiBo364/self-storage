@@ -453,7 +453,7 @@ class PostRentalIntegrationTest {
     // ------------------------------------------------------------------ quá hạn
 
     @Test
-    void overdueFeeAccruesDailyAndExtensionCancelsIt() {
+    void overdueFeeAccruesDailyAndExtensionStopsAccrual() {
         Seed seed = seedActive(LocalDate.now(VN).minusDays(10));
         assertThat(overdue.overdueCandidateIds()).contains(seed.contractId);
 
@@ -479,8 +479,8 @@ class PostRentalIntegrationTest {
         pay(tenancy.requestExtension(seed.contractId, customerId, 1));
         assertThat(overdue.overdueCandidateIds()).contains(seed.contractId);
         assertThat(overdue.accrue(seed.contractId)).isFalse();
-        assertThat(count("select count(*) from invoices where contract_id = ? and code like 'INV-OVD-%' "
-                + "and status = 'Unpaid'", seed.contractId)).isZero();
+        // Gia hạn chỉ dừng cộng thêm: khoản phí của những ngày đã quá hạn vẫn còn nợ, không bị huỷ.
+        assertThat(openOverdueAmount(seed.contractId)).isEqualByComparingTo("160000");
     }
 
     @Test
