@@ -2,6 +2,7 @@ package vn.lemar.selfstorage.backoffice.application;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,9 @@ public class BackofficeService {
 
     static final String PERM_FACILITY = "facility.access";
     static final int INVOICE_LIMIT = 500;
+
+    /** Mốc ngày của báo cáo tính theo giờ Việt Nam, không theo TZ của JVM (container mặc định UTC). */
+    private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final BackofficeReadRepository readRepository;
     private final FacilityAdminCommands facilities;
@@ -294,7 +298,7 @@ public class BackofficeService {
     // ------------------------------------------------------------------ internals
 
     private Report report(Long facilityId, LocalDate from, LocalDate to) {
-        LocalDate end = to == null ? LocalDate.now() : to;
+        LocalDate end = to == null ? LocalDate.now(ZONE) : to;
         LocalDate start = from == null ? end.withDayOfMonth(1).minusMonths(5) : from;
         if (start.isAfter(end)) {
             throw new IllegalArgumentException("Khoảng ngày không hợp lệ");
