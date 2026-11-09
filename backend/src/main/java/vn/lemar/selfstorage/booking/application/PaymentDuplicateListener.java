@@ -24,10 +24,12 @@ class PaymentDuplicateListener {
 
     private final InvoiceRepository invoices;
     private final OrderNotifier orderNotifier;
+    private final InvoiceRefundService refunds;
 
-    PaymentDuplicateListener(InvoiceRepository invoices, OrderNotifier orderNotifier) {
+    PaymentDuplicateListener(InvoiceRepository invoices, OrderNotifier orderNotifier, InvoiceRefundService refunds) {
         this.invoices = invoices;
         this.orderNotifier = orderNotifier;
+        this.refunds = refunds;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -39,6 +41,11 @@ class PaymentDuplicateListener {
                     event.invoiceId());
             return;
         }
+        // Khoản thu trùng phải trả lại: đưa hoá đơn vào hàng đợi hoàn tiền (FM/ADMIN thấy ở danh sách cần hoàn),
+        // không chỉ báo FM. Hoá đơn đang chờ hoàn vì lý do khác thì giữ nguyên lý do đó.
+        invoices.findByIdForUpdate(event.invoiceId())
+                .filter(invoice -> "None".equals(invoice.getRefundStatus().dbValue()))
+                .ifPresent(invoice -> refunds.requireFull(invoice, InvoiceRefundReasons.DUPLICATE_PAYMENT, null));
         orderNotifier.notifyFacilityManager(orderId.get(),
                 NotificationType.PAYMENT_DUPLICATE_REFUND_REQUIRED,
                 Map.of("orderCode", String.valueOf(orderId.get()),

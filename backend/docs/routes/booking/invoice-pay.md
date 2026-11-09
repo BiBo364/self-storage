@@ -100,11 +100,12 @@ Khoang chỉ chuyển `Reserved` khi vẫn còn `Available` tại thời điểm
 tới 10 lần trong 50 phút, đủ lâu để khách khác cọc trước. Nếu khoang đã đổi chủ:
 
 - `Invoice` vẫn chuyển `Paid` — tiền đã vào.
-- `Invoice.refund_status` chuyển `Required`, `refund_reason=UNIT_UNAVAILABLE`.
-- Khoang giữ nguyên; `RentalOrder` không chuyển `Deposited`.
-- Ghi audit `INVOICE_REFUND_REQUIRED`; notify FM `PAYMENT_REFUND_REQUIRED` và khách `PAYMENT_REFUND_PENDING`.
-- Khoản hoàn tiền hiện trong hàng đợi `GET /api/fm/invoices/refunds` (FM) và `GET /api/admin/payments/refunds`
-  (ADMIN); FM chuyển khoản rồi ghi nhận qua `POST /api/fm/invoices/{invoiceId}/refunds`
+- Khoang giữ nguyên; `RentalOrder` không chuyển `Deposited` (đơn đã cọc thì bật `needs_reproposal`).
+- **Cọc giữ lại cho khoang thay thế**, chưa đánh dấu hoàn: FM nhận `PROPOSAL_REPROPOSAL_REQUIRED`, khách nhận
+  `PROPOSAL_UNIT_TAKEN`. Khách đồng ý khoang thay thế thì chênh lệch tính trên cọc đã thu
+  ([proposal-agree.md › Cọc đã trả nhưng khoang bị giữ trước](proposal-agree.md#cọc-đã-trả-nhưng-khoang-bị-giữ-trước)).
+- Đơn hết hạn mà chưa xếp được khoang → hoá đơn cọc vào hàng đợi hoàn tiền (`refund_reason=DEPOSIT_UNSERVED`,
+  `GET /api/fm/invoices/refunds`); FM chuyển khoản rồi ghi nhận qua `POST /api/fm/invoices/{invoiceId}/refunds`
   ([fm-invoice-refunds.md](fm-invoice-refunds.md)).
 
 Hóa đơn không còn `Unpaid` lúc xác nhận về: `Paid` là xác nhận lặp, chỉ log INFO; `Canceled`/`Expired` là tiền vào

@@ -255,8 +255,11 @@ class ManualReconciliationIntegrationTest {
 
         assertThat(paymentStatus(txnRef)).isEqualTo("Duplicate");
         assertThat(statusOf("invoices", invoiceId)).isEqualTo("Unpaid");
+        // Khoản thu trùng vào hàng đợi hoàn tiền (DUPLICATE_PAYMENT) → thêm audit INVOICE_REFUND_REQUIRED.
         assertThat(jdbc.queryForList("SELECT action FROM audit_logs ORDER BY action", String.class))
-                .containsExactly("PAYMENT_DUPLICATE");
+                .containsExactly("INVOICE_REFUND_REQUIRED", "PAYMENT_DUPLICATE");
+        assertThat(jdbc.queryForObject("SELECT refund_reason FROM invoices WHERE id = ?", String.class, invoiceId))
+                .isEqualTo("DUPLICATE_PAYMENT");
     }
 
     @Test

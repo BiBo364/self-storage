@@ -84,9 +84,10 @@ Lớp 1/2 chốt giao dịch thì case tương ứng cũng được đóng (`res
 - **Phiên đang mở = giao dịch `Pending` tạo trong 15'** (`PaymentSession.WINDOW`; `PaymentSessionQuery`,
   `PaymentService.invoicesWithOpenSession`). Cùng một con số khoá khoang ở `/pay`, cho cron hết hạn hoá đơn / huỷ
   đơn / đóng phiên bàn giao đợi phiên đóng, và cho tiền thuê/phạt không đổi số tiền khi khách đang trả.
-- **Xác nhận muộn / unit đã mất.** Tiền đã vào thì invoice vẫn `Paid`. Nếu khoang không còn giữ được, không reserve
-  unit, order giữ trạng thái cũ, invoice có `refund_status=Required` + `refund_reason=UNIT_UNAVAILABLE`; ghi audit
-  `INVOICE_REFUND_REQUIRED`, notify FM/customer và xử lý hoàn tiền thủ công.
+- **Xác nhận muộn / unit đã mất.** Tiền đã vào thì invoice vẫn `Paid`. Nếu khoang không còn giữ được: không reserve
+  unit, order giữ trạng thái cũ (đơn đã cọc bật `needs_reproposal`), **cọc giữ lại** để FM đề xuất khoang thay thế —
+  FM nhận `PROPOSAL_REPROPOSAL_REQUIRED`, khách nhận `PROPOSAL_UNIT_TAKEN`; chưa đánh dấu hoàn. Đơn hết hạn mà chưa
+  xếp được khoang → `refund_status=Required` lý do `DEPOSIT_UNSERVED` (`BookingExpiryService`).
 - **Tiền vào giao dịch đã đóng.** Giao dịch đã `Failed` (phiên bị huỷ ở cổng, cổng báo lỗi) mà IPN/webhook sau đó báo
   đã thu (khách quét QR cũ) → log ERROR, khoá invoice: chưa có `PAY/Success` thì `Failed → Success`
   (`failure_reason` giữ lý do đóng cũ, tiền tố "Thanh toán muộn sau khi phiên đã đóng"), audit `PAYMENT_SUCCEEDED`
@@ -186,7 +187,7 @@ Cổng không có API hoàn tiền dùng được — một cơ chế cho mọi 
 
    | `refund_reason` | Khi nào | Ghi ở |
    |---|---|---|
-   | `UNIT_UNAVAILABLE` | cọc đã vào nhưng khoang không còn giữ được | `DepositPaymentListener` |
+   | `DUPLICATE_PAYMENT` | hoá đơn đã có giao dịch `Success`, cổng báo thu thêm (`Duplicate`) — trả lại khoản trùng; hoá đơn đang chờ hoàn vì lý do khác giữ lý do cũ | `PaymentDuplicateListener` |
    | `INVOICE_CLOSED` | tiền vào hoá đơn đã `Canceled`/`Expired` | `DepositPaymentListener`, `InvoicePaymentSettlement` |
    | `UNIT_CHANGE_EXCESS` | đổi sang khoang có cọc thấp hơn — phần dư | `ProposalService.issueDeposit` |
    | `DEPOSIT_UNSERVED` | đơn `Pending` đã trả cọc hết hạn mà chưa xếp được khoang | `BookingExpiryService` |

@@ -109,16 +109,18 @@ public class DepositPaymentListener {
 
         // Khoang có thể đã đổi chủ trong lúc phiên còn mở: cổng retry tới 10 lần × 5 phút.
         if (!units.reserveIfAvailable(order.getUnitId(), order.getId())) {
-            invoice.markRefundRequired("UNIT_UNAVAILABLE");
-            audit.record(new AuditEntry(AuditAction.INVOICE_REFUND_REQUIRED, AuditEntityType.INVOICE,
-                    String.valueOf(invoice.getId()), Map.of("status", "Unpaid"),
-                    Map.of("status", "Paid", "refundStatus", "Required", "reason", "UNIT_UNAVAILABLE"),
-                    null, null));
+            // Cọc giữ lại cho khoang thay thế (không đánh dấu hoàn ngay): FM đề xuất khoang khác, khách đồng ý thì
+            // chênh lệch tính trên cọc đã thu. Đơn hết hạn mà chưa xếp được khoang → BookingExpiryService đánh dấu
+            // hoàn (DEPOSIT_UNSERVED).
             reportUnitNoLongerAvailable(invoice, order, event);
-            orderNotifier.notifyFacilityManager(order.getId(), NotificationType.PAYMENT_REFUND_REQUIRED,
-                    Map.of("orderCode", String.valueOf(order.getId()), "amount", event.amount().toPlainString()));
-            orderNotifier.notifyCustomer(order, NotificationType.PAYMENT_REFUND_PENDING,
-                    Map.of("orderCode", String.valueOf(order.getId())));
+            if (order.holdsUnit()) {
+                order.requireReproposal();
+            }
+            String unitCode = order.getUnitId() == null ? ""
+                    : unitQuery.find(order.getUnitId()).map(StorageUnitView::code).orElse("");
+            orderNotifier.notifyFacilityManager(order.getId(), NotificationType.PROPOSAL_REPROPOSAL_REQUIRED,
+                    Map.of("orderCode", String.valueOf(order.getId()), "unitCode", unitCode));
+            orderNotifier.notifyCustomer(order, NotificationType.PROPOSAL_UNIT_TAKEN, Map.of("unitCode", unitCode));
             return;
         }
 
@@ -184,7 +186,7 @@ public class DepositPaymentListener {
     private void reportUnitNoLongerAvailable(Invoice invoice, RentalOrder order, PaymentSucceeded event) {
         String status = unitQuery.lock(order.getUnitId()).map(StorageUnitView::status).orElse("không tồn tại");
         LOG.error("Đã thu {} cho hóa đơn {} nhưng khoang {} đang ở trạng thái {} (vnp_TxnRef={}) —"
-                        + " đơn {} giữ nguyên {}, tiền cần được hoàn thủ công",
+                        + " đơn {} giữ nguyên {}, chờ FM đề xuất khoang khác",
                 event.amount(), invoice.getId(), order.getUnitId(), status, event.vnpTxnRef(),
                 order.getId(), order.getStatus().dbValue());
     }

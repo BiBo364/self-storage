@@ -39,7 +39,7 @@ sequenceDiagram
 | Hoá đơn | Khi | Hệ quả |
 |---|---|---|
 | `Deposit` `Unpaid → Paid` | cổng xác nhận | khoang `Available → Reserved` (`reserved_order_id` = đơn), đơn `Pending → Deposited`, khách nhận `DEPOSIT_PAYMENT_SUCCEEDED` |
-| `Deposit` `Unpaid → Paid`, khoang đã bị đơn khác giữ | cổng xác nhận | hoá đơn vẫn `Paid` + `refund_status = Required` (`UNIT_UNAVAILABLE`); đơn ở lại `Pending`; FM nhận `PAYMENT_REFUND_REQUIRED`, khách `PAYMENT_REFUND_PENDING`. FM vẫn đề xuất được khoang thay thế — xem [proposal-agree.md › Cọc đã trả nhưng khoang bị giữ trước](../routes/booking/proposal-agree.md#cọc-đã-trả-nhưng-khoang-bị-giữ-trước) |
+| `Deposit` `Unpaid → Paid`, khoang đã bị đơn khác giữ | cổng xác nhận | hoá đơn vẫn `Paid`; cọc giữ lại cho khoang thay thế (chưa đánh dấu hoàn); đơn ở lại `Pending`; FM nhận `PROPOSAL_REPROPOSAL_REQUIRED`, khách `PROPOSAL_UNIT_TAKEN`. Đơn hết hạn mà chưa xếp được khoang mới vào hàng đợi hoàn tiền (`DEPOSIT_UNSERVED`) — xem [proposal-agree.md › Cọc đã trả nhưng khoang bị giữ trước](../routes/booking/proposal-agree.md#cọc-đã-trả-nhưng-khoang-bị-giữ-trước) |
 | `DepositSupplement` `Unpaid → Paid`, đơn đã giữ khoang | cổng xác nhận | reserve khoang mới; đơn không đổi trạng thái, khách nhận `DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED` (không gửi lại "Đặt cọc thành công"); khoang mới đã bị giữ → như dòng trên |
 | `DepositSupplement` `Unpaid → Paid`, đơn còn `Pending` (cọc đã trả, khoang cũ bị giữ trước) | cổng xác nhận | chốt cọc như `Deposit`: khoang thay thế `Reserved`, đơn `Pending → Deposited`, audit `RENTAL_ORDER_DEPOSITED`, khách nhận `DEPOSIT_PAYMENT_SUCCEEDED` |
 | gắn hợp đồng `Unpaid → Paid` | cổng xác nhận | phát `ContractInvoicePaid(invoiceId, contractId, type, paidAt)` cho module sở hữu hợp đồng |

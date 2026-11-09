@@ -18,7 +18,7 @@ phần). FM ghi nhận khoản đã chuyển qua [fm-invoice-refunds.md](fm-invo
 - Mỗi dòng: `invoiceId`, `invoiceCode`, `orderId`, `amount` (= số phải hoàn `refund_amount`; rỗng thì số tiền hoá
   đơn), `refundStatus`, `refundReason`,
   `refundRequestedAt`, `vnpTxnRef`, `gatewayTransactionNo`, `paidAt`.
-- `refundReason`: `UNIT_UNAVAILABLE`, `INVOICE_CLOSED`, `UNIT_CHANGE_EXCESS`, `DEPOSIT_UNSERVED`,
+- `refundReason`: `UNIT_UNAVAILABLE` (chỉ dữ liệu cũ — nay cọc giữ lại để đề xuất lại), `DUPLICATE_PAYMENT`, `INVOICE_CLOSED`, `UNIT_CHANGE_EXCESS`, `DEPOSIT_UNSERVED`,
   `HANDOVER_CANCELED`, `CHECKOUT_DEPOSIT` ([payment.md › Hoàn tiền thủ công](../../payment.md#hoàn-tiền-thủ-công)).
 - Route chỉ đọc; ghi nhận hoàn tiền ở `POST /api/fm/invoices/{invoiceId}/refunds`.
 

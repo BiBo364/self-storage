@@ -3,7 +3,9 @@ package vn.lemar.selfstorage.booking.application;
 /** Mã lý do của {@code invoices.refund_reason} (tối đa 50 ký tự) — hàng đợi hoàn tiền hiển thị theo mã này. */
 public final class InvoiceRefundReasons {
 
-    /** Tiền cọc đã vào nhưng khoang không còn giữ được. */
+    /** Hoá đơn đã có giao dịch thành công, cổng báo thu thêm lần nữa ({@code Duplicate}) — trả lại khoản thu trùng. */
+    public static final String DUPLICATE_PAYMENT = "DUPLICATE_PAYMENT";
+    /** Dữ liệu cũ: cọc đã vào nhưng khoang không còn giữ được — nay cọc giữ lại để đề xuất khoang khác. */
     public static final String UNIT_UNAVAILABLE = "UNIT_UNAVAILABLE";
     /** Tiền vào sau khi hoá đơn đã {@code Canceled}/{@code Expired}. */
     public static final String INVOICE_CLOSED = "INVOICE_CLOSED";

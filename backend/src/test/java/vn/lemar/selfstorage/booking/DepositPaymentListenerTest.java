@@ -138,26 +138,39 @@ class DepositPaymentListenerTest {
 
     /**
      * VNPay retry tới 10 lần × 5 phút, nên IPN có thể về sau khi khoang đã thuộc về khách khác.
-     * Đơn thứ hai không được chuyển {@code Deposited} — tiền phải hoàn tay.
+     * Đơn thứ hai không được chuyển {@code Deposited}; cọc giữ lại để FM đề xuất khoang khác — chưa đánh dấu hoàn.
      */
     @Test
-    void lateConfirmationOnATakenUnitDoesNotDepositTheOrder() {
+    void lateConfirmationOnATakenUnitKeepsDepositForReproposal() {
         when(units.reserveIfAvailable(UNIT_ID, ORDER_ID)).thenReturn(false);
         when(unitQuery.lock(UNIT_ID)).thenReturn(
+                Optional.of(new StorageUnitView(UNIT_ID, "A-01", 400L, 1L, "Reserved")));
+        when(unitQuery.find(UNIT_ID)).thenReturn(
                 Optional.of(new StorageUnitView(UNIT_ID, "A-01", 400L, 1L, "Reserved")));
 
         listener.onPaymentSucceeded(succeeded());
 
         verify(order, never()).markDeposited();
         verify(invoice).markPaid();
-        verify(invoice).markRefundRequired("UNIT_UNAVAILABLE");
-        // INVOICE_PAID + INVOICE_REFUND_REQUIRED.
-        verify(audit, times(2)).record(any());
+        verify(invoice, never()).markRefundRequired(any());
+        // Chỉ INVOICE_PAID.
+        verify(audit, times(1)).record(any());
         verifyNoInteractions(notifications);
         verify(orderNotifier).notifyFacilityManager(eq(ORDER_ID),
-                eq(NotificationType.PAYMENT_REFUND_REQUIRED), anyMap());
-        verify(orderNotifier).notifyCustomer(eq(order),
-                eq(NotificationType.PAYMENT_REFUND_PENDING), anyMap());
+                eq(NotificationType.PROPOSAL_REPROPOSAL_REQUIRED), anyMap());
+        verify(orderNotifier).notifyCustomer(eq(order), eq(NotificationType.PROPOSAL_UNIT_TAKEN), anyMap());
+    }
+
+    @Test
+    void lateConfirmationOnATakenUnitFlagsADepositedOrderForReproposal() {
+        when(order.holdsUnit()).thenReturn(true);
+        when(units.reserveIfAvailable(UNIT_ID, ORDER_ID)).thenReturn(false);
+        when(unitQuery.lock(UNIT_ID)).thenReturn(Optional.empty());
+        when(unitQuery.find(UNIT_ID)).thenReturn(Optional.empty());
+
+        listener.onPaymentSucceeded(succeeded());
+
+        verify(order).requireReproposal();
     }
 
     @Test
