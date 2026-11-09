@@ -35,12 +35,14 @@ import vn.lemar.selfstorage.booking.application.ProposalService;
 import vn.lemar.selfstorage.booking.application.ProposalView;
 import vn.lemar.selfstorage.booking.application.RejectResult;
 import vn.lemar.selfstorage.booking.application.dto.CustomerProposalResponse;
+import vn.lemar.selfstorage.booking.application.dto.FmRentalOrderPageResponse;
 import vn.lemar.selfstorage.booking.application.dto.FmRentalOrderResponse;
 import vn.lemar.selfstorage.booking.application.exception.ProposalConflictException;
 import vn.lemar.selfstorage.booking.application.exception.ProposalForbiddenException;
 import vn.lemar.selfstorage.booking.application.exception.ProposalNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.ProposalValidationException;
 import vn.lemar.selfstorage.booking.application.exception.RentalOrderNotFoundException;
+import vn.lemar.selfstorage.booking.application.exception.RentalOrderValidationException;
 import vn.lemar.selfstorage.booking.application.exception.StorageUnitNotFoundException;
 import vn.lemar.selfstorage.identity.application.AccountJwtAuthenticationConverter;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
@@ -204,6 +206,29 @@ class BookingControllerTest {
         authenticate(CUSTOMER, "CUSTOMER");
 
         mockMvc.perform(as(get("/api/fm/rental-orders/1"), CUSTOMER)).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void listReturnsOrdersForFacilityManager() throws Exception {
+        authenticate(FM, "FM");
+        when(proposalQueryService.ordersForFacilityManager(1L, null, 0, 20))
+                .thenReturn(new FmRentalOrderPageResponse(List.of(), 0, 20, 0));
+
+        mockMvc.perform(as(get("/api/fm/rental-orders?facilityId=1"), FM))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(FmRentalOrderController.LIST_MESSAGE))
+                .andExpect(jsonPath("$.data.total").value(0));
+    }
+
+    @Test
+    void listMapsInvalidFilterToBadRequest() throws Exception {
+        authenticate(FM, "FM");
+        when(proposalQueryService.ordersForFacilityManager(1L, "Bogus", 0, 20))
+                .thenThrow(new RentalOrderValidationException("Trạng thái đơn không hợp lệ: Bogus"));
+
+        mockMvc.perform(as(get("/api/fm/rental-orders?facilityId=1&status=Bogus"), FM))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Trạng thái đơn không hợp lệ: Bogus"));
     }
 
     @Test

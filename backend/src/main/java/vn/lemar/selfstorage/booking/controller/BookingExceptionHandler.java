@@ -25,6 +25,7 @@ import vn.lemar.selfstorage.booking.application.exception.RentalRequestDuplicate
 import vn.lemar.selfstorage.booking.application.exception.RentalRequestExpiredException;
 import vn.lemar.selfstorage.booking.application.exception.RentalRequestNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.RentalOrderNotFoundException;
+import vn.lemar.selfstorage.booking.application.exception.RentalOrderValidationException;
 import vn.lemar.selfstorage.booking.application.exception.RentalRequestValidationException;
 import vn.lemar.selfstorage.booking.application.exception.StorageUnitFilterException;
 import vn.lemar.selfstorage.booking.application.exception.StorageUnitNotFoundException;
@@ -60,6 +61,11 @@ public class BookingExceptionHandler {
 
     @ExceptionHandler(RentalRequestValidationException.class)
     public ResponseEntity<ApiError> handleValidation(RentalRequestValidationException ex) {
+        return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(RentalOrderValidationException.class)
+    public ResponseEntity<ApiError> handleOrderValidation(RentalOrderValidationException ex) {
         return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
     }
 

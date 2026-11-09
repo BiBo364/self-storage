@@ -190,9 +190,67 @@ public class BookingReadRepository {
                                      String vnpTxnRef, Instant paymentCreatedAt, Instant paidAt) {
     }
 
+    /** Một trang đơn thuê của cơ sở cho FM; sort hạn đơn tăng dần (null cuối), rồi id. */
+    public List<OrderListRow> findOrders(Long facilityId, String status, int limit, long offset) {
+        String sql = """
+                select o.id, o.status, o.cancel_reason, o.expires_at, o.unit_id, u.code as unit_code,
+                       r.id as request_id, r.customer_name, r.normalized_customer_email, r.customer_phone,
+                       o.needs_reproposal,
+                       (select count(*) from proposal_feedbacks x
+                        where x.order_id = o.id and x.status = 'Rejected') as rejection_count,
+                       (select count(*) from proposal_feedbacks x
+                        where x.order_id = o.id and x.status = 'Pending') as pending_count,
+                       p.id as last_proposal_id, pu.code as last_unit_code, p.status as last_proposal_status,
+                       p.note as last_note, p.created_at as last_created_at
+                from rental_orders o
+                join rental_requests r on r.id = o.request_id
+                left join storage_units u on u.id = o.unit_id
+                left join lateral (
+                    select p.id, p.unit_id, p.status, p.note, p.created_at
+                    from proposal_feedbacks p where p.order_id = o.id
+                    order by p.created_at desc, p.id desc limit 1
+                ) p on true
+                left join storage_units pu on pu.id = p.unit_id
+                where r.facility_id = ?
+                  and (cast(? as varchar) is null or o.status = ?)
+                order by o.expires_at asc nulls last, o.id asc
+                limit ? offset ?
+                """;
+        return jdbc.query(sql, (rs, rowNum) -> new OrderListRow(
+                rs.getLong("id"), rs.getString("status"), rs.getString("cancel_reason"),
+                instant(rs, "expires_at"), (Long) rs.getObject("unit_id"), rs.getString("unit_code"),
+                rs.getLong("request_id"), rs.getString("customer_name"),
+                rs.getString("normalized_customer_email"), rs.getString("customer_phone"),
+                rs.getBoolean("needs_reproposal"), (Long) rs.getObject("last_proposal_id"),
+                rs.getString("last_unit_code"), rs.getString("last_proposal_status"),
+                rs.getString("last_note"), instant(rs, "last_created_at"),
+                rs.getLong("rejection_count"), rs.getLong("pending_count")),
+                facilityId, status, status, limit, offset);
+    }
+
+    public long countOrders(Long facilityId, String status) {
+        String sql = """
+                select count(*)
+                from rental_orders o
+                join rental_requests r on r.id = o.request_id
+                where r.facility_id = ?
+                  and (cast(? as varchar) is null or o.status = ?)
+                """;
+        Long count = jdbc.queryForObject(sql, Long.class, facilityId, status, status);
+        return count == null ? 0 : count;
+    }
+
     /** Một dòng đơn thuê đã join form yêu cầu. */
     public record OrderRow(Long id, String status, String cancelReason, Instant expiresAt, Long unitId,
                            Long customerId, Long facilityId, FmRentalOrderResponse.Customer customer,
                            FmRentalOrderResponse.Requested requested) {
+    }
+
+    /** Dòng list đơn thuê kèm proposal gần nhất/count cho FM. */
+    public record OrderListRow(Long id, String status, String cancelReason, Instant expiresAt, Long unitId,
+                               String unitCode, Long requestId, String customerName, String customerEmail,
+                               String customerPhone, boolean needsReproposal, Long lastProposalId,
+                               String lastProposalUnitCode, String lastProposalStatus, String lastProposalNote,
+                               Instant lastProposalCreatedAt, long rejectionCount, long pendingCount) {
     }
 }
