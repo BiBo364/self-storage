@@ -1,16 +1,17 @@
-import { CalendarClock, ChevronRight, Search } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { Navigate } from "../../app/types";
+import { ChevronRight, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ApiError } from "../../app/api";
+import { fetchCurrentFmFacility } from "../../app/fmFacility";
+import { fetchFmRentalOrders } from "../../app/fmOrders";
+import type { FmRentalOrderSummary, Navigate } from "../../app/types";
 import { Button } from "../../components/ui/Button";
-import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
 import { FilterSelect } from "../../components/ui/FilterSelect";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
-import { fmOrders, type FmOrderStatus } from "../../mocks/orders";
 
 const STATUS: Record<
-  FmOrderStatus,
+  string,
   { label: string; tone: "success" | "warning" | "danger" | "info" | "neutral" }
 > = {
   Pending: { label: "Chờ xử lý", tone: "warning" },
@@ -21,34 +22,100 @@ const STATUS: Record<
   Canceled: { label: "Đã huỷ", tone: "danger" },
 };
 
-const ACTIVE_STATUSES: FmOrderStatus[] = ["Pending", "Deposited", "Scheduled", "InProgress"];
+const ACTIVE_STATUSES = ["Pending", "Deposited", "Scheduled", "InProgress"];
 
-function dateValue(value: string) {
-  const [day, month, year] = value.split("/").map(Number);
-  return new Date(year, month - 1, day).getTime();
+function formatDate(value: string | null) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short" }).format(new Date(value));
+}
+
+function deepLinkOrderId() {
+  const raw = new URLSearchParams(window.location.search).get("orderId");
+  const id = raw ? Number(raw) : NaN;
+  return Number.isFinite(id) && id > 0 ? id : null;
 }
 
 export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
-  const [status, setStatus] = useState<"all" | FmOrderStatus>("all");
+  const [status, setStatus] = useState("all");
   const [query, setQuery] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [items, setItems] = useState<FmRentalOrderSummary[]>([]);
+  const [openId, setOpenId] = useState<number | null>(deepLinkOrderId);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<{ status: number; message: string } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        const facility = await fetchCurrentFmFacility();
+        const page = await fetchFmRentalOrders(facility.id, undefined, 0, 100);
+        if (!active) return;
+        setItems(page.items);
+      } catch (caught) {
+        if (!active) return;
+        setError(
+          caught instanceof ApiError
+            ? { status: caught.status, message: caught.message }
+            : { status: 0, message: "Không thể kết nối tới máy chủ." },
+        );
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return fmOrders
+    return items
       .filter((order) => status === "all" || order.status === status)
       .filter((order) => {
         if (!term) return true;
-        return `${order.code} ${order.customerName} ${order.customerEmail} ${order.unitCode ?? ""}`
+        return `${order.id} ${order.customerName} ${order.customerEmail} ${order.unitCode ?? ""}`
           .toLowerCase()
           .includes(term);
-      })
-      .sort((left, right) => dateValue(left.expiresAt) - dateValue(right.expiresAt));
-  }, [status, query]);
+      });
+  }, [items, query, status]);
 
-  const openOrder = fmOrders.find((order) => order.id === openId) ?? null;
-  const activeCount = fmOrders.filter((order) => ACTIVE_STATUSES.includes(order.status)).length;
-  const closedCount = fmOrders.length - activeCount;
+  const openOrder = items.find((order) => order.id === openId) ?? null;
+  const activeCount = items.filter((order) => ACTIVE_STATUSES.includes(order.status)).length;
+  const closedCount = items.length - activeCount;
+
+  if (isLoading) {
+    return <SurfaceState variant="loading" title="Đang tải đơn thuê…" />;
+  }
+
+  if (error) {
+    if (error.status === 403 || error.status === 404) {
+      return (
+        <SurfaceState
+          variant="forbidden"
+          title="Bạn không có quyền xem đơn thuê cơ sở"
+          description={error.message}
+        />
+      );
+    }
+    return (
+      <SurfaceState
+        variant="error"
+        title="Không tải được danh sách đơn thuê"
+        description={error.message}
+        action={{
+          label: "Thử lại",
+          onClick: () => {
+            setIsLoading(true);
+            setError(null);
+            setReloadKey((key) => key + 1);
+          },
+        }}
+      />
+    );
+  }
 
   return (
     <div className="grid gap-6">
@@ -59,14 +126,10 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
         </p>
       </div>
 
-      <DemoNotice tone="info">
-        Prototype — dữ liệu minh hoạ; API danh sách đơn thuê chưa có.
-      </DemoNotice>
-
       <div className="grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
         <div className="bg-surface p-4">
           <strong className="block text-stat text-ink">
-            {String(fmOrders.length).padStart(2, "0")}
+            {String(items.length).padStart(2, "0")}
           </strong>
           <span className="text-label text-muted">Tổng đơn</span>
         </div>
@@ -85,11 +148,7 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
       </div>
 
       <div className="grid grid-cols-2 items-end gap-3 max-[760px]:grid-cols-1">
-        <FilterSelect
-          label="Trạng thái"
-          value={status}
-          onChange={(value) => setStatus(value as "all" | FmOrderStatus)}
-        >
+        <FilterSelect label="Trạng thái" value={status} onChange={setStatus}>
           <option value="all">Tất cả trạng thái</option>
           {Object.entries(STATUS).map(([value, meta]) => (
             <option key={value} value={value}>
@@ -98,65 +157,53 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
           ))}
         </FilterSelect>
         <label className="grid gap-1.5">
-          <span className="text-label text-muted">Tìm đơn / khách / khoang</span>
-          <div className="relative">
+          <span className="text-label font-semibold text-ink">Tìm kiếm</span>
+          <span className="relative">
             <Search
-              size={16}
+              size={15}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
             />
             <input
-              className="min-h-[42px] w-full border border-border bg-surface pl-9 pr-3 text-small text-ink"
+              className="w-full rounded-[2px] border border-rule-strong bg-surface py-2.5 pl-9 pr-3 text-small text-ink outline-0 focus:border-brand"
+              placeholder="Mã đơn, tên, email, khoang…"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="ORD-..., tên khách, mã khoang..."
             />
-          </div>
+          </span>
         </label>
       </div>
 
       {filtered.length === 0 ? (
-        <SurfaceState
-          variant="empty"
-          title="Không có đơn phù hợp"
-          description="Thử đổi trạng thái hoặc từ khoá tìm kiếm."
-        />
+        <SurfaceState variant="empty" title="Không có đơn phù hợp bộ lọc" />
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {filtered.map((order) => {
-            const meta = STATUS[order.status];
+            const meta = STATUS[order.status] ?? { label: order.status, tone: "neutral" as const };
             return (
-              <article key={order.id} className="border border-border bg-surface p-5">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-label text-muted">{order.code}</span>
-                      <StatusTag tone={meta.tone}>{meta.label}</StatusTag>
-                      {order.needsReproposal && (
-                        <span className="bg-warning-soft px-2 py-1 text-label font-semibold text-warning">
-                          Cần đề xuất lại
-                        </span>
-                      )}
-                    </div>
-                    <h2 className="mb-0 mt-2 text-section text-ink">{order.customerName}</h2>
-                    <p className="mb-0 mt-1 text-small text-muted">
-                      {order.unitCode ? `${order.unitCode} · ` : ""}
-                      {order.unitType}
-                    </p>
+              <button
+                key={order.id}
+                className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
+                onClick={() => setOpenId(order.id)}
+              >
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusTag tone={meta.tone}>{meta.label}</StatusTag>
+                    {order.needsRepropose && <StatusTag tone="warning">Cần đề xuất lại</StatusTag>}
+                    <strong className="text-small font-semibold text-ink">Đơn #{order.id}</strong>
                   </div>
-                  <div className="text-right max-[760px]:text-left">
-                    <span className="block text-label text-muted">{order.facility}</span>
-                    <span className="mt-0.5 flex items-center justify-end gap-1 text-label text-muted max-[760px]:justify-start">
-                      <CalendarClock size={14} /> Hết hạn {order.expiresAt}
+                  <span className="mt-1.5 block text-label text-muted">
+                    {order.customerName} · Khoang {order.unitCode ?? "—"} · Hạn{" "}
+                    {formatDate(order.expiresAt)}
+                  </span>
+                  {order.lastProposal && (
+                    <span className="mt-1 block text-label text-muted">
+                      Đề xuất gần nhất: {order.lastProposal.unitCode} · {order.lastProposal.status}{" "}
+                      · {order.rejectionCount}/{order.maxRejectionCount} từ chối
                     </span>
-                  </div>
+                  )}
                 </div>
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                  <span className="text-label text-muted">Tạo ngày {order.createdAt}</span>
-                  <Button size="sm" variant="secondary" onClick={() => setOpenId(order.id)}>
-                    Xem chi tiết <ChevronRight size={14} />
-                  </Button>
-                </div>
-              </article>
+                <ChevronRight size={16} className="text-muted" />
+              </button>
             );
           })}
         </div>
@@ -164,60 +211,49 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
 
       {openOrder && (
         <DetailPanel
-          title={openOrder.code}
-          eyebrow={openOrder.customerName}
+          title={`Đơn #${openOrder.id}`}
+          eyebrow={`${STATUS[openOrder.status]?.label ?? openOrder.status} · ${openOrder.customerName}`}
           onClose={() => setOpenId(null)}
-          footer={
-            openOrder.needsReproposal ? (
-              <Button onClick={() => navigate(`/fm/rental-orders/${openOrder.id}/re-propose`)}>
-                Đề xuất lại khoang <ChevronRight size={16} />
-              </Button>
-            ) : (
-              <Button variant="secondary" onClick={() => setOpenId(null)}>
-                Đóng
-              </Button>
-            )
-          }
         >
-          <dl className="grid gap-3 text-small">
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Trạng thái</dt>
-              <dd className="m-0">
-                <StatusTag tone={STATUS[openOrder.status].tone}>
-                  {STATUS[openOrder.status].label}
-                </StatusTag>
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Khách</dt>
-              <dd className="m-0 text-ink">{openOrder.customerName}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Email</dt>
-              <dd className="m-0 text-ink">{openOrder.customerEmail}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Khoang</dt>
-              <dd className="m-0 text-ink">{openOrder.unitCode ?? "Chưa gán"}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Loại khoang</dt>
-              <dd className="m-0 text-ink">{openOrder.unitType}</dd>
-            </div>
-            <div className="flex items-start justify-between gap-3">
-              <dt className="text-muted">Cơ sở</dt>
-              <dd className="m-0 text-right text-ink">{openOrder.facility}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Ngày tạo</dt>
-              <dd className="m-0 text-ink">{openOrder.createdAt}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Hết hạn giữ kho</dt>
-              <dd className="m-0 text-ink">{openOrder.expiresAt}</dd>
-            </div>
-          </dl>
-          {openOrder.cancelReason && <DemoNotice tone="error">{openOrder.cancelReason}</DemoNotice>}
+          <div className="grid gap-2 text-small text-muted">
+            <span>{openOrder.customerEmail}</span>
+            <span>{openOrder.customerPhone}</span>
+            <span>Khoang {openOrder.unitCode ?? "—"}</span>
+            <span>Hạn đơn {formatDate(openOrder.expiresAt)}</span>
+            {openOrder.cancelReason && <span>Lý do huỷ: {openOrder.cancelReason}</span>}
+            {openOrder.lastProposal && (
+              <span>
+                Đề xuất gần nhất: khoang {openOrder.lastProposal.unitCode} ·{" "}
+                {openOrder.lastProposal.status}
+                {openOrder.lastProposal.note ? ` — ${openOrder.lastProposal.note}` : ""}
+              </span>
+            )}
+            <span>
+              Đã từ chối {openOrder.rejectionCount}/{openOrder.maxRejectionCount} lần
+            </span>
+          </div>
+
+          {openOrder.needsRepropose && (
+            <Button
+              className="mt-6 w-full"
+              onClick={() => {
+                setOpenId(null);
+                navigate(`/fm/rental-orders/${openOrder.id}/re-propose`);
+              }}
+            >
+              Đề xuất lại khoang <ChevronRight size={16} />
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            className="mt-3 w-full"
+            onClick={() => {
+              setOpenId(null);
+              navigate("/fm/rental-orders");
+            }}
+          >
+            Đóng <ChevronRight size={16} />
+          </Button>
         </DetailPanel>
       )}
     </div>

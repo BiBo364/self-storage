@@ -2,47 +2,54 @@
 
 - **Route:** `/fm/rental-orders`
 - **Actor:** Facility Manager
-- **Flow tham chiếu:** Flow 1 (vòng đời `RentalOrder`) / `specs/db-table-draft.md` › RentalOrder
+- **Flow tham chiếu:** Flow 1 (vòng đời `RentalOrder`)
 
 ## Mục đích
 
-FM xem toàn bộ đơn thuê của cơ sở, lọc theo trạng thái, mở chi tiết và chuyển sang re-propose khi cần. Đây là page còn thiếu trong inventory FM trước đây — không thay thế hàng chờ `RentalRequest`.
+FM xem toàn bộ đơn thuê của cơ sở, lọc theo trạng thái, mở chi tiết và chuyển sang re-propose khi
+cần. Đây là nơi theo dõi đơn sau khi `RentalRequest` đã convert — không thay thế hàng chờ
+`RentalRequest` (`/fm/rental-requests`).
 
 ## Navigation
 
-- **Vào từ:** FM shell, notification, trang đề xuất lại.
-- **Đi tới:** detail panel; `/fm/rental-orders/:id/re-propose`; `/fm/contracts`.
+- **Vào từ:** FM shell, notification, hàng chờ yêu cầu (nút **Mở Đơn thuê kho** với
+  `?orderId={id}`), trang đề xuất lại.
+- **Đi tới:** detail panel; `/fm/rental-orders/{id}/re-propose`; `/fm/contracts`.
 
 ## Dữ liệu hiển thị
 
-- Mã đơn, khách, email, khoang, loại khoang, cơ sở.
-- `status`: `Pending` / `Deposited` / `Scheduled` / `InProgress` / `Done` / `Canceled`; `Canceled` kèm `cancel_reason`.
-- `created_at`, `expires_at`, cờ `needs_reproposal`.
+- Nguồn: `GET /api/fm/rental-orders?facilityId=&page=0&size=100`; cơ sở lấy từ `GET /api/fm/facility`.
+- Mỗi dòng: `id`, `status`, `cancelReason`, `expiresAt`, `unitCode`, khách (`customerName`,
+  `customerEmail`, `customerPhone`), `lastProposal`, `rejectionCount`/`maxRejectionCount`.
+- `status`: `Pending` / `Deposited` / `Scheduled` / `InProgress` / `Done` / `Canceled`; `Canceled`
+  kèm `cancelReason`.
+- Badge **Cần đề xuất lại** khi `needsRepropose = true` (flag BE tính, không phải raw
+  `needsReproposal`).
 - Không hiển thị PII thừa ngoài nhu cầu vận hành.
 
 ## Actions
 
-- Lọc theo trạng thái; tìm theo mã đơn / tên khách / email / mã khoang.
-- Mở detail panel.
-- `Đề xuất lại khoang` khi đơn chưa đóng và cần đề xuất lại.
+- Lọc theo trạng thái ở client; tìm theo mã đơn / tên khách / email / mã khoang.
+- Mở detail panel (thông tin khách, khoang, hạn đơn, lý do huỷ, đề xuất gần nhất, số lần từ chối).
+- `Đề xuất lại khoang` khi `needsRepropose = true` → `/fm/rental-orders/{id}/re-propose`.
+- Deep link `?orderId={id}` mở đúng detail panel của đơn đó.
 
 ## States / UI trạng thái
 
-- Loading khi fetch danh sách.
-- Empty khi filter không có kết quả.
-- Error khi fetch lỗi; forbidden nếu đơn ngoài facility.
-- Đơn `Done` / `Canceled`: không có action re-propose.
-- Nút re-propose chỉ hiện khi đơn chưa đóng và cần đề xuất lại.
+- Loading: "Đang tải đơn thuê…".
+- Empty: "Không có đơn phù hợp bộ lọc".
+- Error: SurfaceState lỗi + "Thử lại"; 403/404 → forbidden "Bạn không có quyền xem đơn thuê cơ sở".
+- Đơn `Done` / `Canceled`: không có nút re-propose.
 
 ## API liên quan
 
-- `GET /api/fm/rental-orders?facilityId=&status=&page=&size=` — API list chưa có; cần bổ sung contract + backend.
-- `GET /api/fm/rental-orders/{id}` — đã có, dùng cho detail/re-propose.
+- `GET /api/fm/facility` — cơ sở FM đang phụ trách (`facilityId`).
+- `GET /api/fm/rental-orders?facilityId=&status=&page=&size=` — danh sách đơn của cơ sở.
+- `GET /api/fm/rental-orders/{id}` — chi tiết đơn, dùng cho trang re-propose.
 
 ## Edge case / Lưu ý UX
 
-- `RentalOrder.status` không có `Expired`: quá hạn là `Canceled` + `cancel_reason`.
-- Facility scope: FM chỉ thấy đơn thuộc cơ sở; BE trả 403 nếu sai.
-- Không cho re-propose đơn `Done` / `Canceled`.
-- Sort `expires_at` tăng dần để đơn gần hạn lên trước.
-- Page hiện là prototype mock; khi nối API, bỏ mock và dùng `available_actions` nếu BE trả.
+- `RentalOrder.status` không có `Expired`: quá hạn là `Canceled` + `cancelReason`.
+- Facility scope kiểm ở BE (`rental_order.read`); FM chỉ thấy đơn cơ sở mình, sai cơ sở → 403.
+- Sort `expires_at` tăng dần (null cuối) để đơn gần hạn lên trước.
+- FE tải tối đa 100 đơn đầu tiên rồi lọc/tìm ở client; chưa phân trang UI.
