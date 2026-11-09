@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -82,6 +83,8 @@ class HandoverControllerTest {
     private HandoverWorkflowService workflow;
     @MockBean
     private ContractDocumentService documentService;
+    @MockBean
+    private vn.lemar.selfstorage.handover.application.ContractPdfService pdfService;
     @MockBean
     private HandoverReadRepository readRepository;
     @MockBean
@@ -255,6 +258,19 @@ class HandoverControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
                 .andExpect(content().string("<html>HD-Q7</html>"));
+    }
+
+    @Test
+    void contractDocumentDownloadsAsPdf() throws Exception {
+        login(CUSTOMER, "CUSTOMER", 6L);
+        when(pdfService.render(7L)).thenReturn("%PDF-1.7".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+
+        mockMvc.perform(as(get("/api/contracts/7/document.pdf"), CUSTOMER))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        org.hamcrest.Matchers.containsString("hop-dong-7.pdf")))
+                .andExpect(content().bytes("%PDF-1.7".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
     }
 
     @Test

@@ -259,6 +259,16 @@ Cascade "Không đến nhận kho quá hạn giữ"; chỉ báo khách `APPOINTM
 - người xem: khách của hợp đồng; hoặc account có `rental_order.read` — kiểm bằng `Access.canGlobalOrAt`: ADMIN/BOM
   (mapping `GLOBAL`) xem mọi cơ sở, FS/FM (mapping `FACILITY`) chỉ cơ sở của mình.
 
+`GET /api/contracts/{id}/document.pdf` trả cùng nội dung dạng PDF (`ContractPdfService`): sinh từ đúng HTML ở trên
+(cùng người xem, cùng 409), không lưu file — sinh lại khi tải. Font nhúng DejaVu Sans (`resources/fonts`, đủ dấu
+tiếng Việt); dòng mã hợp đồng / mẫu / trạng thái ở đầu bản HTML là phần chỉ hiện trên màn hình, không in và không có
+trong PDF.
+
+**Bản đã ký sau khi gia hạn:** bản hợp đồng đã ký (HTML/PDF chốt lúc ký, cùng bản scan `pdf_url`) chỉ chứng minh
+điều khoản gốc tại thời điểm ký — kỳ hạn, ngày kết thúc in trên đó là của lúc ký. Gia hạn không sinh phụ lục và không
+sửa bản đã ký; kỳ hạn hiện hành (`period`, `end_date`) là dữ liệu trên hệ thống, xem ở trang kho của khách và hoá đơn
+gia hạn đã thanh toán.
+
 ## Test
 
 - `handover/HandoverFlowIntegrationTest.java` (Postgres):

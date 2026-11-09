@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.handover.application.ContractDocumentService;
+import vn.lemar.selfstorage.handover.application.ContractPdfService;
 import vn.lemar.selfstorage.handover.application.HandoverWorkflowService;
 import vn.lemar.selfstorage.handover.repository.HandoverReadRepository;
 import vn.lemar.selfstorage.handover.repository.HandoverReadRepository.OverrideRequestRow;
@@ -23,13 +24,16 @@ import vn.lemar.selfstorage.identity.application.CurrentAccountProvider;
 public class ContractController {
 
     private final ContractDocumentService documentService;
+    private final ContractPdfService pdfService;
     private final HandoverWorkflowService workflow;
     private final HandoverReadRepository readRepository;
     private final CurrentAccountProvider currentAccount;
 
-    public ContractController(ContractDocumentService documentService, HandoverWorkflowService workflow,
-                              HandoverReadRepository readRepository, CurrentAccountProvider currentAccount) {
+    public ContractController(ContractDocumentService documentService, ContractPdfService pdfService,
+                              HandoverWorkflowService workflow, HandoverReadRepository readRepository,
+                              CurrentAccountProvider currentAccount) {
         this.documentService = documentService;
+        this.pdfService = pdfService;
         this.workflow = workflow;
         this.readRepository = readRepository;
         this.currentAccount = currentAccount;
@@ -43,6 +47,20 @@ public class ContractController {
         return ResponseEntity.ok()
                 .contentType(new MediaType(MediaType.TEXT_HTML, java.nio.charset.StandardCharsets.UTF_8))
                 .body(documentService.render(contractId));
+    }
+
+    @Operation(summary = "Bản hợp đồng (PDF để tải)",
+            description = "Sinh từ đúng HTML của `GET /api/contracts/{contractId}/document` (cùng quyền, cùng 409); "
+                    + "tải về dạng `hop-dong-{contractId}.pdf`.")
+    @GetMapping(value = "/api/contracts/{contractId}/document.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> documentPdf(@PathVariable Long contractId) {
+        byte[] pdf = pdfService.render(contractId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        org.springframework.http.ContentDisposition.attachment()
+                                .filename("hop-dong-" + contractId + ".pdf").build().toString())
+                .body(pdf);
     }
 
     @Operation(summary = "Đề nghị đổi mốc tính tiền đang chờ (FM)")

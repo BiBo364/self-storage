@@ -753,6 +753,42 @@ export async function openContractDocument(contractId: number): Promise<void> {
   }
 }
 
+/**
+ * GET /api/contracts/{id}/document.pdf — PDF sinh từ đúng bản HTML ở trên (cùng quyền). Cần bearer token nên tải
+ * qua fetch rồi lưu bằng Blob URL.
+ */
+export async function downloadContractPdf(contractId: number): Promise<void> {
+  const token = authGateway.getSession()?.token;
+  const response = await fetch(`${API_BASE_URL}/api/contracts/${contractId}/document.pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const parsed: unknown = await response.json();
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "message" in parsed &&
+        typeof parsed.message === "string"
+      ) {
+        message = parsed.message;
+      }
+    } catch {
+      // body không phải JSON
+    }
+    throw new ApiError(response.status, message);
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `hop-dong-${contractId}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 // ---------------------------------------------------------------- Support
 
 /** SupportService.SupportView. */

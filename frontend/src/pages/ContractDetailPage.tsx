@@ -1,4 +1,12 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, FileText, KeyRound, MapPin } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Download,
+  FileText,
+  KeyRound,
+  MapPin,
+} from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import type { Navigate } from "../app/types";
 import { pathId } from "../app/routes";
@@ -15,6 +23,7 @@ import {
   fetchRental,
   INVOICE_STATUS,
   INVOICE_TYPE_LABEL,
+  downloadContractPdf,
   openContractDocument,
   requestExtension,
   requestReturn,
@@ -70,6 +79,7 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
 
   const [notice, setNotice] = useState<Notice>(null);
   const [docPending, setDocPending] = useState(false);
+  const [pdfPending, setPdfPending] = useState(false);
   const [codeConfirm, setCodeConfirm] = useState(false);
   const [codePending, setCodePending] = useState(false);
   const [accessCode, setAccessCode] = useState<string | null>(null);
@@ -91,6 +101,18 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
       setNotice({ tone: "error", message: errorMessage(caught) });
     } finally {
       setDocPending(false);
+    }
+  }
+
+  async function downloadPdf() {
+    setPdfPending(true);
+    setNotice(null);
+    try {
+      await downloadContractPdf(contractId);
+    } catch (caught) {
+      setNotice({ tone: "error", message: errorMessage(caught) });
+    } finally {
+      setPdfPending(false);
     }
   }
 
@@ -190,6 +212,9 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
           </StatusTag>
           <Button variant="secondary" pending={docPending} onClick={openDocument}>
             {!docPending && <FileText size={16} />} Xem bản hợp đồng
+          </Button>
+          <Button variant="secondary" pending={pdfPending} onClick={downloadPdf}>
+            {!pdfPending && <Download size={16} />} Tải PDF
           </Button>
         </div>
       </div>
