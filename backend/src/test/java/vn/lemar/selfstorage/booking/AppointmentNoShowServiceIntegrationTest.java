@@ -9,6 +9,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,6 +28,9 @@ import vn.lemar.selfstorage.booking.application.AppointmentNoShowService;
 @Testcontainers(disabledWithoutDocker = true)
 @Transactional
 class AppointmentNoShowServiceIntegrationTest {
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     @Container
     @ServiceConnection
@@ -117,7 +121,7 @@ class AppointmentNoShowServiceIntegrationTest {
         Map<String, Object> notification = jdbc.queryForMap(
                 "select type, title, body from notifications where account_id = ?", customerId);
         assertThat(notification.get("type")).isEqualTo("APPOINTMENT_CANCELED_NO_SHOW");
-        assertThat((String) notification.get("body")).contains("http://localhost:5173/appointments/new");
+        assertThat((String) notification.get("body")).contains(frontendUrl + "/appointments/new");
         assertThat(jdbc.queryForObject("select order_id from order_notifications where notification_id = "
                 + "(select id from notifications where account_id = ?)", Long.class, customerId)).isEqualTo(orderId);
     }

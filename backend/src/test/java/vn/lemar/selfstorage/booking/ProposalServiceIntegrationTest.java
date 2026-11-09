@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,6 +50,9 @@ import vn.lemar.selfstorage.identity.application.exception.ForbiddenException;
 @Testcontainers(disabledWithoutDocker = true)
 @Transactional
 class ProposalServiceIntegrationTest {
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     @Container
     @ServiceConnection
@@ -502,7 +506,7 @@ class ProposalServiceIntegrationTest {
         assertThat(auditReason(view.id())).isNull();
         assertThat(notificationsOf(customerId)).singleElement().satisfies(row -> {
             assertThat(row.get("type")).isEqualTo("PROPOSAL_REPROPOSED");
-            assertThat((String) row.get("body")).contains("http://localhost:5173/proposals");
+            assertThat((String) row.get("body")).contains(frontendUrl + "/proposals");
         });
     }
 
