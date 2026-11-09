@@ -129,6 +129,9 @@ class SupportBackofficeIntegrationTest {
         assertThat(support.staffRequests()).extracting(SupportView::id).contains(created.id());
         assertThatThrownBy(() -> support.resolve(created.id(), new ResolveInput(" ", null, null)))
                 .isInstanceOf(TenancyException.class);
+        assertThatThrownBy(() -> support.resolve(created.id(), new ResolveInput("Phí lẻ", null,
+                new BigDecimal("50000.75")))).isInstanceOf(TenancyException.class)
+                .hasMessageContaining("số nguyên");
         SupportView resolved = support.resolve(created.id(), new ResolveInput("Đã giao 2 chìa mới", 2,
                 new BigDecimal("50000")));
         assertThat(resolved.status()).isEqualTo("Resolved");

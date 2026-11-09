@@ -229,6 +229,10 @@ public class SupportService {
         if (input.feeAmount() != null && input.feeAmount().signum() < 0) {
             throw TenancyException.invalid("Phí không được âm");
         }
+        // Cổng (payOS) chỉ thu số nguyên VND — phần lẻ làm số tiền thu ≠ hoá đơn, giao dịch không chốt được.
+        if (input.feeAmount() != null && input.feeAmount().stripTrailingZeros().scale() > 0) {
+            throw TenancyException.invalid("Phí phải là số nguyên (VND)");
+        }
         SupportRequest peek = requests.findById(id).orElseThrow(() -> TenancyException.notFound(MSG_NOT_FOUND));
         Long actorId = currentAccount.getCurrentAccountId();
         if (actorId.equals(peek.getAssignedStaffId())) {

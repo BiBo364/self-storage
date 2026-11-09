@@ -51,7 +51,7 @@ Bearer token + `ACCOUNT_ACTIVE`; prefix quyết role (`/api/customer/**` → `CU
 | POST | `/api/fm/support-requests/{id}/assign` `{staffId}` | FM có `appointment.assign` tại cơ sở của yêu cầu | 400 FS không thuộc cơ sở / không hoạt động; 403; 404; 409 đã đóng |
 | POST | `/api/fm/support-requests/{id}/resolve` `{resolution, newKeyQuantity?, feeAmount?}` | FM có `appointment.assign` tại cơ sở | như route FS bên dưới |
 | GET | `/api/staff/support-requests` | FS — yêu cầu `Assigned` giao cho mình | — |
-| POST | `/api/staff/support-requests/{id}/resolve` `{resolution, newKeyQuantity?, feeAmount?}` | FS được giao, có `unit_access_key.issue` tại cơ sở (người khác phải có `appointment.assign`) | 400 thiếu/quá dài `resolution` (2000), `newKeyQuantity` ngoài 0–10, `feeAmount` âm; 403; 404; 409 đã đóng, thay chìa / thu phí khi yêu cầu không gắn hợp đồng hoặc hợp đồng không `Active` |
+| POST | `/api/staff/support-requests/{id}/resolve` `{resolution, newKeyQuantity?, feeAmount?}` | FS được giao, có `unit_access_key.issue` tại cơ sở (người khác phải có `appointment.assign`) | 400 thiếu/quá dài `resolution` (2000), `newKeyQuantity` ngoài 0–10, `feeAmount` âm hoặc có phần lẻ (VND nguyên); 403; 404; 409 đã đóng, thay chìa / thu phí khi yêu cầu không gắn hợp đồng hoặc hợp đồng không `Active` |
 
 ## Test
 
