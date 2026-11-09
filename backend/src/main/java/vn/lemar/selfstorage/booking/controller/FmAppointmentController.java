@@ -68,7 +68,9 @@ public class FmAppointmentController {
     }
 
     @Operation(summary = "Nhân viên FS của cơ sở",
-            description = "FS đang hoạt động được gán vào cơ sở, để FM chọn khi phân công. "
+            description = "FS đang hoạt động được gán vào cơ sở, để FM chọn khi phân công. Mỗi FS kèm ca tại cơ sở "
+                    + "(`shift` = ca đầu tiên, `shifts` = mọi ca), `onLeave`, `openWork` (lịch check-in / trả kho "
+                    + "`Pending` trong ngày) và `openSupport` của ngày `date` (mặc định hôm nay, giờ VN). "
                     + "Quyền `appointment.assign` theo cơ sở.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy danh sách thành công"),
@@ -77,8 +79,9 @@ public class FmAppointmentController {
             @ApiResponse(responseCode = "404", description = "Cơ sở không tồn tại")
     })
     @GetMapping("/facilities/{facilityId}/staff")
-    public ResponseEntity<ApiEnvelope<List<FmFacilityStaffResponse>>> staff(@PathVariable Long facilityId) {
-        return ResponseEntity.ok(ApiEnvelope.ok(STAFF_MESSAGE, queryService.staffOfFacility(facilityId)));
+    public ResponseEntity<ApiEnvelope<List<FmFacilityStaffResponse>>> staff(@PathVariable Long facilityId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ResponseEntity.ok(ApiEnvelope.ok(STAFF_MESSAGE, queryService.staffOfFacility(facilityId, date)));
     }
 
     @Operation(summary = "Phân công FS cho lịch check-in",
@@ -92,7 +95,8 @@ public class FmAppointmentController {
             @ApiResponse(responseCode = "403", description = "Không phải role FM, hoặc ngoài phạm vi cơ sở"),
             @ApiResponse(responseCode = "404", description = "Lịch hẹn không tồn tại"),
             @ApiResponse(responseCode = "409", description = "Lịch không phải check-in, không còn Pending, đã có FS, "
-                    + "hoặc đơn không ở trạng thái chờ phân công")
+                    + "đơn không ở trạng thái chờ phân công, FS nghỉ phép ngày hẹn, hoặc (policy "
+                    + "`staff.shift_required` bật) FS không có ca tại cơ sở bao trọn giờ hẹn")
     })
     @PostMapping("/appointments/{appointmentId}/staff")
     public ResponseEntity<ApiEnvelope<FmAppointmentResponse>> assignStaff(
@@ -115,7 +119,8 @@ public class FmAppointmentController {
             @ApiResponse(responseCode = "403", description = "Không phải role FM, hoặc ngoài phạm vi cơ sở"),
             @ApiResponse(responseCode = "404", description = "Lịch hẹn không tồn tại"),
             @ApiResponse(responseCode = "409", description = "Lịch không phải check-in, không còn Pending, chưa có FS, "
-                    + "đã là FS này, hoặc đơn không ở InProgress")
+                    + "đã là FS này, đơn không ở InProgress, FS nghỉ phép ngày hẹn, hoặc (policy "
+                    + "`staff.shift_required` bật) FS không có ca tại cơ sở bao trọn giờ hẹn")
     })
     @PutMapping("/appointments/{appointmentId}/staff")
     public ResponseEntity<ApiEnvelope<FmAppointmentResponse>> reassignStaff(

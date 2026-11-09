@@ -31,7 +31,7 @@ Mọi route cần bearer token + `ACCOUNT_ACTIVE`; prefix quyết role (`/api/cu
 | GET | `/api/customer/return-requests` | khách — mọi yêu cầu trả kho của mình, mới nhất trước | — |
 | POST | `/api/customer/return-requests/{id}/cancel` | khách chủ yêu cầu | 404 "Không tìm thấy yêu cầu trả kho"; 409 yêu cầu đã đóng, FS đã xác nhận khách đến |
 | GET | `/api/fm/return-requests?facilityId=` | FM có `rental_order.read` tại cơ sở — yêu cầu `Pending`/`Assigned`, cũ nhất trước | 403 thiếu quyền / ngoài phạm vi cơ sở |
-| POST | `/api/fm/return-requests/{id}/assign` body `{staffId}` | FM có `appointment.assign` tại cơ sở của yêu cầu | 400 FS không thuộc cơ sở hoặc không hoạt động; 403; 404; 409 yêu cầu đã đóng, buổi trả kho đã bắt đầu, không còn khung trống trong 14 ngày |
+| POST | `/api/fm/return-requests/{id}/assign` body `{staffId}` | FM có `appointment.assign` tại cơ sở của yêu cầu | 400 FS không thuộc cơ sở hoặc không hoạt động; 403; 404; 409 yêu cầu đã đóng, buổi trả kho đã bắt đầu, không còn khung trống trong 14 ngày, FS nghỉ phép ngày hẹn / không có ca tại cơ sở bao trọn khung giờ vừa đặt ([backoffice/hr.md](../backoffice/hr.md#luật-phân-công-theo-ca--nghỉ-phép)) |
 | GET | `/api/staff/return-requests` | FS — yêu cầu `Assigned` phân cho chính mình | — |
 | GET | `/api/fm/overdue-contracts?facilityId=` | FM có `rental_order.read` tại cơ sở | 403 thiếu quyền / ngoài phạm vi cơ sở |
 
@@ -75,7 +75,7 @@ Route trả kho tại cơ sở (`…/checkout`) thuộc [checkout/return.md](../
 | Bước | Ai | Kết quả |
 |---|---|---|
 | Gửi yêu cầu | Khách, hợp đồng `Active` | `ReturnRequest` `Pending`, `preferred_date` trong 30 ngày tới; FM nhận `RETURN_REQUESTED`; audit `RETURN_REQUESTED` |
-| Phân công | FM (`appointment.assign` + facility scope), FS đang hoạt động của cơ sở | lịch `RETURN` (`Pending`, có `staff_id`) ở khung trống đầu tiên từ `preferred_date`, tìm tối đa 14 ngày; `Assigned`; khách + FS nhận `RETURN_SCHEDULED`; ngày khách chọn đã kín và lịch bị dời sang ngày khác → khách nhận thêm `RETURN_DATE_SHIFTED` (ngày giờ mới); audit `RETURN_ASSIGNED` |
+| Phân công | FM (`appointment.assign` + facility scope), FS đang hoạt động của cơ sở | lịch `RETURN` (`Pending`, có `staff_id`) ở khung trống đầu tiên từ `preferred_date` mà FS có ca bao trọn và không nghỉ phép (không khung trống nào thoả thì lấy khung trống đầu tiên và báo 409 bên dưới), tìm tối đa 14 ngày; `Assigned`; khách + FS nhận `RETURN_SCHEDULED`; ngày khách chọn đã kín và lịch bị dời sang ngày khác → khách nhận thêm `RETURN_DATE_SHIFTED` (ngày giờ mới); audit `RETURN_ASSIGNED`. Khung được chọn vẫn kiểm lại: FS phải không nghỉ phép ngày đó và (policy `staff.shift_required` bật) có ca tại cơ sở bao trọn khung giờ — vi phạm → 409, rollback cả lịch vừa đặt |
 | Phân công lại | FM | lịch cũ chưa có khách đến → `Canceled`, tạo lịch mới |
 | Huỷ | Khách | chỉ khi FS chưa xác nhận khách đến; lịch `Pending` → `Canceled`; audit `RETURN_CANCELED` |
 | Khách không đến | cron `ReturnNoShowJob` | [bên dưới](#khách-không-đến-buổi-trả-kho) |

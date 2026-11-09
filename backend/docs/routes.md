@@ -29,7 +29,7 @@ hữu route (xem quy ước ở cuối trang).
 | POST | `/api/fm/rental-requests/{id}/approve` | Bearer + role `FM`; `rental_request.approve` + facility scope | Duyệt yêu cầu đặt kho, gán khoang; email đã xác minh thì convert ngay (response vẫn `Approved`) | [routes/booking/fm-rental-request-approve.md](routes/booking/fm-rental-request-approve.md) |
 | POST | `/api/fm/rental-requests/{id}/reject` | Bearer + role `FM`; `rental_request.reject` + facility scope | Từ chối yêu cầu đặt kho + mail (dừng ở Rejected) | [routes/booking/fm-rental-request-reject.md](routes/booking/fm-rental-request-reject.md) |
 | GET | `/api/fm/appointments` | Bearer + role `FM`; `appointment.read` + facility scope | Lịch check-in của cơ sở theo ngày | [routes/booking/fm-appointment-day-list.md](routes/booking/fm-appointment-day-list.md) |
-| GET | `/api/fm/facilities/{facilityId}/staff` | Bearer + role `FM`; `appointment.assign` + facility scope | FS đang hoạt động của cơ sở | [routes/booking/fm-facility-staff.md](routes/booking/fm-facility-staff.md) |
+| GET | `/api/fm/facilities/{facilityId}/staff` | Bearer + role `FM`; `appointment.assign` + facility scope | FS đang hoạt động của cơ sở, kèm ca / nghỉ phép / việc còn mở của ngày `date` | [routes/booking/fm-facility-staff.md](routes/booking/fm-facility-staff.md) |
 | POST | `/api/fm/appointments/{appointmentId}/staff` | Bearer + role `FM`; `appointment.assign` + facility scope | Phân công FS cho lịch check-in, đơn `Scheduled → InProgress` | [routes/booking/fm-appointment-assign-staff.md](routes/booking/fm-appointment-assign-staff.md) |
 | PUT | `/api/fm/appointments/{appointmentId}/staff` | Bearer + role `FM`; `appointment.assign` + facility scope | Đổi FS của lịch check-in đã phân công, khách chưa đến | [routes/booking/fm-appointment-assign-staff.md](routes/booking/fm-appointment-assign-staff.md#put--đổi-fs) |
 | GET | `/api/staff/appointments` | Bearer + role `FS`; `appointment.read` + đúng FS | Lịch làm việc của FS theo ngày | [routes/booking/staff-appointment-day-list.md](routes/booking/staff-appointment-day-list.md) |
@@ -82,6 +82,15 @@ hữu route (xem quy ước ở cuối trang).
 | GET / POST | `/api/fm/invoices/{invoiceId}/refunds` | Bearer + role `FM`; `payment_transaction.refund` + facility scope (cơ sở của hoá đơn) | Lịch sử hoàn tiền / ghi nhận hoàn tiền thủ công | [routes/booking/fm-invoice-refunds.md](routes/booking/fm-invoice-refunds.md) |
 | GET | `/api/fm/facilities/{id}/access-options` | Bearer + role `FM`; `facility.access` + facility scope | Cơ sở + hình thức truy cập đang bật | [backoffice/overview.md](backoffice/overview.md) |
 | PUT | `/api/fm/facilities/{id}/access-options` | Bearer + role `FM`; `facility.access` + facility scope | Bật / tắt khóa cơ, mã số | [backoffice/overview.md](backoffice/overview.md) |
+| GET / POST / PUT / DELETE | `/api/fm/staff-shifts`, `/api/fm/staff-shifts/{id}` | Bearer + role `FM`; `staff_shift.manage` + facility scope | Ca làm việc của FS tại cơ sở (chồng ca / nghỉ phép / lịch rơi khỏi ca → 409) | [backoffice/hr.md](backoffice/hr.md) |
+| GET / POST | `/api/fm/staff-leaves`, `/api/fm/staff-leaves/{id}/approve`, `/api/fm/staff-leaves/{id}/reject` | Bearer + role `FM`; `staff_leave.review` + facility scope | Đơn nghỉ phép của FS thuộc cơ sở; duyệt (FS còn việc → 409; xoá ca trong khoảng nghỉ) / từ chối | [backoffice/hr.md](backoffice/hr.md) |
+| GET | `/api/fm/staff/{id}/profile` | Bearer + role `FM`; `staff_profile.read` + facility scope | Hồ sơ FS (không có số giấy tờ) | [backoffice/hr.md](backoffice/hr.md) |
+| GET | `/api/fm/reports/staff` | Bearer + role `FM`; `facility.access` + facility scope | Báo cáo nhân sự của cơ sở | [backoffice/hr.md](backoffice/hr.md) |
+| GET | `/api/staff/shifts` | Bearer + role `FS`; ownership | Ca của tôi | [backoffice/hr.md](backoffice/hr.md) |
+| GET / POST | `/api/staff/leaves`, `/api/staff/leaves/{id}/cancel` | Bearer + role `FS`; ownership | Đơn nghỉ phép của tôi / gửi / huỷ | [backoffice/hr.md](backoffice/hr.md) |
+| GET | `/api/staff/profile` | Bearer + role `FS`; ownership | Hồ sơ của tôi (không có số giấy tờ) | [backoffice/hr.md](backoffice/hr.md) |
+| GET / PUT | `/api/bom/staff/{id}/profile`, `/api/admin/accounts/{id}/profile` | Bearer + role `BOM` / `ADMIN`; `staff_profile.read` / `staff_profile.manage` | Hồ sơ nhân viên FS / FM đầy đủ (gồm số giấy tờ) | [backoffice/hr.md](backoffice/hr.md) |
+| GET | `/api/bom/reports/staff` | Bearer + role `BOM` | Báo cáo nhân sự toàn chuỗi / một cơ sở | [backoffice/hr.md](backoffice/hr.md) |
 | GET / POST / PATCH / PUT | `/api/bom/facilities…`, `/api/bom/policies…`, `/api/bom/unit-types…`, `/api/bom/storage-units/{id}`, `/api/bom/reports`, `/api/bom/invoices`, `/api/bom/managers`, `/api/bom/staff…` | Bearer + role `BOM` | Quản lý cơ sở, FM, gán FS vào cơ sở, policy, giá; báo cáo toàn chuỗi | [backoffice/overview.md](backoffice/overview.md) |
 | GET / POST / PATCH / PUT | `/api/admin/accounts…`, `/api/admin/login-events`, `/api/admin/audit-logs`, `/api/admin/permissions`, `/api/admin/roles/{role}/permissions` | Bearer + role `ADMIN` | Tài khoản, phân quyền, lịch sử đăng nhập, nhật ký | [backoffice/overview.md](backoffice/overview.md) |
 | PATCH | `/api/notifications/{notificationId}/read` | Chủ tài nguyên | Đánh dấu một thông báo đã đọc | [routes/notification/mark-read.md](routes/notification/mark-read.md) |
@@ -122,7 +131,8 @@ Ghi chú:
     `/api/health`;
   - **doc module** cho route của `tenancy` + `overdue` ([tenancy/rentals.md](tenancy/rentals.md)), `checkout`
     ([checkout/return.md](checkout/return.md)), `support` ([support/requests.md](support/requests.md)),
-    `backoffice` ([backoffice/overview.md](backoffice/overview.md)) và `chat` ([chat/assistant.md](chat/assistant.md)).
+    `backoffice` ([backoffice/overview.md](backoffice/overview.md)), `staffing` ([backoffice/hr.md](backoffice/hr.md)) và
+    `chat` ([chat/assistant.md](chat/assistant.md)).
     Doc module liệt kê từng route nó sở hữu với method + path + ai gọi được + lỗi chính.
 - Thêm route mới → thêm một dòng vào bảng này và mô tả route ở đúng nơi theo module như trên.
 - Quy ước chung (base URL, error body, 401 vs 403): xem

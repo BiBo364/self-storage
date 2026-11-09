@@ -14,7 +14,7 @@ trong `routes/`; field chi tiết ở Swagger trên `SupportController`). Code:
 | Bước | Ai | Điều kiện | Kết quả |
 |---|---|---|---|
 | Gửi | Khách | gắn `contractId` (hợp đồng của mình) hoặc chọn `facilityId`; `LOST_KEY` bắt buộc hợp đồng; tiêu đề ≤ 255, mô tả ≤ 4000, ảnh ≤ 10 (ảnh là upload `Pending` của khách thì attach phía server) | `Open`; FM của cơ sở nhận `SUPPORT_REQUEST_CREATED`; audit `SUPPORT_REQUEST_CREATED` |
-| Giao | FM (`appointment.assign` + facility scope), FS đang hoạt động của cơ sở | yêu cầu còn mở (giao lại được) | `Assigned`; FS và khách nhận `SUPPORT_ASSIGNED`; audit `SUPPORT_REQUEST_ASSIGNED` |
+| Giao | FM (`appointment.assign` + facility scope), FS đang hoạt động của cơ sở, không nghỉ phép hôm nay và (policy `staff.shift_required` bật) có ca tại cơ sở hôm nay ([backoffice/hr.md](../backoffice/hr.md#luật-phân-công-theo-ca--nghỉ-phép)) | yêu cầu còn mở (giao lại được) | `Assigned`; FS và khách nhận `SUPPORT_ASSIGNED`; audit `SUPPORT_REQUEST_ASSIGNED` |
 | Xử lý | FS được giao (`unit_access_key.issue`) hoặc FM của cơ sở | còn mở; kết quả ≤ 2000 ký tự | `Resolved`; khách nhận `SUPPORT_RESOLVED`; audit `SUPPORT_REQUEST_RESOLVED` |
 | Huỷ | Khách | còn mở | `Canceled`; audit `SUPPORT_REQUEST_CANCELED` |
 
@@ -48,7 +48,7 @@ Bearer token + `ACCOUNT_ACTIVE`; prefix quyết role (`/api/customer/**` → `CU
 | POST | `/api/customer/support-requests` `{contractId?, facilityId?, category, title, description, photos?}` | khách | 400 thiếu/quá dài `title` (255) / `description` (4000), `category` sai, > 10 ảnh, không chọn hợp đồng lẫn cơ sở hợp lệ, `LOST_KEY` không gắn hợp đồng; 404 hợp đồng không phải của khách |
 | POST | `/api/customer/support-requests/{id}/cancel` | khách chủ yêu cầu | 404 (không có / của khách khác); 409 "Yêu cầu hỗ trợ đã đóng" |
 | GET | `/api/fm/support-requests?facilityId=&includeClosed=` | FM có `rental_order.read` tại cơ sở; mặc định chỉ `Open`/`Assigned` | 403 thiếu quyền / ngoài cơ sở |
-| POST | `/api/fm/support-requests/{id}/assign` `{staffId}` | FM có `appointment.assign` tại cơ sở của yêu cầu | 400 FS không thuộc cơ sở / không hoạt động; 403; 404; 409 đã đóng |
+| POST | `/api/fm/support-requests/{id}/assign` `{staffId}` | FM có `appointment.assign` tại cơ sở của yêu cầu | 400 FS không thuộc cơ sở / không hoạt động; 403; 404; 409 đã đóng, FS nghỉ phép hôm nay, FS không có ca tại cơ sở hôm nay |
 | POST | `/api/fm/support-requests/{id}/resolve` `{resolution, newKeyQuantity?, feeAmount?}` | FM có `appointment.assign` tại cơ sở | như route FS bên dưới |
 | GET | `/api/staff/support-requests` | FS — yêu cầu `Assigned` giao cho mình | — |
 | POST | `/api/staff/support-requests/{id}/resolve` `{resolution, newKeyQuantity?, feeAmount?}` | FS được giao, có `unit_access_key.issue` tại cơ sở (người khác phải có `appointment.assign`) | 400 thiếu/quá dài `resolution` (2000), `newKeyQuantity` ngoài 0–10, `feeAmount` âm hoặc có phần lẻ (VND nguyên); 403; 404; 409 đã đóng, thay chìa / thu phí khi yêu cầu không gắn hợp đồng hoặc hợp đồng không `Active` |

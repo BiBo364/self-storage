@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.backoffice.application.BackofficeService;
 import vn.lemar.selfstorage.backoffice.application.BackofficeService.Report;
+import vn.lemar.selfstorage.backoffice.application.BackofficeService.StaffReport;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.AuditRow;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.ContractRow;
@@ -75,6 +76,16 @@ public class BackofficeController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ok("Báo cáo cơ sở", backoffice.facilityReport(facilityId, from, to));
+    }
+
+    @Operation(summary = "Báo cáo nhân sự của cơ sở", description = "Mỗi FS (đang gán hoặc có lịch hẹn / ca ở cơ sở "
+            + "trong khoảng): check-in / trả kho đã xong, bàn giao / trả kho hoàn tất, hỗ trợ đã xử lý, giờ ca, ngày "
+            + "nghỉ phép đã duyệt. Mặc định tháng hiện tại, tối đa 366 ngày. Quyền `facility.access` theo cơ sở.")
+    @GetMapping("/api/fm/reports/staff")
+    public ResponseEntity<ApiEnvelope<StaffReport>> fmStaffReport(@RequestParam Long facilityId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ok("Báo cáo nhân sự", backoffice.facilityStaffReport(facilityId, from, to));
     }
 
     @PostMapping("/api/fm/storage-units")
@@ -205,6 +216,15 @@ public class BackofficeController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ok("Báo cáo doanh thu", backoffice.chainReport(facilityId, from, to));
+    }
+
+    @Operation(summary = "Báo cáo nhân sự toàn chuỗi", description = "Như `/api/fm/reports/staff`; bỏ `facilityId` "
+            + "= mọi FS toàn chuỗi. `facilityId` không tồn tại → 400.")
+    @GetMapping("/api/bom/reports/staff")
+    public ResponseEntity<ApiEnvelope<StaffReport>> bomStaffReport(@RequestParam(required = false) Long facilityId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ok("Báo cáo nhân sự", backoffice.chainStaffReport(facilityId, from, to));
     }
 
     @GetMapping("/api/bom/invoices")

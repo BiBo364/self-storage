@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,8 @@ import vn.lemar.selfstorage.identity.domain.Account;
 import vn.lemar.selfstorage.identity.domain.AccountStatus;
 import vn.lemar.selfstorage.identity.domain.Role;
 import vn.lemar.selfstorage.identity.repository.AccountRepository;
+import vn.lemar.selfstorage.staffing.application.StaffAvailability.DayWork;
+import vn.lemar.selfstorage.staffing.application.StaffAvailability.ShiftTime;
 
 /** HTTP contract của màn lịch hẹn FM: guard role {@code /api/fm/**} + đổi exception thành status code. */
 @WebMvcTest(controllers = FmAppointmentController.class)
@@ -125,14 +128,20 @@ class FmAppointmentControllerTest {
     @Test
     void staffListReturnsFacilityStaff() throws Exception {
         authenticate(FM, "FM");
-        when(queryService.staffOfFacility(1L)).thenReturn(List.of(new FmFacilityStaffResponse(4L, "FS Quận 7",
-                "fs1@lemar.vn", "0901234567", Instant.parse("2026-11-01T00:00:00Z"))));
+        LocalDate day = LocalDate.parse("2026-11-12");
+        ShiftTime shift = new ShiftTime(LocalTime.of(7, 0), LocalTime.of(21, 0));
+        when(queryService.staffOfFacility(1L, day)).thenReturn(List.of(new FmFacilityStaffResponse(4L, "FS Quận 7",
+                "fs1@lemar.vn", "0901234567", Instant.parse("2026-11-01T00:00:00Z"), day, shift, List.of(shift),
+                false, new DayWork(1, 0), 2)));
 
-        mockMvc.perform(as(get("/api/fm/facilities/1/staff"), FM))
+        mockMvc.perform(as(get("/api/fm/facilities/1/staff?date=2026-11-12"), FM))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value(FmAppointmentController.STAFF_MESSAGE))
                 .andExpect(jsonPath("$.data[0].name").value("FS Quận 7"))
-                .andExpect(jsonPath("$.data[0].email").value("fs1@lemar.vn"));
+                .andExpect(jsonPath("$.data[0].email").value("fs1@lemar.vn"))
+                .andExpect(jsonPath("$.data[0].shift.startTime").value("07:00"))
+                .andExpect(jsonPath("$.data[0].openWork.checkins").value(1))
+                .andExpect(jsonPath("$.data[0].openSupport").value(2));
     }
 
     @Test

@@ -78,7 +78,9 @@ public class TenancyController {
     }
 
     @Operation(summary = "Phân công FS cho buổi trả kho (FM)",
-            description = "Tạo lịch `RETURN` ở khung trống đầu tiên từ ngày khách chọn (dùng chung khung check-in).")
+            description = "Tạo lịch `RETURN` ở khung trống đầu tiên từ ngày khách chọn (dùng chung khung check-in). "
+                    + "409 khi FS nghỉ phép ngày hẹn hoặc (policy `staff.shift_required` bật) không có ca tại cơ sở "
+                    + "bao trọn khung giờ vừa đặt — lịch vừa tạo rollback.")
     @PostMapping("/api/fm/return-requests/{id}/assign")
     public ResponseEntity<ApiEnvelope<ReturnRequestView>> assign(@PathVariable Long id,
                                                                  @Valid @RequestBody AssignBody body) {

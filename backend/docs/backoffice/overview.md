@@ -15,6 +15,7 @@ Spec Flow 4/5 chỉ có tiêu đề; trang này là hành vi as-built và là co
 | Ghi cơ sở / khoang | `facility/application/FacilityAdminCommands.java` |
 | Ghi policy / giá loại khoang | `pricing/application/PricingAdminCommands.java` |
 | Tài khoản, phân quyền, lịch sử đăng nhập | `identity/application/AccountAdminService.java` |
+| Nhân sự: ca làm việc, nghỉ phép, hồ sơ nhân viên, báo cáo nhân sự | [hr.md](hr.md) (module `staffing`) |
 
 Mọi route cần bearer token + `ACCOUNT_ACTIVE` và đúng role theo prefix (`/api/fm/**` → `FM`, `/api/bom/**` →
 `BOM`, `/api/admin/**` → `ADMIN`; sai role → 403). Lỗi nghiệp vụ của `BackofficeController`
@@ -28,6 +29,7 @@ Mọi route cần bearer token + `ACCOUNT_ACTIVE` và đúng role theo prefix (`
 |---|---|---|
 | GET | `/api/fm/contracts?facilityId=&status=` | hợp đồng của cơ sở + tổng hoá đơn `Unpaid` |
 | GET | `/api/fm/reports?facilityId=&from=&to=` | KPI (gồm cọc đang giữ), doanh thu theo tháng × loại (bên dưới), số khoang theo trạng thái. Mặc định 6 tháng gần nhất |
+| GET | `/api/fm/reports/staff?facilityId=&from=&to=` | báo cáo nhân sự của cơ sở — [hr.md › Báo cáo nhân sự](hr.md#báo-cáo-nhân-sự) |
 | POST | `/api/fm/storage-units` `{facilityId, code, unitTypeId, monthlyPrice?}` | thêm khoang `Available`; mã trùng trong cơ sở → 400; cơ sở tự "cung cấp" loại khoang đó (`facility_unit_type`) |
 | PATCH | `/api/fm/storage-units/{id}` `{unitTypeId?, monthlyPrice?}` | đổi loại / giá riêng (`monthlyPrice` null = giá loại khoang; có giá thì là số nguyên VND > 0, cả lúc tạo khoang) |
 | POST | `/api/fm/storage-units/{id}/maintenance` `{maintenance}` | bảo trì tay: `Available ↔ Maintenance`. Khoang đang có đơn chưa hoàn tất trỏ tới → 409. Mở lại tay xoá `maintenance_started_at` |
@@ -68,17 +70,19 @@ qua `GET` / `POST /api/fm/invoices/{invoiceId}/refunds` (quyền `payment_transa
 
 | Method | Path | Hành vi |
 |---|---|---|
-| GET / POST | `/api/bom/facilities` | danh sách (kèm FM, số khoang, số khoang `Rented`) / tạo cơ sở; mã viết hoa, chỉ `A-Z 0-9 -`, tối đa 20 ký tự (mã nằm trong mã hoá đơn, cột 50 ký tự), trùng → 400 |
+| GET / POST | `/api/bom/facilities` | danh sách (kèm FM, số khoang, số khoang `Rented`, `staffCount` = số FS `ACTIVE` đang gán) / tạo cơ sở; mã viết hoa, chỉ `A-Z 0-9 -`, tối đa 20 ký tự (mã nằm trong mã hoá đơn, cột 50 ký tự), trùng → 400 |
 | PATCH | `/api/bom/facilities/{id}` | tên, địa chỉ, giờ mở cửa, `status` (`Active`/`Inactive`) |
 | PUT | `/api/bom/facilities/{id}/manager` `{fmAccountId}` | gán FM (1–1: FM đang ở cơ sở khác bị gỡ), `null` = bỏ FM; tài khoản không phải FM → 400 |
 | PUT | `/api/bom/facilities/{id}/access-options` | như route FM (cùng kiểm `facility.access`; BOM có quyền mọi cơ sở) |
 | GET | `/api/bom/managers` | tài khoản FM đang hoạt động |
 | GET | `/api/bom/staff` | tài khoản FS (mọi trạng thái) kèm `facilityIds` đang gán |
 | PUT | `/api/bom/staff/{id}/facilities` `{facilityIds}` | như `PUT /api/admin/accounts/{id}/facilities` — BOM điều phối FS giữa các cơ sở (xem [Gán FS vào cơ sở](#gán-fs-vào-cơ-sở)) |
-| GET / PUT | `/api/bom/policies`, `/api/bom/policies/{key}` `{value}` | policy đang là số thì giá trị mới phải là số ≥ 0; policy đang là số nguyên (ngày, tháng, số lần, phí) thì giá trị mới phải là số nguyên ≥ 0 trong miền `int` — `2.5` / `1e2` → 400 |
+| GET / PUT | `/api/bom/policies`, `/api/bom/policies/{key}` `{value}` | policy đang là số thì giá trị mới phải là số ≥ 0; policy đang là số nguyên (ngày, tháng, số lần, phí) thì giá trị mới phải là số nguyên ≥ 0 trong miền `int` — `2.5` / `1e2` → 400; policy đang là `true`/`false` (vd `staff.shift_required`) chỉ nhận `true` hoặc `false` |
 | GET / PUT | `/api/bom/unit-types`, `/api/bom/unit-types/{id}/price` `{monthlyPrice}` | giá theo loại khoang (số nguyên VND > 0 — cổng payOS chỉ thu số nguyên). Hợp đồng đã ký giữ giá chốt lúc ký |
 | PATCH | `/api/bom/storage-units/{id}` | giá riêng từng khoang |
 | GET | `/api/bom/reports?facilityId=&from=&to=` | báo cáo toàn chuỗi (bỏ `facilityId`) hoặc một cơ sở |
+| GET | `/api/bom/reports/staff?facilityId=&from=&to=` | báo cáo nhân sự toàn chuỗi / một cơ sở ([hr.md](hr.md#báo-cáo-nhân-sự)) |
+| GET / PUT | `/api/bom/staff/{id}/profile` | hồ sơ nhân viên FS / FM gồm số giấy tờ ([hr.md › Hồ sơ nhân viên](hr.md#hồ-sơ-nhân-viên)) |
 | GET | `/api/bom/invoices?facilityId=&status=&type=` | hoá đơn toàn chuỗi |
 
 Audit:
@@ -107,7 +111,9 @@ audit và việc đã làm vẫn gắn với một account id.
   Message liệt kê tối đa 5 việc (`… và N việc khác`), mỗi việc kèm cách gỡ chặn của cột cuối trong ngoặc. Trả kho sau khi khách đến (checkout) không chặn: mọi FS của
   cơ sở có `unit_access_key.issue` đều làm tiếp được.
 - Mỗi module giao việc cho FS khai báo việc còn mở qua interface `identity.application.StaffOpenWork`
-  (booking, handover, support) — identity không phụ thuộc ngược các module đó.
+  (booking, handover, support) — identity không phụ thuộc ngược các module đó. Module nhân sự dùng các biến thể theo
+  ngày của cùng interface để chặn duyệt nghỉ phép, chặn xoá / thu hẹp ca và đếm việc trên màn phân công
+  ([hr.md](hr.md)).
 - **Tranh chấp với FM đang phân công:** `FacilityStaffQuery.isActiveStaffOf` khoá `FOR SHARE` dòng gán tới hết
   transaction phân công. Lệnh gỡ xoá dòng gán **trước** rồi mới kiểm việc, nên chờ FM commit và thấy việc vừa giao
   (→ 409, rollback). FM phân công sau khi dòng đã xoá → 400 "không phải FS của cơ sở".
@@ -137,6 +143,7 @@ Lần 409 không ghi audit; lần 200 ghi `ACCOUNT_UPDATED | Account | 5 | {"fac
 | GET | `/api/admin/accounts?role=&status=&q=&page=&size=` | tài khoản + cơ sở được gán / phụ trách + lần đăng nhập thành công gần nhất |
 | POST | `/api/admin/accounts` `{email, password, name?, phone?, role}` | tạo tài khoản đã xác minh email; mật khẩu ≥ 8; email trùng → 409 |
 | PATCH | `/api/admin/accounts/{id}` `{role?, status?, name?, phone?}` | đổi role / khoá (`BANNED`) / mở; không tự đổi role hoặc khoá chính mình (409); đổi khỏi FS thì gỡ gán cơ sở |
+| GET / PUT | `/api/admin/accounts/{id}/profile` | hồ sơ nhân viên của tài khoản FS / FM gồm số giấy tờ ([hr.md › Hồ sơ nhân viên](hr.md#hồ-sơ-nhân-viên)) |
 | PUT | `/api/admin/accounts/{id}/facilities` `{facilityIds}` | gán FS vào đúng các cơ sở này (thay toàn bộ); không phải tài khoản FS → 409; cơ sở không tồn tại → 400; gỡ khỏi cơ sở mà FS còn việc mở → 409 ([Gán FS vào cơ sở](#gán-fs-vào-cơ-sở)) |
 | GET | `/api/admin/login-events?email=` | lịch sử đăng nhập (thành công / thất bại + lý do + IP), mới nhất trước |
 | GET | `/api/admin/audit-logs?action=&entityType=&entityId=&actor=` | nhật ký thao tác (lọc theo email actor) |

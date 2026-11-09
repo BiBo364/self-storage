@@ -1,7 +1,7 @@
 import { CalendarClock, Check, User } from "lucide-react";
 import { useState } from "react";
 import { formatDate, formatDateTime, formatTime } from "../../app/format";
-import { fetchFacilityStaff, type FmStaff } from "../../app/fmStaff";
+import { fetchFacilityStaff, staffDaySummary, type FmStaff } from "../../app/fmStaff";
 import {
   assignReturnRequest,
   fetchReturnRequests,
@@ -140,6 +140,11 @@ function ReturnRow({
 }) {
   const [staffId, setStaffId] = useState("");
   const action = useFmAction();
+  // Ca / nghỉ phép / việc của FS theo ngày khách chọn (lịch có thể dời sang ngày trống sau đó).
+  const dayStaff = useFmLoad(`staff:${request.preferredDate}`, (facility) =>
+    fetchFacilityStaff(facility.id, request.preferredDate),
+  );
+  const options = dayStaff.data ?? staff;
   const assigned = staff.find((member) => member.id === request.assignedStaffId);
   const selectId = `return-staff-${request.id}`;
 
@@ -211,9 +216,10 @@ function ReturnRow({
                 }}
               >
                 <option value="">— Chọn FS —</option>
-                {staff.map((member) => (
+                {options.map((member) => (
                   <option key={member.id} value={member.id}>
                     {staffLabel(member)}
+                    {dayStaff.data ? ` — ${staffDaySummary(member)}` : ""}
                   </option>
                 ))}
               </select>

@@ -8,6 +8,8 @@ import {
   type FacilityRow,
   type StaffRow,
 } from "../../app/services/bom";
+import { fetchBomStaffProfile, updateBomStaffProfile } from "../../app/services/hr";
+import { StaffProfileEditor } from "../../components/domain/StaffProfileSection";
 import type { Navigate } from "../../app/types";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
@@ -216,6 +218,12 @@ function AssignPanel({
         </p>
       </div>
       {error && <DemoNotice tone="error">{error}</DemoNotice>}
+      <div className="mt-6">
+        <StaffProfileEditor
+          load={() => fetchBomStaffProfile(member.id)}
+          save={(input) => updateBomStaffProfile(member.id, input)}
+        />
+      </div>
     </DetailPanel>
   );
 }

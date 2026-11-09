@@ -1,7 +1,7 @@
 import { Check, ChevronRight, ImageIcon, User } from "lucide-react";
 import { useState } from "react";
 import { formatDateTime, formatMoney } from "../../app/format";
-import { fetchFacilityStaff, type FmStaff } from "../../app/fmStaff";
+import { fetchFacilityStaff, staffDaySummary, type FmStaff } from "../../app/fmStaff";
 import {
   assignSupportRequest,
   fetchSupportRequests,
@@ -272,7 +272,8 @@ function SupportPanel({
                   placeholder="— Chọn FS —"
                   options={staff.map((member) => ({
                     value: String(member.id),
-                    label: staffLabel(member),
+                    // Yêu cầu hỗ trợ không gắn giờ — FS cần có ca hôm nay và không nghỉ phép.
+                    label: `${staffLabel(member)} — hôm nay: ${staffDaySummary(member)}`,
                   }))}
                 />
                 <Button

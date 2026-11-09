@@ -64,39 +64,68 @@ public class ReturnAppointmentService {
     @Transactional(propagation = Propagation.MANDATORY)
     public ReturnAppointment book(Long orderId, Long customerId, Long facilityId, Long staffId,
                                   LocalDate preferredDate, Long actorAccountId) {
+        return book(orderId, customerId, facilityId, staffId, preferredDate, actorAccountId, (start, end) -> true);
+    }
+
+    /**
+     * Như trên, nhưng ưu tiên khung trống đầu tiên thoả {@code slotFits} (vd FS có ca bao trọn khung). Không khung
+     * trống nào thoả thì vẫn chọn khung trống đầu tiên — caller kiểm lại và báo đúng lý do (thiếu ca / nghỉ phép).
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ReturnAppointment book(Long orderId, Long customerId, Long facilityId, Long staffId,
+                                  LocalDate preferredDate, Long actorAccountId,
+                                  java.util.function.BiPredicate<Instant, Instant> slotFits) {
         appointmentRepository.lockFacility(facilityId);
         Instant now = Instant.now();
         LocalDate today = LocalDate.now(ZONE);
         LocalDate from = preferredDate.isBefore(today) ? today : preferredDate;
         Set<Instant> taken = new HashSet<>(appointmentRepository.findTakenSlotStarts(facilityId, from,
                 from.plusDays(SEARCH_DAYS)));
+        LocalDate firstFreeDate = null;
+        LocalTime[] firstFree = null;
         for (LocalDate d = from; !d.isAfter(from.plusDays(SEARCH_DAYS)); d = d.plusDays(1)) {
             for (LocalTime[] w : AppointmentBookingService.WINDOWS) {
                 Instant start = d.atTime(w[0]).atZone(ZONE).toInstant();
                 if (!start.isAfter(now) || taken.contains(start)) {
                     continue;
                 }
-                Instant end = d.atTime(w[1]).atZone(ZONE).toInstant();
-                Appointment appointment = appointmentRepository.save(
-                        Appointment.returnVisit(customerId, facilityId, staffId, d, start, end));
-                appointmentRepository.linkToOrder(appointment.getId(), orderId);
-                Map<String, Object> value = new HashMap<>();
-                value.put("type", "RETURN");
-                value.put("status", "Pending");
-                value.put("orderId", orderId);
-                value.put("staffId", staffId);
-                value.put("startedAt", start.toString());
-                auditRecorder.record(new AuditEntry(AuditAction.APPOINTMENT_CREATED, AuditEntityType.APPOINTMENT,
-                        String.valueOf(appointment.getId()), null, value, null, actorAccountId));
-                boolean shifted = !d.equals(preferredDate);
-                if (shifted) {
-                    notifyShifted(orderId, customerId, start);
+                if (firstFree == null) {
+                    firstFreeDate = d;
+                    firstFree = w;
                 }
-                return new ReturnAppointment(appointment.getId(), d, start, end, shifted);
+                if (slotFits.test(start, d.atTime(w[1]).atZone(ZONE).toInstant())) {
+                    return save(orderId, customerId, facilityId, staffId, preferredDate, actorAccountId, d, w);
+                }
             }
+        }
+        if (firstFree != null) {
+            return save(orderId, customerId, facilityId, staffId, preferredDate, actorAccountId, firstFreeDate,
+                    firstFree);
         }
         throw new BookingConflictException("Không còn khung giờ trống trong " + SEARCH_DAYS
                 + " ngày tới để hẹn trả kho");
+    }
+
+    private ReturnAppointment save(Long orderId, Long customerId, Long facilityId, Long staffId,
+                                   LocalDate preferredDate, Long actorAccountId, LocalDate d, LocalTime[] w) {
+        Instant start = d.atTime(w[0]).atZone(ZONE).toInstant();
+        Instant end = d.atTime(w[1]).atZone(ZONE).toInstant();
+        Appointment appointment = appointmentRepository.save(
+                Appointment.returnVisit(customerId, facilityId, staffId, d, start, end));
+        appointmentRepository.linkToOrder(appointment.getId(), orderId);
+        Map<String, Object> value = new HashMap<>();
+        value.put("type", "RETURN");
+        value.put("status", "Pending");
+        value.put("orderId", orderId);
+        value.put("staffId", staffId);
+        value.put("startedAt", start.toString());
+        auditRecorder.record(new AuditEntry(AuditAction.APPOINTMENT_CREATED, AuditEntityType.APPOINTMENT,
+                String.valueOf(appointment.getId()), null, value, null, actorAccountId));
+        boolean shifted = !d.equals(preferredDate);
+        if (shifted) {
+            notifyShifted(orderId, customerId, start);
+        }
+        return new ReturnAppointment(appointment.getId(), d, start, end, shifted);
     }
 
     /** Ngày khách chọn đã kín lịch — báo khách ngày giờ mới (in-app + email, nối đơn). */

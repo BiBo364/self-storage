@@ -29,6 +29,7 @@ import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
 import vn.lemar.selfstorage.pricing.application.PricingQuery;
+import vn.lemar.selfstorage.staffing.application.StaffAvailability;
 import vn.lemar.selfstorage.support.domain.SupportRequest;
 import vn.lemar.selfstorage.support.repository.SupportRequestRepository;
 import vn.lemar.selfstorage.tenancy.application.TenancyException;
@@ -68,12 +69,14 @@ public class SupportService {
     private final JdbcTemplate jdbc;
     private final PricingQuery pricingQuery;
     private final MediaAttachments mediaAttachments;
+    private final StaffAvailability staffAvailability;
 
     SupportService(SupportRequestRepository requests, RentalContractService contracts, ContractInvoiceService invoices,
                    HandoverOrderService orders, FacilityAccess facilityAccess, FacilityStaffQuery staffQuery,
                    AccountQueryService accountQuery, NotificationService notificationService, Access access,
                    CurrentAccountProvider currentAccount, AuditRecorder auditRecorder, JdbcTemplate jdbc,
-                   PricingQuery pricingQuery, MediaAttachments mediaAttachments) {
+                   PricingQuery pricingQuery, MediaAttachments mediaAttachments,
+                   StaffAvailability staffAvailability) {
         this.requests = requests;
         this.contracts = contracts;
         this.invoices = invoices;
@@ -88,6 +91,7 @@ public class SupportService {
         this.jdbc = jdbc;
         this.pricingQuery = pricingQuery;
         this.mediaAttachments = mediaAttachments;
+        this.staffAvailability = staffAvailability;
     }
 
     /** Yêu cầu hỗ trợ. */
@@ -198,6 +202,10 @@ public class SupportService {
         if (staffId == null || !staffQuery.isActiveStaffOf(staffId, peek.getFacilityId())) {
             throw TenancyException.invalid("FS không thuộc cơ sở hoặc không còn hoạt động");
         }
+        // Yêu cầu hỗ trợ không gắn giờ: FS phải có ca tại cơ sở hôm nay (khi policy bật) và không nghỉ phép.
+        staffAvailability.todayViolation(staffId, peek.getFacilityId()).ifPresent(message -> {
+            throw TenancyException.conflict(message);
+        });
         SupportRequest request = requests.findByIdForUpdate(id).orElseThrow();
         if (!request.isActive()) {
             throw TenancyException.conflict("Yêu cầu hỗ trợ đã đóng");

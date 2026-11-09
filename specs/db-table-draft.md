@@ -597,11 +597,15 @@ giao. Bảng `checkout_records` (V25) theo dạng rút gọn của Flow 2.a (quy
 | `ACCOUNT_CREATED` | Admin tạo tài khoản | `Account` | Admin |
 | `ACCOUNT_UPDATED` | Admin đổi role / trạng thái / thông tin | `Account` | Admin |
 | `ROLE_PERMISSIONS_UPDATED` | Admin thay quyền của một role | `Role` | Admin |
+| `STAFF_SHIFT_CREATED` / `_UPDATED` / `_DELETED` | FM thêm / sửa / xoá ca của FS; duyệt nghỉ phép xoá ca trong khoảng nghỉ | `StaffShift` | FM |
+| `STAFF_LEAVE_REQUESTED` / `_CANCELED` | FS gửi / huỷ đơn nghỉ phép | `StaffLeave` | FS |
+| `STAFF_LEAVE_APPROVED` / `_REJECTED` | FM duyệt / từ chối đơn nghỉ phép | `StaffLeave` | FM |
+| `STAFF_PROFILE_UPDATED` | ADMIN / BOM sửa hồ sơ nhân viên (số giấy tờ che, giữ 4 ký tự cuối) | `StaffProfile` | Admin/BOM |
 
 - Entity type (`audit_logs.entity_type`, CHECK theo migration): `RentalRequest`, `ProposalFeedback`, `Invoice`,
   `PaymentTransaction`, `RentalOrder`, `StorageUnit`, `Appointment`, `HandoverRecord`, `RentalContract`,
   `UnitAccessKey`, `CheckoutRecord`, `Account`, `ReturnRequest`, `SupportRequest`, `Facility`, `Policy`, `UnitType`,
-  `Role`.
+  `Role`, `StaffShift`, `StaffLeave`, `StaffProfile`.
 
 - Xác minh email không tạo `AuditLog`; bản ghi là `Account.email_verified_at`. Nếu sau này có đường
   verify khác self-service (admin verify hộ, đổi email re-verify), phải bổ sung action tương ứng.
@@ -623,6 +627,39 @@ giao. Bảng `checkout_records` (V25) theo dạng rút gọn của Flow 2.a (quy
 
 **CONSTRAINTS:**
 - Index `(facility_id, status)` cho hàng chờ FM, `(customer_id)` cho danh sách của khách.
+
+# StaffShift
+**Overview:** ca làm việc của FS tại một cơ sở trong một ngày (Flow 5). Bảng `staff_shifts` (V32); hành vi ở
+`backend/docs/backoffice/hr.md`.
+- facility_id (N - 1: Facility)
+- staff_id (N - 1: Account, role FS)
+- shift_date (Date), start_time, end_time (Time, giờ VN)
+- note (≤ 500, nullable)
+- created_by (N - 1: Account, nullable), created_at, updated_at
+
+**CONSTRAINTS:**
+- `start_time < end_time` (ca trong một ngày). Index `(staff_id, shift_date)`, `(facility_id, shift_date)`.
+- Không chồng giờ với ca khác của cùng FS cùng ngày ở mọi cơ sở — kiểm ở service (khoá advisory theo FS).
+
+# StaffLeave
+**Overview:** đơn nghỉ phép cả ngày của FS (Flow 5). Bảng `staff_leaves` (V32).
+- staff_id (N - 1: Account, role FS)
+- from_date, to_date (Date, tính cả hai đầu)
+- reason (≤ 500)
+- status (`Pending`/`Approved`/`Rejected`/`Canceled`) - default `Pending`
+- reviewed_by (N - 1: Account, nullable), reviewed_at, review_note (≤ 500)
+- created_at
+
+**CONSTRAINTS:**
+- `from_date <= to_date`. Index `(staff_id, from_date, to_date)`, `(status)`.
+- Một FS không có hai đơn `Pending`/`Approved` chồng ngày — kiểm ở service.
+
+# StaffProfile
+**Overview:** hồ sơ nhân viên của tài khoản FS / FM (Flow 5). Bảng `staff_profiles` (V32).
+- account_id (PK, 1 - 1: Account)
+- position (≤ 100), hire_date, id_number (≤ 20 — chỉ ADMIN / BOM đọc), emergency_contact_name (≤ 100),
+  emergency_contact_phone (≤ 20), note (≤ 1000) — đều nullable
+- updated_by (N - 1: Account, nullable), updated_at
 
 # LoginEvent
 **Overview:** lịch sử đăng nhập cho Admin — mọi lần thử, thành công hay thất bại. Bảng `login_events` (V26).
@@ -655,6 +692,8 @@ giao. Bảng `checkout_records` (V25) theo dạng rút gọn của Flow 2.a (quy
   còn trong hạn giữ đơn).
 - V28: thêm `return.no_show_grace_minutes = 120` (lịch trả kho quá giờ kết thúc N phút mà khách chưa đến → no-show),
   `return.max_no_shows = 2` (no-show N lần → huỷ yêu cầu trả kho).
+- V32: thêm `staff.shift_required = true` (phân công FS bắt buộc ca bao trọn giờ hẹn; policy boolean chỉ nhận
+  `true`/`false`).
 - `appointment.checkin_reschedule_enabled` không được seed — khách không đổi được lịch check-in `Pending`.
 
 # OrderNotification
@@ -721,6 +760,9 @@ giao. Bảng `checkout_records` (V25) theo dạng rút gọn của Flow 2.a (quy
 | `RETURN_DATE_SHIFTED` | Ngày trả kho khách chọn đã kín, lịch được dời sang ngày giờ khác | Customer |
 | `RETURN_NO_SHOW` | Khách không đến buổi trả kho — chờ phân công lại hoặc yêu cầu bị huỷ | Customer, FM |
 | `CHECKOUT_SHORTFALL_UNPAID` | Trả kho đã đóng nhưng hoá đơn phần còn thiếu quá hạn chưa trả — cần thu thủ công | FM |
+| `STAFF_SHIFT_CHANGED` | FM thêm / sửa / xoá ca ở tương lai của FS | FS |
+| `STAFF_LEAVE_REQUESTED` | FS gửi đơn nghỉ phép | FM (các cơ sở FS được gán) |
+| `STAFF_LEAVE_REVIEWED` | Đơn nghỉ phép được duyệt / bị từ chối (kèm ghi chú) | FS |
 | `OTHER` | Thông báo khẩn cấp thủ công khi chưa có type phù hợp | Recipient do người tạo chọn |
 
 # MediaUpload

@@ -1,4 +1,12 @@
-import { Bell, CalendarDays, ClipboardCheck, LifeBuoy, Undo2 } from "lucide-react";
+import {
+  Bell,
+  CalendarDays,
+  CalendarRange,
+  ClipboardCheck,
+  ClipboardPen,
+  LifeBuoy,
+  Undo2,
+} from "lucide-react";
 import { authGateway } from "../../app/auth";
 import { useUnreadNotificationCount } from "../../app/notifications";
 import type { Navigate, View } from "../../app/types";
@@ -20,6 +28,8 @@ const navigation: (WorkspaceNavItem & { view: View })[] = [
   },
   { label: "Trả kho", path: "/staff/returns", view: "fs-returns", icon: Undo2 },
   { label: "Yêu cầu hỗ trợ", path: "/staff/support", view: "fs-support", icon: LifeBuoy },
+  { label: "Ca của tôi", path: "/staff/shifts", view: "fs-shifts", icon: CalendarRange },
+  { label: "Nghỉ phép & hồ sơ", path: "/staff/leaves", view: "fs-leaves", icon: ClipboardPen },
   { label: "Thông báo", path: "/notifications", view: "notifications", icon: Bell },
 ];
 

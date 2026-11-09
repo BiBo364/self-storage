@@ -237,6 +237,15 @@ public class NotificationTemplateCatalog {
         put(NotificationType.CHECKOUT_COMPLETED, NotificationRecipient.CUSTOMER,
                 "Trả kho hoàn tất",
                 "Hợp đồng {{contractCode}} đã kết thúc. Tiền cọc hoàn lại: {{refundAmount}}đ (cơ sở xử lý thủ công).");
+        put(NotificationType.STAFF_SHIFT_CHANGED, NotificationRecipient.FS,
+                "Ca làm việc thay đổi",
+                "Ca làm việc tại {{facilityCode}}: {{change}}.");
+        put(NotificationType.STAFF_LEAVE_REQUESTED, NotificationRecipient.FM,
+                "FS xin nghỉ phép",
+                "{{staffName}} xin nghỉ từ {{fromDate}} đến {{toDate}}. Lý do: {{reason}}.");
+        put(NotificationType.STAFF_LEAVE_REVIEWED, NotificationRecipient.FS,
+                "Đơn nghỉ phép {{result}}",
+                "Đơn nghỉ phép từ {{fromDate}} đến {{toDate}} {{result}}.{{noteText}}");
     }
 
     /**

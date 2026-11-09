@@ -46,7 +46,8 @@ class AppointmentAssignConcurrencyTest {
     void twoConcurrentAssignsOnlyOneWins() throws Exception {
         long fmId = accountId("fm1@lemar.vn");
         long fs1 = accountId("fs1@lemar.vn");
-        long fs2 = secondStaffOfQ7(fs1);
+        LocalDate day = LocalDate.now().plusDays(3);
+        long fs2 = secondStaffOfQ7(fs1, day);
         long customerId = accountId("customer1@lemar.vn");
         long q7 = jdbc.queryForObject("select id from facilities where code = 'Q7'", Long.class);
         long unitId = jdbc.queryForObject("select id from storage_units where code = 'A-01'", Long.class);
@@ -62,7 +63,6 @@ class AppointmentAssignConcurrencyTest {
                 insert into rental_orders (request_id, customer_id, unit_id, status, expires_at)
                 values (?, ?, ?, 'Scheduled', now() + interval '30 days') returning id""",
                 Long.class, requestId, customerId, unitId);
-        LocalDate day = LocalDate.now().plusDays(3);
         long appointmentId = jdbc.queryForObject("""
                 insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status)
                 values (?, ?, 'CHECKIN', ?, ?::timestamptz, ?::timestamptz, 'Pending') returning id""",
@@ -121,13 +121,19 @@ class AppointmentAssignConcurrencyTest {
         return jdbc.queryForObject("select id from accounts where email = ?", Long.class, email);
     }
 
-    private long secondStaffOfQ7(long fsId) {
+    /**
+     * FS thứ hai của Q7 kèm ca 07:00–21:00 ngày hẹn — policy {@code staff.shift_required} bật (V32) và FS tạo
+     * trong test không có ca mẫu; thiếu ca thì lần gán của FS này bị 409 vì ca, không phải vì lịch đã có FS.
+     */
+    private long secondStaffOfQ7(long fsId, LocalDate day) {
         long id = jdbc.queryForObject("""
                 insert into accounts (email, password_hash, email_verified_at, role_id, status)
                 values ('fs2@lemar.vn', (select password_hash from accounts where id = ?), now(),
                         (select id from roles where name = 'FS'), 'ACTIVE') returning id""", Long.class, fsId);
         jdbc.update("insert into account_facility_assignments (account_id, facility_id) values (?, "
                 + "(select id from facilities where code = 'Q7'))", id);
+        jdbc.update("insert into staff_shifts (facility_id, staff_id, shift_date, start_time, end_time) values "
+                + "((select id from facilities where code = 'Q7'), ?, ?, '07:00', '21:00')", id, day);
         return id;
     }
 }

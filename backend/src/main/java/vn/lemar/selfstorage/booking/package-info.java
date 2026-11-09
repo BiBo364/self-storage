@@ -8,5 +8,6 @@
         displayName = "Booking (F1)",
         allowedDependencies = {"facility::application", "pricing::application",
                 "identity::application", "payment", "payment::application", "payment::events",
-                "payment::dto", "notification", "notification::application", "audit::application"})
+                "payment::dto", "notification", "notification::application", "audit::application",
+                "staffing::application"})
 package vn.lemar.selfstorage.booking;

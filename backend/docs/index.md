@@ -19,7 +19,7 @@ Kiến trúc **modular monolith**: `vn.lemar.selfstorage` là package gốc,
 mỗi package con trực tiếp là một module độc lập (`identity`, `booking`, `facility`, ...).
 `ModuleStructureTest` chặn việc gọi sai chiều giữa các module ngay lúc build.
 
-16 module:
+17 module:
 
 | Module | Làm gì |
 |---|---|
@@ -34,6 +34,7 @@ mỗi package con trực tiếp là một module độc lập (`identity`, `book
 | `checkout` | trả kho, quyết toán cọc ([checkout/return.md](checkout/return.md)) |
 | `support` | yêu cầu hỗ trợ / sự cố ([support/requests.md](support/requests.md)) |
 | `backoffice` | màn quản trị FM / BOM / Admin ([backoffice/overview.md](backoffice/overview.md)) |
+| `staffing` | nhân sự: ca làm việc, nghỉ phép, hồ sơ nhân viên, kiểm FS có ca / không nghỉ phép khi phân công ([backoffice/hr.md](backoffice/hr.md)) |
 | `chat` | chatbot tư vấn ([chat/assistant.md](chat/assistant.md)) |
 | `notification` | email + thông báo in-app |
 | `audit` | ghi vết thao tác nghiệp vụ ([audit-log.md](audit-log.md)) |
@@ -46,7 +47,10 @@ kiểm). Hai phụ thuộc cần biết khi đọc flow sau bàn giao:
   ([support/requests.md](support/requests.md));
 - `handover` → `media` — `MediaUrlLookup.notUploadedBy` kiểm ảnh hiện trạng / bản scan hợp đồng là file FS đã upload
   ([handover/records.md](handover/records.md)); `handover`, `checkout`, `support` → `media` —
-  `MediaAttachments.attach` khi lưu URL ảnh / scan (bên dưới, [Upload file](#upload-file-module-media)).
+  `MediaAttachments.attach` khi lưu URL ảnh / scan (bên dưới, [Upload file](#upload-file-module-media));
+- `booking`, `tenancy`, `support` → `staffing::application` — `StaffAvailability` kiểm ca / nghỉ phép khi phân công FS;
+  `staffing` đọc việc FS đang giữ qua SPI `identity.application.StaffOpenWork` nên không phụ thuộc ngược
+  ([backoffice/hr.md](backoffice/hr.md)).
 
 Layout trong một module:
 
@@ -136,7 +140,7 @@ hướng dẫn ở [docs/vnpay-testing.md](../../docs/vnpay-testing.md); chạy 
 ## Database & seed
 
 Flyway chạy migration lúc khởi động, từ `V1__baseline_schema.sql` tới file mới nhất trong `db/migration/`
-(hiện `V31__invoice_refund_amount.sql`). V1/V2 có mirror byte-identical ở `backend/sql/` (CI check đồng bộ) và đã
+(hiện `V32__staff_hr.sql`). V1/V2 có mirror byte-identical ở `backend/sql/` (CI check đồng bộ) và đã
 đóng băng như mọi migration đã apply — đổi schema/seed bằng migration mới ([backend/sql/README.md](../sql/README.md));
 V3+ đọc trực tiếp trong `db/migration/`.
 
@@ -198,7 +202,7 @@ Schema Flow 1.3 đi bằng migration V8–V11:
 - V26 thêm `support_requests` (hỗ trợ / sự cố), `login_events` (lịch sử đăng nhập), audit action hỗ trợ + back-office
   (`SUPPORT_REQUEST_*`, `FACILITY_*`, `STORAGE_UNIT_CREATED`/`_UPDATED`, `POLICY_UPDATED`, `UNIT_TYPE_UPDATED`,
   `ACCOUNT_CREATED`/`_UPDATED`, `ROLE_PERMISSIONS_UPDATED`) và entity type `SupportRequest`, `Facility`, `Policy`,
-  `UnitType`, `Role` — đây là lần cuối dựng lại `audit_logs_entity_type_check`. Xem [support/requests.md](support/requests.md),
+  `UnitType`, `Role` — V32 dựng lại `audit_logs_entity_type_check` lần nữa (thêm entity type nhân sự). Xem [support/requests.md](support/requests.md),
   [backoffice/overview.md](backoffice/overview.md).
 - V27 thêm cột `rental_contracts.document_html` (bản hợp đồng chốt lúc ký) và `rental_contracts.access_suspended_at`
   (tạm khoá truy cập do quá hạn kéo dài); seed policy `rent.invoice_lead_days = 5` (hoá đơn tiền thuê hằng tháng) và
@@ -211,8 +215,7 @@ Schema Flow 1.3 đi bằng migration V8–V11:
 - V28 thêm cột `rental_orders.canceled_at` (backfill từ audit `RENTAL_ORDER_CANCELED`; mốc cọc bị giữ lại trong báo
   cáo doanh thu), `proposal_feedbacks.agreed_at` (mốc cửa sổ đặt lịch check-in khi đơn đã cọc đổi khoang),
   `return_requests.no_show_count`; seed policy `return.no_show_grace_minutes = 120`, `return.max_no_shows = 2`; thêm
-  audit action `RETURN_NO_SHOW` — đây là lần cuối dựng lại `audit_logs_action_check` (đủ mọi giá trị của
-  `AuditAction`). Notification type `RETURN_NO_SHOW` chỉ thêm ở code. Cron `ReturnNoShowJob`
+  audit action `RETURN_NO_SHOW` — V32 dựng lại `audit_logs_action_check` lần nữa (thêm action nhân sự). Notification type `RETURN_NO_SHOW` chỉ thêm ở code. Cron `ReturnNoShowJob`
   (`tenancy.return-no-show.fixed-delay-ms`, mặc định 10 phút). Xem [tenancy/rentals.md](tenancy/rentals.md),
   [backoffice/overview.md](backoffice/overview.md), [booking/appointment-booking.md](booking/appointment-booking.md).
 - V29 chuyển `Attached` các upload `Pending` đang được biên bản bàn giao / biên bản trả kho / yêu cầu hỗ trợ / bản
@@ -222,6 +225,12 @@ Schema Flow 1.3 đi bằng migration V8–V11:
   khi xác định được đúng một đơn giữ khoang.
 - V31 thêm `invoices.refund_amount` — số phải hoàn khi chỉ hoàn một phần (rỗng = cả hoá đơn); FM ghi nhận đủ số này
   thì hoá đơn `Refunded` ([payment.md › Hoàn tiền thủ công](payment.md#hoàn-tiền-thủ-công)).
+- V32 thêm `staff_shifts`, `staff_leaves`, `staff_profiles`; seed policy `staff.shift_required = true`, ca mẫu
+  07:00–21:00 mỗi ngày (`CURRENT_DATE − 7` … `+ 60`) cho FS `ACTIVE` đang gán cơ sở, 4 permission `staff_*` + 7 dòng
+  mapping; dựng lại `audit_logs_action_check` (thêm `STAFF_SHIFT_*`, `STAFF_LEAVE_*`, `STAFF_PROFILE_UPDATED`) và
+  `audit_logs_entity_type_check` (thêm `StaffShift`, `StaffLeave`, `StaffProfile`) — hai CHECK là đúng tập giá trị
+  của `AuditAction` / `AuditEntityType`. Notification type `STAFF_SHIFT_CHANGED`, `STAFF_LEAVE_REQUESTED`,
+  `STAFF_LEAVE_REVIEWED` chỉ thêm ở code. Xem [backoffice/hr.md](backoffice/hr.md).
 - Policy `appointment.checkin_reschedule_enabled` không được seed: khách không đổi được lịch check-in `Pending`
   ([booking/appointment-booking.md](booking/appointment-booking.md)).
 
@@ -393,6 +402,8 @@ bấm **Authorize** và dán token (không cần prefix `Bearer `) để gọi A
 | [permission-catalog.md](permission-catalog.md) | Catalog permission + mapping role mặc định |
 | [error-handling.md](error-handling.md) | Xử lý lỗi: envelope, các tầng bắt lỗi, bảng status nền |
 | [audit-log.md](audit-log.md) | Hợp đồng tích hợp AuditLog cho module gọi + call site hiện có |
+| [backoffice/overview.md](backoffice/overview.md) | Back-office FM / BOM / Admin |
+| [backoffice/hr.md](backoffice/hr.md) | Nhân sự: ca làm việc, nghỉ phép, luật phân công theo ca, báo cáo nhân sự, hồ sơ |
 | [booking/conversion.md](booking/conversion.md) | Convert request → đơn + proposal, claim sau xác minh |
 | [booking/proposal-flow.md](booking/proposal-flow.md) | Đồng ý / từ chối đề xuất khoang, đề xuất lại: sơ đồ, state, invariant |
 | [booking/appointment-no-show.md](booking/appointment-no-show.md) | Cron no-show check-in, guard `noShowDue`, audit/notification |

@@ -3,6 +3,7 @@ package vn.lemar.selfstorage.backoffice.application;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.Invoi
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.Kpis;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.OccupancyRow;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.RevenueRow;
+import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.StaffReportRow;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.FacilityRow;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.UnitRow;
@@ -38,6 +40,7 @@ public class BackofficeService {
 
     static final String PERM_FACILITY = "facility.access";
     static final int INVOICE_LIMIT = 500;
+    static final int STAFF_REPORT_MAX_DAYS = 366;
 
     /** Mốc ngày của báo cáo tính theo giờ Việt Nam, không theo TZ của JVM (container mặc định UTC). */
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -67,6 +70,10 @@ public class BackofficeService {
                          List<OccupancyRow> occupancy) {
     }
 
+    /** Báo cáo nhân sự: khoảng ngày đã áp mặc định, cơ sở ({@code null} = toàn chuỗi), một dòng mỗi FS. */
+    public record StaffReport(LocalDate from, LocalDate to, Long facilityId, List<StaffReportRow> rows) {
+    }
+
     // ------------------------------------------------------------------ FM (theo cơ sở)
 
     @Transactional(readOnly = true)
@@ -79,6 +86,12 @@ public class BackofficeService {
     public Report facilityReport(Long facilityId, LocalDate from, LocalDate to) {
         access.can(PERM_FACILITY, facilityId);
         return report(facilityId, from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public StaffReport facilityStaffReport(Long facilityId, LocalDate from, LocalDate to) {
+        access.can(PERM_FACILITY, facilityId);
+        return staffReport(facilityId, from, to);
     }
 
     @Transactional
@@ -260,6 +273,9 @@ public class BackofficeService {
         if (isInteger(before.value()) && !isInteger(value)) {
             throw new IllegalArgumentException("Policy " + key + " phải là số nguyên không âm");
         }
+        if (isBoolean(before.value()) && !isBoolean(value)) {
+            throw new IllegalArgumentException("Policy " + key + " chỉ nhận true hoặc false");
+        }
         pricing.updatePolicy(key, value.trim());
         audit(AuditAction.POLICY_UPDATED, AuditEntityType.POLICY, before.id(), Map.of("value", before.value()),
                 Map.of("key", key, "value", value.trim()));
@@ -290,6 +306,15 @@ public class BackofficeService {
         return report(facilityId, from, to);
     }
 
+    /** BOM: báo cáo nhân sự toàn chuỗi ({@code facilityId} null) hoặc một cơ sở. */
+    @Transactional(readOnly = true)
+    public StaffReport chainStaffReport(Long facilityId, LocalDate from, LocalDate to) {
+        if (facilityId != null && facilities.find(facilityId).isEmpty()) {
+            throw new IllegalArgumentException("Không tìm thấy cơ sở");
+        }
+        return staffReport(facilityId, from, to);
+    }
+
     @Transactional(readOnly = true)
     public List<InvoiceRow> chainInvoices(Long facilityId, String status, String type) {
         return readRepository.invoices(facilityId, status, type, INVOICE_LIMIT);
@@ -307,6 +332,18 @@ public class BackofficeService {
         BigDecimal total = revenue.stream().map(RevenueRow::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new Report(start, end, readRepository.kpis(facilityId), total, revenue,
                 readRepository.occupancy(facilityId));
+    }
+
+    /** Mặc định tháng hiện tại (giờ VN); tối đa 366 ngày. */
+    private StaffReport staffReport(Long facilityId, LocalDate from, LocalDate to) {
+        LocalDate today = LocalDate.now(ZONE);
+        LocalDate start = from == null ? (to == null ? today : to).withDayOfMonth(1) : from;
+        LocalDate end = to == null ? start.withDayOfMonth(start.lengthOfMonth()) : to;
+        if (start.isAfter(end) || ChronoUnit.DAYS.between(start, end) >= STAFF_REPORT_MAX_DAYS) {
+            throw new IllegalArgumentException("Khoảng ngày không hợp lệ (tối đa " + STAFF_REPORT_MAX_DAYS + " ngày)");
+        }
+        return new StaffReport(start, end, facilityId, readRepository.staffReport(facilityId, start, end,
+                start.atStartOfDay(ZONE).toInstant(), end.plusDays(1).atStartOfDay(ZONE).toInstant()));
     }
 
     /**
@@ -331,6 +368,11 @@ public class BackofficeService {
             return false;
         }
         return Long.parseLong(trimmed) <= Integer.MAX_VALUE;
+    }
+
+    private static boolean isBoolean(String value) {
+        String trimmed = value.trim();
+        return "true".equals(trimmed) || "false".equals(trimmed);
     }
 
     private static boolean isNumber(String value) {

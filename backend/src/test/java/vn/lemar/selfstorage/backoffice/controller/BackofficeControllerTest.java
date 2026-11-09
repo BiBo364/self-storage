@@ -242,7 +242,7 @@ class BackofficeControllerTest {
     }
 
     private static FacilityRow facility() {
-        return new FacilityRow(1L, "Q7", "Quận 7", null, null, "Active", 4L, "fm@x.vn", true, true, 8, 2);
+        return new FacilityRow(1L, "Q7", "Quận 7", null, null, "Active", 4L, "fm@x.vn", true, true, 8, 2, 1);
     }
 
     private static AccountRow account(String role) {

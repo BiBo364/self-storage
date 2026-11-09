@@ -60,6 +60,9 @@ public class SupportController {
                 supportService.facilityRequests(facilityId, includeClosed)));
     }
 
+    @Operation(summary = "Giao FS xử lý yêu cầu hỗ trợ (FM)",
+            description = "FS đang hoạt động của cơ sở (400). 409 khi yêu cầu đã đóng, FS nghỉ phép hôm nay, hoặc "
+                    + "(policy `staff.shift_required` bật) FS không có ca tại cơ sở hôm nay.")
     @PostMapping("/api/fm/support-requests/{id}/assign")
     public ResponseEntity<ApiEnvelope<SupportView>> assign(@PathVariable Long id, @Valid @RequestBody AssignBody body) {
         return ResponseEntity.ok(ApiEnvelope.ok("Đã giao FS", supportService.assign(id, body.staffId())));

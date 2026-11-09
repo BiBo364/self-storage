@@ -2,7 +2,12 @@ import { Mail, Phone, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../app/api";
 import { fetchCurrentFmFacility, type FmFacility } from "../../app/fmFacility";
-import { fetchFacilityStaff, type FmStaff } from "../../app/fmStaff";
+import { fetchFacilityStaff, staffDaySummary, type FmStaff } from "../../app/fmStaff";
+import { errorMessage } from "../../app/http";
+import { fetchFmStaffProfile, type StaffProfileSummary } from "../../app/services/hr";
+import { StaffProfileDetails } from "../../components/domain/StaffProfileSection";
+import { DemoNotice } from "../../components/ui/DemoNotice";
+import { SectionTitle } from "../../components/ui/SectionTitle";
 import { DetailPanel } from "../../components/ui/DetailPanel";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
@@ -122,6 +127,9 @@ export function StaffListPage() {
                 <span className="mt-1 block text-label text-muted">
                   Gán vào cơ sở từ {formatDate(member.assignedAt)}
                 </span>
+                <span className="mt-1 block text-label text-muted">
+                  Hôm nay: {staffDaySummary(member)}
+                </span>
               </div>
             </button>
           ))}
@@ -134,6 +142,20 @@ export function StaffListPage() {
 }
 
 function StaffDetailPanel({ staff, onClose }: { staff: FmStaff; onClose: () => void }) {
+  const [profile, setProfile] = useState<StaffProfileSummary | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchFmStaffProfile(staff.id).then(
+      (result) => active && setProfile(result),
+      (caught: unknown) => active && setProfileError(errorMessage(caught)),
+    );
+    return () => {
+      active = false;
+    };
+  }, [staff.id]);
+
   return (
     <DetailPanel title={staffName(staff)} eyebrow="Nhân viên FS" onClose={onClose}>
       <div className="grid gap-2 text-small text-muted">
@@ -144,6 +166,17 @@ function StaffDetailPanel({ staff, onClose }: { staff: FmStaff; onClose: () => v
           <Phone size={14} /> {staff.phone ?? "—"}
         </span>
         <span>Gán vào cơ sở từ {formatDate(staff.assignedAt)}</span>
+        <span>Hôm nay: {staffDaySummary(staff)}</span>
+      </div>
+      <div className="mt-6 grid gap-3">
+        <SectionTitle>Hồ sơ</SectionTitle>
+        {profileError ? (
+          <DemoNotice tone="error">Không tải được hồ sơ: {profileError}</DemoNotice>
+        ) : profile ? (
+          <StaffProfileDetails profile={profile} />
+        ) : (
+          <p className="m-0 text-label text-muted">Đang tải hồ sơ…</p>
+        )}
       </div>
     </DetailPanel>
   );

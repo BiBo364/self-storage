@@ -95,7 +95,17 @@ public enum AuditAction {
     INSPECTION_CORRECTED(AuditEntityType.HANDOVER_RECORD),
     /** Quá hạn kéo dài: tạm khoá mã khoá số / mở lại khi hết quá hạn. */
     CONTRACT_ACCESS_SUSPENDED(AuditEntityType.RENTAL_CONTRACT),
-    CONTRACT_ACCESS_RESTORED(AuditEntityType.RENTAL_CONTRACT);
+    CONTRACT_ACCESS_RESTORED(AuditEntityType.RENTAL_CONTRACT),
+    /** Nhân sự (V32): FM thêm / sửa / xoá ca của FS; duyệt nghỉ phép xoá ca trong khoảng nghỉ. */
+    STAFF_SHIFT_CREATED(AuditEntityType.STAFF_SHIFT),
+    STAFF_SHIFT_UPDATED(AuditEntityType.STAFF_SHIFT),
+    STAFF_SHIFT_DELETED(AuditEntityType.STAFF_SHIFT),
+    STAFF_LEAVE_REQUESTED(AuditEntityType.STAFF_LEAVE),
+    STAFF_LEAVE_APPROVED(AuditEntityType.STAFF_LEAVE),
+    STAFF_LEAVE_REJECTED(AuditEntityType.STAFF_LEAVE),
+    STAFF_LEAVE_CANCELED(AuditEntityType.STAFF_LEAVE),
+    /** ADMIN / BOM sửa hồ sơ nhân viên; số giấy tờ được che trong old/new. */
+    STAFF_PROFILE_UPDATED(AuditEntityType.STAFF_PROFILE);
 
     private final Set<AuditEntityType> entityTypes;
 

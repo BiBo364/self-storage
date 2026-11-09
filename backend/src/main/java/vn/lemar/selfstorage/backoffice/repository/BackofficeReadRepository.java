@@ -10,6 +10,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -254,6 +256,67 @@ public class BackofficeReadRepository {
         return jdbc.query(sql.toString(), (rs, n) -> new AuditRow(rs.getLong(1), rs.getString(2), rs.getString(3),
                 rs.getString(4), (Long) rs.getObject(5), rs.getString(6), rs.getString(7), rs.getString(8),
                 rs.getString(9), instant(rs, 10)), args.toArray());
+    }
+
+    /**
+     * Một FS trong báo cáo nhân sự: việc đã hoàn tất trong khoảng (lịch check-in / trả kho {@code Done} theo
+     * {@code arrived_at}, bàn giao {@code COMPLETED}, trả kho {@code COMPLETED} theo {@code completed_at}, hỗ trợ
+     * {@code Resolved} theo {@code resolved_at}), giờ ca đã xếp và số ngày nghỉ phép đã duyệt rơi vào khoảng.
+     */
+    public record StaffReportRow(Long staffId, String name, String email, String status, long completedCheckins,
+                                 long completedReturns, long handoversCompleted, long checkoutsCompleted,
+                                 long supportResolved, BigDecimal shiftHours, long leaveDays) {
+    }
+
+    /**
+     * Báo cáo nhân sự {@code from..to} (ngày VN, {@code start/end} = nửa đêm VN đầu / sau cuối khoảng). Có
+     * {@code facilityId}: FS đang gán vào cơ sở hoặc có lịch hẹn / ca ở cơ sở trong khoảng, số liệu chỉ tính tại cơ sở
+     * đó (nghỉ phép không theo cơ sở); không có: mọi tài khoản FS, toàn chuỗi.
+     */
+    public List<StaffReportRow> staffReport(Long facilityId, LocalDate from, LocalDate to, Instant start,
+                                            Instant end) {
+        boolean scoped = facilityId != null;
+        String apFacility = scoped ? " and ap.facility_id = :facilityId" : "";
+        String sql = """
+                select a.id, a.name, a.email, a.status,
+                  (select count(*) from appointments ap where ap.staff_id = a.id and ap.type = 'CHECKIN'
+                     and ap.status = 'Done' and ap.arrived_at >= :start and ap.arrived_at < :end AP_F),
+                  (select count(*) from appointments ap where ap.staff_id = a.id and ap.type = 'RETURN'
+                     and ap.status = 'Done' and ap.arrived_at >= :start and ap.arrived_at < :end AP_F),
+                  (select count(*) from handover_records h join appointments ap on ap.id = h.appointment_id
+                     where ap.staff_id = a.id and h.result = 'COMPLETED'
+                       and h.completed_at >= :start and h.completed_at < :end AP_F),
+                  (select count(*) from checkout_records c join return_requests rr on rr.id = c.return_request_id
+                     where rr.assigned_staff_id = a.id and c.result = 'COMPLETED'
+                       and c.completed_at >= :start and c.completed_at < :end RR_F),
+                  (select count(*) from support_requests sr where sr.assigned_staff_id = a.id
+                     and sr.status = 'Resolved' and sr.resolved_at >= :start and sr.resolved_at < :end SR_F),
+                  (select round(coalesce(sum(extract(epoch from (sh.end_time - sh.start_time))), 0) / 3600, 2)
+                     from staff_shifts sh where sh.staff_id = a.id and sh.shift_date between :from and :to SH_F),
+                  (select coalesce(sum(least(l.to_date, :to) - greatest(l.from_date, :from) + 1), 0)
+                     from staff_leaves l where l.staff_id = a.id and l.status = 'Approved'
+                       and l.from_date <= :to and l.to_date >= :from)
+                from accounts a join roles r on r.id = a.role_id and r.name = 'FS'
+                """.replace("AP_F", apFacility)
+                .replace("RR_F", scoped ? " and rr.facility_id = :facilityId" : "")
+                .replace("SR_F", scoped ? " and sr.facility_id = :facilityId" : "")
+                .replace("SH_F", scoped ? " and sh.facility_id = :facilityId" : "")
+                + (scoped ? """
+                where exists (select 1 from account_facility_assignments f
+                              where f.account_id = a.id and f.facility_id = :facilityId)
+                   or exists (select 1 from appointments ap where ap.staff_id = a.id
+                              and ap.facility_id = :facilityId and ap.date between :from and :to)
+                   or exists (select 1 from staff_shifts sh where sh.staff_id = a.id
+                              and sh.facility_id = :facilityId and sh.shift_date between :from and :to)
+                """ : "")
+                + " order by a.email";
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", Timestamp.from(start)).addValue("end", Timestamp.from(end))
+                .addValue("from", Date.valueOf(from)).addValue("to", Date.valueOf(to))
+                .addValue("facilityId", facilityId);
+        return new NamedParameterJdbcTemplate(jdbc).query(sql, params, (rs, n) -> new StaffReportRow(rs.getLong(1),
+                rs.getString(2), rs.getString(3), rs.getString(4), rs.getLong(5), rs.getLong(6), rs.getLong(7),
+                rs.getLong(8), rs.getLong(9), rs.getBigDecimal(10), rs.getLong(11)));
     }
 
     private long count(String sql) {

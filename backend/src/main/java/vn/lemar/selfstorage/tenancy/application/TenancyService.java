@@ -34,6 +34,7 @@ import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
 import vn.lemar.selfstorage.pricing.application.PricingQuery;
+import vn.lemar.selfstorage.staffing.application.StaffAvailability;
 import vn.lemar.selfstorage.tenancy.domain.ReturnRequest;
 import vn.lemar.selfstorage.tenancy.repository.ReturnRequestRepository;
 
@@ -76,12 +77,14 @@ public class TenancyService {
     private final Access access;
     private final CurrentAccountProvider currentAccount;
     private final AuditRecorder auditRecorder;
+    private final StaffAvailability staffAvailability;
 
     TenancyService(RentalContractService contracts, ContractInvoiceService invoices, HandoverOrderService orders,
                    ReturnAppointmentService returnAppointments, OrderNotificationService orderNotifications,
                    NotificationService notificationService, AccountQueryService accountQuery,
                    ReturnRequestRepository returnRequests, FacilityStaffQuery staffQuery, PricingQuery pricingQuery,
-                   Access access, CurrentAccountProvider currentAccount, AuditRecorder auditRecorder) {
+                   Access access, CurrentAccountProvider currentAccount, AuditRecorder auditRecorder,
+                   StaffAvailability staffAvailability) {
         this.contracts = contracts;
         this.invoices = invoices;
         this.orders = orders;
@@ -95,6 +98,7 @@ public class TenancyService {
         this.access = access;
         this.currentAccount = currentAccount;
         this.auditRecorder = auditRecorder;
+        this.staffAvailability = staffAvailability;
     }
 
     /** Kho đang thuê của khách. */
@@ -270,8 +274,16 @@ public class TenancyService {
             }
             returnAppointments.cancel(request.getAppointmentId(), "FM phân công lại buổi trả kho", actorId);
         }
+        // Ưu tiên khung trống FS có ca bao trọn (FS chỉ có ca chiều thì không bị xếp vào khung sáng rồi 409).
         ReturnAppointment appointment = returnAppointments.book(contract.orderId(), contract.customerId(),
-                request.getFacilityId(), staffId, request.getPreferredDate(), actorId);
+                request.getFacilityId(), staffId, request.getPreferredDate(), actorId,
+                (start, end) -> staffAvailability.appointmentViolation(staffId, request.getFacilityId(), start, end)
+                        .isEmpty());
+        // Giờ hẹn chỉ biết sau khi chọn khung trống; vi phạm ca / nghỉ phép thì cả transaction (lịch vừa tạo) rollback.
+        staffAvailability.appointmentViolation(staffId, request.getFacilityId(), appointment.startAt(),
+                appointment.endAt()).ifPresent(message -> {
+                    throw TenancyException.conflict(message);
+                });
         String before = request.getStatus();
         request.assign(staffId, appointment.appointmentId());
         audit(AuditAction.RETURN_ASSIGNED, request.getId(), Map.of("status", before),

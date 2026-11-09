@@ -15,7 +15,9 @@ import {
   type AccountRow,
   type PublicFacility,
 } from "../../app/services/admin";
+import { fetchAdminStaffProfile, updateAdminStaffProfile } from "../../app/services/hr";
 import type { Navigate } from "../../app/types";
+import { StaffProfileEditor } from "../../components/domain/StaffProfileSection";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
@@ -622,6 +624,16 @@ function EditPanel({
           >
             Lưu cơ sở
           </Button>
+        </div>
+      )}
+
+      {(account.role === "FS" || account.role === "FM") && (
+        <div className="mt-8">
+          <StaffProfileEditor
+            key={account.id}
+            load={() => fetchAdminStaffProfile(account.id)}
+            save={(input) => updateAdminStaffProfile(account.id, input)}
+          />
         </div>
       )}
     </DetailPanel>

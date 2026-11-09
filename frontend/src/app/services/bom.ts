@@ -75,6 +75,8 @@ export type FacilityRow = {
   codeAccess: boolean;
   unitCount: number;
   rentedCount: number;
+  /** Số FS `ACTIVE` đang được gán vào cơ sở. */
+  staffCount: number;
 };
 
 /** `PricingAdminCommands.PolicyRow` */

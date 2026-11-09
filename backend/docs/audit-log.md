@@ -24,7 +24,8 @@ trang này ghi các action **đã nối trong code** ở bảng call site bên d
 8. `reason`: bắt buộc với thao tác override (nhập lý do); các case khác để null.
 9. `oldValue`/`newValue`: Map/POJO trạng thái trước–sau (serialize thành JSONB); null khi
    không có giá trị tương ứng (ví dụ tạo mới).
-10. Không đưa vào audit: mật khẩu, secret, số thẻ, raw payment payload; không audit thao tác
+10. Không đưa vào audit: mật khẩu, secret, số thẻ, raw payment payload, số giấy tờ tuỳ thân đầy đủ (che, giữ 4 ký
+    tự cuối); không audit thao tác
     đọc; xác minh email không ghi audit — dùng `Account.email_verified_at`.
 
 Hạ tầng append-only: không có API sửa/xóa bản ghi; module gọi chỉ ghi thêm.
@@ -107,6 +108,9 @@ auditRecorder.record(new AuditEntry(AuditAction.RENTAL_ORDER_CANCELED, AuditEnti
 | `backoffice` | `STORAGE_UNIT_CREATED`, `STORAGE_UNIT_UPDATED`, `STORAGE_UNIT_MAINTENANCE`, `STORAGE_UNIT_AVAILABLE` | `StorageUnit` | `BackofficeService` — FM/BOM thêm / sửa khoang, bảo trì tay; `holdMaintenance` ("Giữ bảo trì") ghi `STORAGE_UNIT_MAINTENANCE` với `new_value.reason` "FM giữ bảo trì" và old/new `maintenanceStartedAt` |
 | `backoffice` | `POLICY_UPDATED`, `UNIT_TYPE_UPDATED` | `Policy`, `UnitType` | `BackofficeService` — BOM đổi policy / giá loại khoang |
 | `identity` | `ACCOUNT_CREATED`, `ACCOUNT_UPDATED`, `ROLE_PERMISSIONS_UPDATED` | `Account`, `Role` | `identity/application/AccountAdminService` — Admin |
+| `staffing` | `STAFF_SHIFT_CREATED`, `STAFF_SHIFT_UPDATED`, `STAFF_SHIFT_DELETED` | `StaffShift` | `staffing/application/StaffShiftService` — FM thêm / sửa / xoá ca (old/new `facilityId`, `staffId`, `shiftDate`, `startTime`, `endTime`, `note`); duyệt nghỉ phép xoá ca trong khoảng nghỉ — mỗi ca một bản ghi, `reason` "Duyệt nghỉ phép #id"; actor = FM |
+| `staffing` | `STAFF_LEAVE_REQUESTED`, `STAFF_LEAVE_APPROVED`, `STAFF_LEAVE_REJECTED`, `STAFF_LEAVE_CANCELED` | `StaffLeave` | `staffing/application/StaffLeaveService` — actor = FS (gửi / huỷ) hoặc FM (duyệt / từ chối, `new_value.reviewNote`) |
+| `staffing` | `STAFF_PROFILE_UPDATED` | `StaffProfile` | `staffing/application/StaffProfileService.update` — ADMIN / BOM; `idNumber` trong old/new chỉ giữ 4 ký tự cuối |
 
 ## Xem thêm
 

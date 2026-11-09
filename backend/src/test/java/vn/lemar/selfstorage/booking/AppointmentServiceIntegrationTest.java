@@ -461,13 +461,18 @@ class AppointmentServiceIntegrationTest {
         return jdbc.queryForObject("select id from accounts where email = ?", Long.class, email);
     }
 
-    /** FS thứ hai của Q7 để thử đổi FS (bị chặn); seed chỉ có fs1. */
+    /**
+     * FS thứ hai của Q7 để thử đổi FS (bị chặn); seed chỉ có fs1. Kèm ca 07:00–21:00 ngày hẹn vì policy
+     * {@code staff.shift_required} bật (V32) và FS tạo trong test không có ca mẫu như fs1.
+     */
     private long secondStaffOfQ7() {
         long id = jdbc.queryForObject("""
                 insert into accounts (email, password_hash, email_verified_at, role_id, status)
                 values ('fs2@lemar.vn', (select password_hash from accounts where id = ?), now(),
                         (select id from roles where name = 'FS'), 'ACTIVE') returning id""", Long.class, fsId);
         jdbc.update("insert into account_facility_assignments (account_id, facility_id) values (?, ?)", id, q7);
+        jdbc.update("insert into staff_shifts (facility_id, staff_id, shift_date, start_time, end_time) values "
+                + "(?, ?, ?, '07:00', '21:00')", q7, id, day);
         return id;
     }
 

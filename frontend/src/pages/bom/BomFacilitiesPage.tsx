@@ -327,6 +327,9 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
                   {facility.rentedCount}/{facility.unitCount}
                 </strong>
                 <span className="text-label text-muted">khoang đang thuê</span>
+                <span className="mt-1 block text-label text-muted">
+                  {facility.staffCount} FS đang làm việc
+                </span>
               </div>
             </button>
           ))}

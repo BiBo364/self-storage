@@ -26,6 +26,9 @@ import { ExtendRequestQueuePage } from "./pages/fm/ExtendRequestQueuePage";
 import { SupportRequestQueuePage } from "./pages/fm/SupportRequestQueuePage";
 import { StorageUnitManagementPage } from "./pages/fm/StorageUnitManagementPage";
 import { StaffListPage } from "./pages/fm/StaffListPage";
+import { StaffShiftsPage } from "./pages/fm/StaffShiftsPage";
+import { StaffLeavesPage } from "./pages/fm/StaffLeavesPage";
+import { StaffReportPage } from "./pages/fm/StaffReportPage";
 import { FacilityReportPage } from "./pages/fm/FacilityReportPage";
 import { FacilityInvoicesPage } from "./pages/fm/FacilityInvoicesPage";
 import { CustomerContractOverviewPage } from "./pages/fm/CustomerContractOverviewPage";
@@ -36,6 +39,8 @@ import { HandoverQueuePage } from "./pages/fs/HandoverQueuePage";
 import { ReturnQueuePage } from "./pages/fs/ReturnQueuePage";
 import { ReturnCheckoutPage } from "./pages/fs/ReturnCheckoutPage";
 import { StaffSupportPage } from "./pages/fs/SupportQueuePage";
+import { MyShiftsPage } from "./pages/fs/MyShiftsPage";
+import { MyLeavesPage } from "./pages/fs/MyLeavesPage";
 import { HandoverPage } from "./pages/HandoverPage";
 import { PaymentResultPage } from "./pages/PaymentResultPage";
 import { SupportPage } from "./pages/SupportPage";
@@ -45,6 +50,7 @@ import { BomFacilitiesPage } from "./pages/bom/BomFacilitiesPage";
 import { BomStaffPage } from "./pages/bom/BomStaffPage";
 import { BomPricingPage } from "./pages/bom/BomPricingPage";
 import { BomInvoicesPage } from "./pages/bom/BomInvoicesPage";
+import { BomStaffReportPage } from "./pages/bom/BomStaffReportPage";
 import { AdminAccountsPage } from "./pages/admin/AdminAccountsPage";
 import { AdminPermissionsPage } from "./pages/admin/AdminPermissionsPage";
 import { AdminLoginEventsPage } from "./pages/admin/AdminLoginEventsPage";
@@ -167,6 +173,9 @@ function App() {
     view === "fm-support-requests" ||
     view === "fm-storage-units" ||
     view === "fm-staff" ||
+    view === "fm-shifts" ||
+    view === "fm-leaves" ||
+    view === "fm-staff-report" ||
     view === "fm-reports" ||
     view === "fm-invoices" ||
     view === "fm-contracts";
@@ -176,7 +185,9 @@ function App() {
     view === "fs-handovers" ||
     view === "fs-returns" ||
     view === "fs-return-detail" ||
-    view === "fs-support";
+    view === "fs-support" ||
+    view === "fs-shifts" ||
+    view === "fs-leaves";
   const isBomView = view.startsWith("bom-");
   const isAdminView = view.startsWith("admin-");
   const isNotificationView = view === "notifications";
@@ -266,6 +277,9 @@ function App() {
           {view === "fm-support-requests" && <SupportRequestQueuePage />}
           {view === "fm-storage-units" && <StorageUnitManagementPage navigate={navigate} />}
           {view === "fm-staff" && <StaffListPage />}
+          {view === "fm-shifts" && <StaffShiftsPage />}
+          {view === "fm-leaves" && <StaffLeavesPage />}
+          {view === "fm-staff-report" && <StaffReportPage />}
           {view === "fm-reports" && <FacilityReportPage navigate={navigate} />}
           {view === "fm-invoices" && <FacilityInvoicesPage />}
           {view === "fm-contracts" && <CustomerContractOverviewPage navigate={navigate} />}
@@ -279,6 +293,8 @@ function App() {
           {view === "fs-returns" && <ReturnQueuePage navigate={navigate} />}
           {view === "fs-return-detail" && <ReturnCheckoutPage navigate={navigate} />}
           {view === "fs-support" && <StaffSupportPage navigate={navigate} />}
+          {view === "fs-shifts" && <MyShiftsPage />}
+          {view === "fs-leaves" && <MyLeavesPage />}
           {isNotificationView && <NotificationsPage navigate={navigate} />}
         </FsShell>
       ) : isBomView ? (
@@ -288,6 +304,7 @@ function App() {
           {view === "bom-staff" && <BomStaffPage navigate={navigate} />}
           {view === "bom-pricing" && <BomPricingPage navigate={navigate} />}
           {view === "bom-invoices" && <BomInvoicesPage navigate={navigate} />}
+          {view === "bom-staff-report" && <BomStaffReportPage />}
         </BomShell>
       ) : isAdminView ? (
         <AdminShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>

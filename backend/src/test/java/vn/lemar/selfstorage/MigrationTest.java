@@ -154,8 +154,10 @@ class MigrationTest {
             // + fee.unit_change (V9) + handover.due_days (V16) + 7 key Flow 1.5/2.3 (V23)
             // + contract.start_date_rule (V24) + 9 key Flow 3/6/trả kho (V25)
             // − order.deposit_expiry_days (V27, không code nào đọc) + rent.invoice_lead_days + overdue.escalation_days
-            // + return.no_show_grace_minutes + return.max_no_shows (V28).
-            assertThat(count(connection, "policies")).isEqualTo(30);
+            // + return.no_show_grace_minutes + return.max_no_shows (V28) + staff.shift_required (V32).
+            assertThat(count(connection, "policies")).isEqualTo(31);
+            assertThat(countWhere(connection, "policies", "key = 'staff.shift_required' and value = 'true'"))
+                    .isEqualTo(1);
             assertThat(countWhere(connection, "policies", "key = 'return.max_no_shows'")).isEqualTo(1);
             // V5 (bug #130): policy key B2 đọc khi tạo RentalOrder.
             assertThat(countWhere(connection, "policies", "key = 'order.expiry_days'")).isEqualTo(1);
@@ -171,11 +173,14 @@ class MigrationTest {
             assertThat(countWhere(connection, "pg_indexes",
                     "indexname = 'uq_invoices_unpaid_deposit_supplement'")).isEqualTo(1);
             assertThat(count(connection, "account_facility_assignments")).isEqualTo(1);
-            // V3: permission catalog + mapping mặc định (A3b, #57).
-            assertThat(count(connection, "permissions")).isEqualTo(24);
-            assertThat(count(connection, "role_permissions")).isEqualTo(32);
-            assertThat(countWhere(connection, "role_permissions", "scope = 'FACILITY'")).isEqualTo(24);
-            assertThat(countWhere(connection, "role_permissions", "scope = 'GLOBAL'")).isEqualTo(8);
+            // V3: permission catalog + mapping mặc định (A3b, #57); V19: invoice.read của FM;
+            // V32: 4 permission nhân sự, 7 dòng mapping (FM 3 FACILITY; BOM, ADMIN mỗi role 2 GLOBAL).
+            assertThat(count(connection, "permissions")).isEqualTo(28);
+            assertThat(count(connection, "role_permissions")).isEqualTo(39);
+            assertThat(countWhere(connection, "role_permissions", "scope = 'FACILITY'")).isEqualTo(27);
+            assertThat(countWhere(connection, "role_permissions", "scope = 'GLOBAL'")).isEqualTo(12);
+            // V32: ca mẫu 07:00–21:00 cho FS seed (fs1 @ Q7), CURRENT_DATE − 7 … CURRENT_DATE + 60.
+            assertThat(count(connection, "staff_shifts")).isEqualTo(68);
 
             // #57: quan hệ FM–Facility 1–1 trên facilities.
             try (Statement statement = connection.createStatement();

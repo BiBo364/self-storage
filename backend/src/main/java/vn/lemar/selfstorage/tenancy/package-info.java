@@ -7,5 +7,5 @@
         displayName = "Tenancy (F3)",
         allowedDependencies = {"handover::application", "booking::application", "facility::application",
                 "pricing::application", "identity::application", "payment::application",
-                "notification::application", "audit::application"})
+                "notification::application", "audit::application", "staffing::application"})
 package vn.lemar.selfstorage.tenancy;

@@ -29,6 +29,7 @@ import vn.lemar.selfstorage.identity.application.FacilityStaffQuery;
 import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
+import vn.lemar.selfstorage.staffing.application.StaffAvailability;
 
 /**
  * Spec 1.5 phía FM: phân công FS cho lịch check-in. Gán {@code Appointment.staff_id}, đơn {@code Scheduled ->
@@ -52,11 +53,12 @@ public class AppointmentService {
     private final Access access;
     private final AuditRecorder auditRecorder;
     private final NotificationService notificationService;
+    private final StaffAvailability staffAvailability;
 
     AppointmentService(AppointmentRepository appointmentRepository, AppointmentReadRepository readRepository,
                        RentalOrderRepository orderRepository, FacilityStaffQuery facilityStaffQuery,
                        AccountQueryService accountQueryService, Access access, AuditRecorder auditRecorder,
-                       NotificationService notificationService) {
+                       NotificationService notificationService, StaffAvailability staffAvailability) {
         this.appointmentRepository = appointmentRepository;
         this.readRepository = readRepository;
         this.orderRepository = orderRepository;
@@ -65,6 +67,7 @@ public class AppointmentService {
         this.access = access;
         this.auditRecorder = auditRecorder;
         this.notificationService = notificationService;
+        this.staffAvailability = staffAvailability;
     }
 
     /**
@@ -96,6 +99,7 @@ public class AppointmentService {
         if (!facilityStaffQuery.isActiveStaffOf(staffAccountId, facilityId)) {
             throw new AppointmentValidationException("Nhân viên không phải FS của cơ sở này");
         }
+        requireAvailable(staffAccountId, facilityId, appointment);
         if (!order.isScheduled()) {
             throw new AppointmentConflictException("Đơn thuê không ở trạng thái chờ phân công");
         }
@@ -148,6 +152,7 @@ public class AppointmentService {
         if (!facilityStaffQuery.isActiveStaffOf(staffAccountId, facilityId)) {
             throw new AppointmentValidationException("Nhân viên không phải FS của cơ sở này");
         }
+        requireAvailable(staffAccountId, facilityId, appointment);
         if (order.getStatus() != RentalOrderStatus.IN_PROGRESS) {
             throw new AppointmentConflictException("Đơn thuê không ở trạng thái đang thực hiện");
         }
@@ -159,6 +164,14 @@ public class AppointmentService {
         auditRecorder.record(new AuditEntry(AuditAction.FS_ASSIGNED, AuditEntityType.APPOINTMENT,
                 String.valueOf(appointmentId), Map.of("staffId", previousStaffId), newValue, null, actorAccountId));
         return notifyAssigned(appointmentId, staffAccountId, orderId);
+    }
+
+    /** FS phải có ca bao trọn giờ hẹn (khi policy bật) và không nghỉ phép ngày hẹn — vi phạm → 409. */
+    private void requireAvailable(Long staffAccountId, Long facilityId, Appointment appointment) {
+        staffAvailability.appointmentViolation(staffAccountId, facilityId, appointment.getStartedAt(),
+                appointment.getEndAt()).ifPresent(message -> {
+                    throw new AppointmentConflictException(message);
+                });
     }
 
     private FmAppointmentResponse notifyAssigned(Long appointmentId, Long staffAccountId, Long orderId) {

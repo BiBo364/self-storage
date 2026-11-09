@@ -18,6 +18,10 @@ Body `{ "staffId": 5 }`.
 3. Khoá row lịch hẹn (sau đơn — cùng thứ tự với cancellation cascade). Lịch không phải `CHECKIN` / không
    còn `Pending` / đã có FS → 409, không đổi gì.
 4. `staffId` không phải FS đang hoạt động của cùng cơ sở → 400. Thiếu `staffId` → 400.
+   FS nghỉ phép `Approved` ngày hẹn → 409 "FS đang nghỉ phép ngày …" (luôn kiểm); policy `staff.shift_required` bật
+   (mặc định) mà FS không có ca **tại cơ sở** ngày hẹn bao trọn `[started_at, end_at]` → 409 "FS không có ca làm việc
+   tại cơ sở bao trọn giờ hẹn 08:00–10:00 ngày 12/11/2026"
+   ([backoffice/hr.md › Luật phân công](../../backoffice/hr.md#luật-phân-công-theo-ca--nghỉ-phép)).
 5. OK → một transaction: `appointments.staff_id = staffId`, đơn `Scheduled → InProgress`, hai AuditLog
    `FS_ASSIGNED` (actor = FM): một cho `Appointment` (`old_value = null`, `new_value = {staffId, orderId}`)
    và một cho `RentalOrder` (`old_value = {status: "Scheduled"}`, `new_value = {status: "InProgress"}`).
@@ -74,7 +78,8 @@ cũ nghỉ hoặc cần chuyển cơ sở: BOM / ADMIN không gỡ được FS k
 1. Lịch không tồn tại → 404; ngoài phạm vi cơ sở → 403. Khoá đơn rồi khoá lịch (cùng thứ tự với `POST`).
 2. Lịch không phải `CHECKIN` / không còn `Pending` (khách đã đến, đã huỷ) → 409. Lịch chưa có FS → 409 "Lịch hẹn
    chưa có FS — dùng phân công lần đầu". `staffId` trùng FS hiện tại → 409 "FS này đang phụ trách lịch hẹn".
-3. `staffId` không phải FS đang hoạt động của cùng cơ sở → 400. Đơn không ở `InProgress` → 409.
+3. `staffId` không phải FS đang hoạt động của cùng cơ sở → 400. FS mới nghỉ phép ngày hẹn / không có ca bao trọn giờ
+   hẹn → 409 như `POST` bước 4. Đơn không ở `InProgress` → 409.
 4. OK → `appointments.staff_id = staffId`; đơn giữ `InProgress`. Một AuditLog `FS_ASSIGNED` cho `Appointment`
    (`old_value = {staffId: <FS cũ>}`, `new_value = {staffId, orderId}`); không ghi cho `RentalOrder` vì đơn không đổi.
    FS mới nhận notification + email `FS_ASSIGNED`; FS cũ không nhận thông báo.

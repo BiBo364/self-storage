@@ -25,9 +25,10 @@ public class FacilityAdminCommands {
     }
 
     /** Cơ sở (cho BOM). */
+    /** {@code staffCount} = số FS {@code ACTIVE} đang được gán vào cơ sở (headcount). */
     public record FacilityRow(Long id, String code, String name, String address, String operatingHours,
                               String status, Long fmAccountId, String fmEmail, boolean keyAccess,
-                              boolean codeAccess, long unitCount, long rentedCount) {
+                              boolean codeAccess, long unitCount, long rentedCount, long staffCount) {
     }
 
     @Transactional(readOnly = true)
@@ -37,11 +38,14 @@ public class FacilityAdminCommands {
                        f.enabled_key_access, f.enabled_code_access,
                        (select count(*) from storage_units u where u.facility_id = f.id) as units,
                        (select count(*) from storage_units u where u.facility_id = f.id and u.status = 'Rented')
-                           as rented
+                           as rented,
+                       (select count(*) from account_facility_assignments s
+                        join accounts sa on sa.id = s.account_id join roles r on r.id = sa.role_id
+                        where s.facility_id = f.id and r.name = 'FS' and sa.status = 'ACTIVE') as staff
                 from facilities f left join accounts a on a.id = f.fm_account_id order by f.code""",
                 (rs, i) -> new FacilityRow(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4),
                         rs.getString(5), rs.getString(6), (Long) rs.getObject(7), rs.getString(8),
-                        rs.getBoolean(9), rs.getBoolean(10), rs.getLong(11), rs.getLong(12)));
+                        rs.getBoolean(9), rs.getBoolean(10), rs.getLong(11), rs.getLong(12), rs.getLong(13)));
     }
 
     @Transactional(readOnly = true)

@@ -7,7 +7,8 @@ Catalog permission cho model RBAC data-driven (Flow 5.0) — danh sách code mà
 flow sau bàn giao (trả kho, quá hạn, hỗ trợ, back-office) dùng lại code có sẵn thay vì thêm code mới (xem
 [Code dùng lại](#code-dùng-lại)). Được seed ở
 `backend/src/main/resources/db/migration/V3__rbac_permissions_seed.sql` (V3+ không mirror trong
-`backend/sql/` — chỉ baseline V1/V2 có mirror).
+`backend/sql/` — chỉ baseline V1/V2 có mirror); `invoice.read` của FM ở V19, 4 code nhân sự (`staff_*`) ở
+`V32__staff_hr.sql`.
 
 Mô hình guard: [authorization.md › Models](authorization.md#models).
 
@@ -61,6 +62,10 @@ Sắp theo code alphabet.
 | `rental_request.approve` | Duyệt + gán unit | | | F | | | §1.1 |
 | `rental_request.read` | Xem yêu cầu đặt kho | G | G | F | | | §1.1 |
 | `rental_request.reject` | Từ chối yêu cầu | | | F | | | §1.1 |
+| `staff_leave.review` | Xem / duyệt / từ chối nghỉ phép của FS | | | F | | own | Flow 5 — `StaffLeaveService` ([backoffice/hr.md](backoffice/hr.md)); FS gửi / huỷ đơn của mình theo ownership |
+| `staff_profile.manage` | Sửa hồ sơ nhân viên (gồm số giấy tờ) | G | G | | | | Flow 5 — `StaffProfileService.update` |
+| `staff_profile.read` | Xem hồ sơ nhân viên | G | G | F | | own | Flow 5 — ADMIN/BOM bản đủ; FM bản không số giấy tờ, FS của cơ sở mình; FS xem hồ sơ của mình |
+| `staff_shift.manage` | Quản lý ca làm việc của FS | | | F | | own | Flow 5 — `StaffShiftService`; FS xem ca của mình |
 | `unit_access_key.issue` | Bàn giao khóa/mã | | | | F | | §2.4 |
 
 Ghi chú:
@@ -69,6 +74,9 @@ Ghi chú:
   sửa / bảo trì / giữ bảo trì khoang, cấu hình truy cập — gồm cả `PUT /api/bom/facilities/{id}/access-options`), danh sách khoang
   `GET /api/fm/storage-units` (`FmFacilityReadService`) và endpoint kiểm RBAC `GET /api/facility-access/ping/{id}`.
   Mô tả seed ở V3 vẫn ghi "permission tạm cho endpoint demo"; hành vi là như trên.
+- `staff_profile.read` là `G` với ADMIN/BOM, `F` với FM: route ADMIN/BOM gọi `can("staff_profile.read")`, route FM gọi
+  `can("staff_profile.read", facilityId)` với một cơ sở FS được gán mà FM phụ trách. `staff_leave.review` kiểm như
+  vậy: FM của **bất kỳ** cơ sở nào FS được gán đều xem / duyệt được.
 - Các dòng chỉ có `own` (`invoice.pay`, `appointment.create`, `handover_record.reject`,
   `proposal_feedback.respond`) không seed — guard ownership ở service. `invoice.read` có thêm FM
   scope `FACILITY` (V19 — danh sách hoá đơn `GET /api/fm/invoices`); khách vẫn đọc hoá đơn của mình qua ownership.
@@ -93,6 +101,7 @@ gọi `canGlobalOrAt` vì `rental_order.read` của ADMIN/BOM là `G`:
 
 ## Nguồn
 
-- Catalog theo quyết định của chủ dự án: không có nhóm `*.manage`, có `facility.access`, hoàn tiền dùng code
-  `payment_transaction.refund` (không phải `payment.refund`).
+- Catalog theo quyết định của chủ dự án: có `facility.access`, hoàn tiền dùng code `payment_transaction.refund` (không
+  phải `payment.refund`). Nhóm `*.manage` chỉ có hai code nhân sự được duyệt riêng: `staff_shift.manage`,
+  `staff_profile.manage`.
 - Cột "Căn cứ" trỏ mục `specs/draft.md` của từng flow; code nào khớp seed V3 là nguồn sự thật.
