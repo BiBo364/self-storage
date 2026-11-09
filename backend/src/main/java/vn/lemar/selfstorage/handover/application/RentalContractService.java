@@ -96,6 +96,17 @@ public class RentalContractService {
                 .toList();
     }
 
+    /**
+     * Còn bộ chìa vật lý {@code Active} — trả kho phải nhập số chìa thu lại; bỏ trống thì hệ thống không được phép
+     * đoán (đoán sai nghĩa là thu oan {@code fee.lost_key}).
+     */
+    @Transactional(readOnly = true)
+    public boolean hasActivePhysicalKeys(Long contractId) {
+        return accessKeys.findByContractIdOrderByIdAsc(contractId).stream()
+                .anyMatch(k -> UnitAccessKey.PHYSICAL_KEY.equals(k.getAccessType())
+                        && UnitAccessKey.ACTIVE.equals(k.getStatus()));
+    }
+
     /** Gia hạn {@code months} tháng (hoá đơn gia hạn đã {@code Paid}); audit {@code CONTRACT_EXTENDED}. */
     @Transactional(propagation = Propagation.MANDATORY)
     public ContractSnapshot extend(Long contractId, int months, Long actorAccountId) {

@@ -149,6 +149,12 @@ public class CheckoutService {
             throw TenancyException.invalid("Tối đa 20 ảnh hiện trạng");
         }
         Locked locked = lockForStaff(returnRequestId);
+        // Khoang đã dọn xong mà hợp đồng còn chìa vật lý: bắt buộc nhập số chìa thu lại. Bỏ trống thì `revokeAll`
+        // hiểu là 0 chìa trả về và thu oan `fee.lost_key` cho toàn bộ chìa đã cấp.
+        if (Boolean.TRUE.equals(input.unitEmptied()) && input.returnedKeys() == null
+                && contracts.hasActivePhysicalKeys(locked.contract().id())) {
+            throw TenancyException.invalid("Vui lòng nhập số chìa khoá đã thu lại");
+        }
         CheckoutRecord record = records.findByReturnRequestIdForUpdate(returnRequestId)
                 .orElseGet(() -> records.save(CheckoutRecord.open(returnRequestId, locked.contract().id(),
                         locked.contract().unitId(), locked.request().appointmentId())));

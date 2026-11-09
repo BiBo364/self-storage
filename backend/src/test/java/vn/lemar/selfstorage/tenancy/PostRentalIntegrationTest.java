@@ -571,6 +571,9 @@ class PostRentalIntegrationTest {
                 List.of(), null))).isInstanceOf(TenancyException.class);
         assertThatThrownBy(() -> checkout.inspect(request.id(), new Inspection(true, false, null, null, 1,
                 java.util.Collections.nCopies(21, "u"), null))).isInstanceOf(TenancyException.class);
+        // Hợp đồng còn chìa vật lý Active: bỏ trống số chìa thu lại là 400, không được đoán thành "mất hết".
+        assertThatThrownBy(() -> checkout.inspect(request.id(), new Inspection(true, false, null, null, null,
+                List.of(), null))).isInstanceOf(TenancyException.class).hasMessageContaining("chìa");
         assertThatThrownBy(() -> tenancy.cancelReturn(request.id(), customerId))
                 .isInstanceOf(TenancyException.class).hasMessageContaining("đã bắt đầu");
         loginAs(FM);
