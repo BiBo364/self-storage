@@ -25,6 +25,8 @@ không còn sửa/xoá từ checklist.
 - Response `{attached}`: số row Pending vừa chuyển Attached.
 - Không audit — hành vi đánh dấu file đã dùng, không đổi state nghiệp vụ của flow.
 - Khi phase chuyển, FE không còn hiển thị nút X; dù có gọi delete batch thì row `Attached` bị bỏ qua.
+- Handover, trả kho và hỗ trợ cũng attach phía server khi lưu URL (`MediaAttachments`), nên lỗi ở route này không làm
+  mất ảnh đã gắn vào entity; route vẫn dùng cho batch FE muốn khoá sớm.
 
 ## Ví dụ
 

@@ -20,7 +20,7 @@ public record ConversionResult(Long requestId, Outcome outcome, Long orderId, Lo
         NOT_CONVERTIBLE,
         /**
          * Account đã có đơn/proposal đang hoạt động cho cùng khoang — request giữ nguyên {@code Approved}
-         * để FM xử lý (spec 1.2 Case A); quá hạn thì cron Flow 1 (#143) chuyển {@code Expired}.
+         * để FM xử lý (spec 1.2 Case A); quá hạn thì cron Flow 1 chuyển {@code Expired}.
          */
         DUPLICATE_UNIT
     }

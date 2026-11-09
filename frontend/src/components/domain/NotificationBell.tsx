@@ -167,16 +167,19 @@ export function NotificationBell({ onNavigate }: { onNavigate: (path: string) =>
               );
             })
           )}
-          <button
-            className="mt-1 flex w-full items-center justify-center gap-2 border-0 bg-transparent px-2.5 py-2.5 text-small font-semibold text-accent hover:bg-surface-subtle hover:text-ink"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onNavigate("/notifications");
-            }}
-          >
-            Xem tất cả
-          </button>
+          {/* BOM/ADMIN chưa có trang /notifications trong shell — ẩn để khỏi bị đẩy về trang chủ. */}
+          {role !== "BOM" && role !== "ADMIN" && (
+            <button
+              className="mt-1 flex w-full items-center justify-center gap-2 border-0 bg-transparent px-2.5 py-2.5 text-small font-semibold text-accent hover:bg-surface-subtle hover:text-ink"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onNavigate("/notifications");
+              }}
+            >
+              Xem tất cả
+            </button>
+          )}
         </div>
       )}
       {detail && (

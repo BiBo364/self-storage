@@ -4,6 +4,7 @@ import { ApiError } from "../../app/api";
 import {
   assignAppointmentStaff,
   fetchFmAppointments,
+  reassignAppointmentStaff,
   type FmAppointment,
 } from "../../app/appointments";
 import { fetchCurrentFmFacility, type FmFacility } from "../../app/fmFacility";
@@ -127,7 +128,12 @@ export function AppointmentSchedulePage() {
     setAssigning(true);
     setAssignError(null);
     try {
-      await assignAppointmentStaff(openAppointment.id, Number(selectedStaffId));
+      // Lịch đã có FS mà khách chưa đến: đổi FS (PUT); chưa có thì phân công (POST).
+      if (openAppointment.staffId === null) {
+        await assignAppointmentStaff(openAppointment.id, Number(selectedStaffId));
+      } else {
+        await reassignAppointmentStaff(openAppointment.id, Number(selectedStaffId));
+      }
       setOpenId(null);
       setReloadKey((key) => key + 1);
     } catch (caught) {
@@ -278,13 +284,15 @@ export function AppointmentSchedulePage() {
             </div>
           )}
 
-          {assignedStaffName(openAppointment) ? (
+          {assignedStaffName(openAppointment) && (
             <div className="mt-6">
               <DemoNotice tone="success">
                 Đã phân công {assignedStaffName(openAppointment)} phụ trách lịch hẹn này.
               </DemoNotice>
             </div>
-          ) : (
+          )}
+
+          {(openAppointment.staffId === null || openAppointment.status === "Pending") && (
             <>
               {staff.length === 0 ? (
                 <div className="mt-6">
@@ -295,24 +303,28 @@ export function AppointmentSchedulePage() {
               ) : (
                 <>
                   <label className="mt-6 grid gap-1.5 text-label text-muted">
-                    Chọn nhân viên FS
+                    {openAppointment.staffId === null
+                      ? "Chọn nhân viên FS"
+                      : "Đổi sang nhân viên FS"}
                     <select
                       className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
                       value={selectedStaffId}
                       onChange={(event) => setSelectedStaffId(event.target.value)}
                     >
                       <option value="">— Chọn nhân viên —</option>
-                      {staff.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {staffLabel(member)}
-                        </option>
-                      ))}
+                      {staff
+                        .filter((member) => member.id !== openAppointment.staffId)
+                        .map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {staffLabel(member)}
+                          </option>
+                        ))}
                     </select>
                   </label>
                   <div className="mt-5">
                     <Button pending={assigning} disabled={!selectedStaffId} onClick={assign}>
                       {!assigning && <Check size={16} />}
-                      Phân công
+                      {openAppointment.staffId === null ? "Phân công" : "Đổi FS"}
                     </Button>
                   </div>
                 </>

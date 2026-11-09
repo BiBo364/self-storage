@@ -19,12 +19,15 @@ FM xem toàn bộ hóa đơn phát sinh từ khách hàng thuộc cơ sở mình
 ## Actions
 - Xem chi tiết 1 hóa đơn (liên kết ngược tới hợp đồng/đơn/khách hàng)
 - MVP không có action tạo/sửa hóa đơn thủ công ở đây — mọi hóa đơn sinh ra tự động từ flow tương ứng (đặt cọc, gia hạn, trả kho, sự cố)
+- Tab **Hoàn tiền**: hàng đợi hoá đơn `Required`/`Processing` của cơ sở; chọn một khoản → xem lịch sử hoàn + số còn hoàn được → nhập số tiền + ghi chú (lý do, mã chuyển khoản) → "Ghi nhận đã hoàn". Hoàn đủ thì khoản rời hàng đợi.
 
 ## States / UI trạng thái
 - Tổng hợp nhanh (summary card): tổng công nợ `Unpaid`, tổng đã thu trong kỳ
 
 ## API liên quan
-- `GET /api/fm/invoices?type=&status=`
+- `GET /api/fm/invoices?facilityId=&type=&status=&paymentStatus=&page=&size=`
+- `GET /api/fm/invoices/refunds?facilityId=&page=&size=` — hàng đợi hoàn tiền
+- `GET` / `POST /api/fm/invoices/{invoiceId}/refunds` — lịch sử / ghi nhận hoàn tiền thủ công
 
 ## Edge case / Lưu ý UX
 - **Lưu ý:** đây là trang được đề xuất dựa trên mô tả actor (chưa có flow nào mô tả chi tiết UI này) — cần xác nhận với team xem có thực sự cần trang riêng hay chỉ cần xem hóa đơn lồng trong từng hợp đồng ở `fm/11-customer-contract-overview.md`

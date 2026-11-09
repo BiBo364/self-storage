@@ -19,7 +19,7 @@ import vn.lemar.selfstorage.booking.application.ProposalView;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
 
 /**
- * FM đề xuất lại khoang cho đơn — contract #113: {@code POST /api/rental-orders/{orderId}/proposals}. Route
+ * FM đề xuất lại khoang cho đơn: {@code POST /api/rental-orders/{orderId}/proposals}. Route
  * permission-bound trong {@code /api/**} ({@code ACCOUNT_ACTIVE}); quyền {@code proposal_feedback.repropose}
  * (+ {@code .override}) theo cơ sở kiểm trong service qua {@code Access.can}.
  */

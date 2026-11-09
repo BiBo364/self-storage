@@ -1,7 +1,8 @@
 # GET /api/payments/vnpay/ipn
 
-Server VNPay gọi vào để xác nhận kết quả thanh toán. Đây là **nguồn xác nhận thanh toán duy nhất**
-— Return URL chỉ để hiển thị cho khách.
+Server VNPay gọi vào để xác nhận kết quả thanh toán khi dùng VNPay (cổng mặc định). Đây là **nguồn xác nhận
+thanh toán chính** — Return URL chỉ để hiển thị cho khách; dự phòng là `payment-check` khi khách quay về và đối
+soát thủ công của ADMIN ([payment.md](../../payment.md)).
 
 - **Actor / quyền:** public. VNPay gọi từ server của họ và không có JWT, nên route này không thể
   yêu cầu token. Thứ thay cho token là chữ ký HMAC-SHA512 trong `vnp_SecureHash`.
@@ -16,7 +17,9 @@ Thứ tự kiểm, dừng ngay ở bước đầu tiên không đạt:
 2. Tìm giao dịch theo `vnp_TxnRef` — không có → `01`
 3. `vnp_TmnCode` khớp merchant — không khớp → `01`
 4. `vnp_Amount` khớp số tiền (VNPay gửi đã nhân 100) — lệch → `04`
-5. Giao dịch còn `Pending` — không còn → `02`, **không ghi gì thêm**
+5. Giao dịch còn `Pending` — không còn → `02`, **không ghi gì thêm**; riêng giao dịch đã `Failed` (phiên đã huỷ)
+   mà IPN báo thành công → tiền về muộn: khoá invoice, chưa có `PAY/Success` thì `Failed → Success` + `PaymentSucceeded`
+   (booking đánh dấu hoàn tiền nếu hoá đơn đã đóng), có rồi thì `Duplicate`; vẫn trả `02`
 6. Nếu là Success: khoá invoice; invoice đã có `PAY/Success` khác → transaction chuyển `Duplicate`,
    audit `PAYMENT_DUPLICATE`, notify FM, trả `02`; không ghi Success lần hai
 7. Ngược lại ghi `Success`/`Failed`, bắn `PaymentSucceeded`/`PaymentFailed` → `00`
@@ -44,10 +47,10 @@ Lỗi ngoài dự kiến trả `99` thay vì HTTP 500, bắt ở controller nên
   `@TransactionalEventListener(phase = AFTER_COMMIT)` (hoặc `REQUIRES_NEW`) — listener đồng bộ mặc
   định thấy state chưa commit, và exception từ listener sẽ rollback IPN khiến VNPay retry 10 lần.
 - IPN URL khai trong **cấu hình tài khoản merchant** trên portal VNPay, không gửi kèm lúc tạo URL
-  thanh toán. Dev local cần tunnel HTTPS — xem [docs/vnpay-sandbox.md](../../../../docs/vnpay-sandbox.md).
-- `vnp_Amount` đối chiếu với `PaymentTransaction.amount`; giá trị đó do caller truyền vào lúc
-  `startPayment`. Caller phải đọc amount từ `Invoice` trong DB — luồng đặt cọc làm vậy, xem
-  [invoice-pay.md](../booking/invoice-pay.md). Module `payment` không import `booking` nên không tự
+  thanh toán. Dev local cần tunnel HTTPS — xem [docs/vnpay-testing.md](../../../../docs/vnpay-testing.md) và
+  [docs/vnpay-run-local.md](../../../../docs/vnpay-run-local.md).
+- `vnp_Amount` đối chiếu với `PaymentTransaction.amount`; giá trị đó booking lấy từ `invoice.amount` trong DB lúc
+  mở phiên ([invoice-pay.md](../booking/invoice-pay.md)). Module `payment` không import `booking` nên không tự
   đọc lại.
 
 ## Ví dụ
@@ -67,4 +70,4 @@ Hai key viết hoa `RspCode`/`Message` cũng thấy rõ trong chính response n�
 ## Liên quan
 
 - [vnpay-return.md](vnpay-return.md) · [routes.md](../../routes.md) · [index.md](../../index.md)
-- Hướng dẫn lấy credential sandbox + dựng IPN URL: [docs/vnpay-sandbox.md](../../../../docs/vnpay-sandbox.md)
+- Hướng dẫn lấy credential sandbox + dựng IPN URL: [docs/vnpay-testing.md](../../../../docs/vnpay-testing.md)

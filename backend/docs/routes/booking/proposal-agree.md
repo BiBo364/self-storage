@@ -15,8 +15,9 @@ Khách bấm "Đồng ý" trên một proposal `Pending`.
 
 - Một transaction: khoá row proposal (bấm đúp / 2 tab → request sau nhận 409), khoá row đơn
   (`findByIdForUpdate`, vì đọc/ghi tiền), khoá row khoang cũ + khoang mới theo thứ tự id.
-- Guard trạng thái đơn: đơn `Canceled`/`Done` → 409; `expires_at < now` → 409.
-- Khoang còn `Available`, đơn chưa cọc: proposal `Agreed`, `RentalOrder.unit_id` = khoang đó, tạo `Invoice`
+- Guard trạng thái đơn: đơn `Canceled`/`Done` → 409; `expires_at < now` → 409; đơn còn hoá đơn
+  `Deposit`/`DepositSupplement` `Unpaid` → 409 "Đơn đang có hoá đơn cọc chờ thanh toán".
+- Khoang còn `Available`, đơn chưa cọc (không giữ khoang, chưa có cọc `Paid`): proposal `Agreed`, `RentalOrder.unit_id` = khoang đó, tạo `Invoice`
   `Deposit`/`Unpaid`, AuditLog `PROPOSAL_AGREED` (payload có `unitId`) + `INVOICE_CREATED`.
 - Khoang `Reserved`/`Maintenance`: proposal `Canceled`, AuditLog `PROPOSAL_CANCELED`, FM nhận
   `PROPOSAL_REPROPOSAL_REQUIRED`, response 409 — các thay đổi này **vẫn được commit** (service trả kết quả,
@@ -29,8 +30,11 @@ sinh ra từ nhánh FM đề xuất lại sau khi khách từ chối khoang tạ
 
 - Khoang cũ được nhả ngay (`Reserved → Available`, AuditLog `UNIT_CHANGE_RELEASED`); `order.unit_id` đổi
   sang khoang mới.
-- Khoang mới **chưa được reserve** ở bước này — bước thu cọc bổ sung reserve sau khi thanh toán;
-  trường hợp `delta ≤ 0` chưa có bước reserve (follow-up).
+- Khoang mới được reserve theo `delta` bên dưới: `delta ≤ 0` → reserve ngay trong transaction đồng ý
+  (`Available → Reserved`, AuditLog `STORAGE_UNIT_RESERVED` lý do "Đổi khoang sau khi đã cọc"); `delta > 0` →
+  reserve khi hoá đơn `DepositSupplement` được thanh toán (`DepositPaymentListener`); khoang đã bị giữ lúc đó thì
+  hoá đơn bổ sung `Paid` + `refund_status = Required` (`UNIT_UNAVAILABLE`), FM nhận `PAYMENT_REFUND_REQUIRED`
+  ([invoice-pay.md](invoice-pay.md#nhánh-thành-công)).
 
 ```text
 paidDeposit = tổng Invoice Deposit + DepositSupplement đã Paid của đơn
@@ -38,12 +42,31 @@ required    = giá thuê hiệu lực(khoang mới) × invoice.deposit_months + 
 delta       = required − paidDeposit
 ```
 
+### Cọc đã trả nhưng khoang bị giữ trước
+
+Đơn `Pending` có `Deposit` `Paid` — lúc chốt cọc khoang đã bị đơn khác giữ (`DepositPaymentListener` không reserve
+được: hoá đơn `refund_status = Required`, FM nhận `PAYMENT_REFUND_REQUIRED`). FM có thể đề xuất khoang thay thế; khi
+khách đồng ý (`ProposalService.issueDeposit`), cọc đã thu (trừ khoản đã ghi nhận hoàn) được tính cho khoang mới:
+
+- **không** nhả khoang cũ (đơn không giữ nó — `releaseReplacedUnit` chỉ nhả khi `order.holdsUnit()`);
+- `required` **không** cộng `fee.unit_change` (khách không gây ra việc đổi khoang);
+- `delta ≤ 0` → giữ khoang thay thế ngay (`STORAGE_UNIT_RESERVED`), đơn `Pending → Deposited` (audit
+  `RENTAL_ORDER_DEPOSITED` lý do "Cọc đã thu, giữ khoang thay thế"), khách nhận `DEPOSIT_PAYMENT_SUCCEEDED`;
+  `delta < 0` thì thêm nhánh hoàn phần dư như dưới;
+- `delta > 0` → hoá đơn `DepositSupplement` như dưới; khi hoá đơn này `Paid` mà đơn còn `Pending`,
+  `DepositPaymentListener` chốt cọc như hoá đơn `Deposit` (giữ khoang, đơn `Deposited`, `RENTAL_ORDER_DEPOSITED`,
+  `DEPOSIT_PAYMENT_SUCCEEDED`).
+
+### Kết quả theo delta
+
 - `delta > 0`: tạo `Invoice` `DepositSupplement`/`Unpaid` cho phần chênh lệch, title "Bổ sung cọc khoang chứa {mã}",
   hạn như hoá đơn cọc thường; khách nhận `UNIT_CHANGE_PAYMENT_REQUIRED` ("thanh toán để giữ khoang mới").
 - `delta < 0`: không tạo hoá đơn; AuditLog `DEPOSIT_REFUND_REQUIRED` + notification
-  `DEPOSIT_REFUND_REQUIRED` cho FM, khách nhận `DEPOSIT_REFUND_PENDING`. Việc ghi nhận hoàn tiền thuộc
-  Flow 2/4: hiện FM hoàn thủ công; hoàn tự động chưa có trong code.
-- `delta = 0`: không tạo gì.
+  `DEPOSIT_REFUND_REQUIRED` cho FM, khách nhận `DEPOSIT_REFUND_PENDING`; hoá đơn cọc đã `Paid` của đơn chuyển
+  `refund_status = Required` với `refund_amount` = phần dư (`UNIT_CHANGE_EXCESS`, chia từ hoá đơn mới nhất). FM chuyển
+  khoản hoàn ngoài hệ thống rồi ghi nhận qua `POST /api/fm/invoices/{invoiceId}/refunds`
+  ([fm-invoice-refunds.md](fm-invoice-refunds.md)).
+- `delta = 0`: không tạo hoá đơn, không có nhánh hoàn tiền (khoang mới vẫn được giữ như trên).
 - Response 200: `invoice = null` khi `delta ≤ 0` (message "Đã cập nhật khoang mới cho đơn thuê"); khi
   `delta > 0` là hoá đơn bổ sung (message "Đã đồng ý khoang. Vui lòng thanh toán hoá đơn đặt cọc").
 

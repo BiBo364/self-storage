@@ -25,13 +25,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # SMTP giả để dev — xem mail tại http://localhost:8025
-  mailhog:
-    image: mailhog/mailhog:v1.0.1
-    ports:
-      - "1025:1025"
-      - "8025:8025"
-
   # App chạy trong Docker (tuỳ chọn): docker compose --profile app up -d
   # Dev bình thường chạy `cd backend && ./mvnw spring-boot:run` cho nhanh.
   backend:
@@ -49,10 +42,14 @@ services:
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-PT15M}
+      # Mail thật qua Gmail SMTP — giá trị lấy từ .env (xem .env.example).
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
     ports:
       - "8080:8080"
-
-  # frontend: React app (issue #15 mục 9) - thêm khi FE có code
 
 volumes:
   postgres-data:

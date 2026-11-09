@@ -1,6 +1,7 @@
 package vn.lemar.selfstorage.payment.repository;
 
 import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -14,6 +15,22 @@ import vn.lemar.selfstorage.payment.domain.PaymentStatus;
 import vn.lemar.selfstorage.payment.domain.PaymentTransaction;
 
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Long> {
+
+    /** Tổng tiền giao dịch {@code Success} theo chiều (PAY / REFUND) của hoá đơn. */
+    @Query("select coalesce(sum(t.amount), 0) from PaymentTransaction t where t.invoiceId = :invoiceId "
+            + "and t.status = vn.lemar.selfstorage.payment.domain.PaymentStatus.SUCCESS and t.direction = :direction")
+    BigDecimal sumSucceeded(
+            @Param("invoiceId") Long invoiceId,
+            @Param("direction") PaymentDirection direction);
+
+    /** Tổng tiền giao dịch theo chiều + trạng thái của hoá đơn (vd {@code PAY}/{@code Duplicate}). */
+    @Query("select coalesce(sum(t.amount), 0) from PaymentTransaction t where t.invoiceId = :invoiceId "
+            + "and t.direction = :direction and t.status = :status")
+    BigDecimal sumByStatus(@Param("invoiceId") Long invoiceId, @Param("direction") PaymentDirection direction,
+                           @Param("status") PaymentStatus status);
+
+    List<PaymentTransaction> findByInvoiceIdAndDirectionOrderByIdAsc(Long invoiceId,
+            PaymentDirection direction);
 
     /**
      * Khoá row khi xử lý IPN ({@code SELECT ... FOR UPDATE}).
@@ -61,4 +78,21 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     /** Toàn bộ giao dịch PAY của nhóm invoice, mới nhất trước — read model cho FM. */
     List<PaymentTransaction> findByInvoiceIdInAndDirectionOrderByCreatedAtDesc(
             Collection<Long> invoiceIds, PaymentDirection direction);
+    /** Hoá đơn nào trong danh sách đang có giao dịch ở trạng thái {@code status} tạo sau mốc. */
+    @Query("select distinct t.invoiceId from PaymentTransaction t where t.invoiceId in :invoiceIds "
+            + "and t.status = :status and t.createdAt > :since")
+    List<Long> findInvoiceIdsWithStatusSince(@Param("invoiceIds") Collection<Long> invoiceIds,
+                                             @Param("status") PaymentStatus status, @Param("since") Instant since);
+
+    /** Mốc cổng ghi nhận thu tiền sớm nhất của hoá đơn. */
+    @Query("select min(t.paidAt) from PaymentTransaction t where t.invoiceId = :invoiceId and t.status = :status")
+    Optional<Instant> findFirstPaidAt(@Param("invoiceId") Long invoiceId, @Param("status") PaymentStatus status);
+
+    @Query("select t.vnpTxnRef from PaymentTransaction t where t.invoiceId in :invoiceIds "
+            + "and t.status = vn.lemar.selfstorage.payment.domain.PaymentStatus.PENDING order by t.id")
+    List<String> findPendingTxnRefsByInvoiceIds(@Param("invoiceIds") Collection<Long> invoiceIds);
+
+    /** Giao dịch mới nhất của hoá đơn (đọc thuần, không khoá). */
+    Optional<PaymentTransaction> findFirstByInvoiceIdOrderByCreatedAtDescIdDesc(Long invoiceId);
+
 }

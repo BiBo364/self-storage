@@ -19,7 +19,8 @@ public record FmRentalOrderSummaryResponse(
         @Schema(description = "Đơn cần FM đề xuất lại (BE tính)") boolean needsRepropose,
         @Schema(description = "Số proposal bị từ chối") long rejectionCount,
         @Schema(description = "Ngưỡng từ chối") int maxRejectionCount,
-        @Schema(description = "Proposal gần nhất; null nếu chưa có") LastProposal lastProposal
+        @Schema(description = "Proposal gần nhất; null nếu chưa có") LastProposal lastProposal,
+        @Schema(description = "Thao tác FM được làm: REPROPOSE, CANCEL") java.util.List<String> availableActions
 ) {
 
     @Schema(name = "FmRentalOrderLastProposal")

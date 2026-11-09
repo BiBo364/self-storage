@@ -32,6 +32,8 @@ cần. Đây là nơi theo dõi đơn sau khi `RentalRequest` đã convert — k
 - Lọc theo trạng thái ở client; tìm theo mã đơn / tên khách / email / mã khoang.
 - Mở detail panel (thông tin khách, khoang, hạn đơn, lý do huỷ, đề xuất gần nhất, số lần từ chối).
 - `Đề xuất lại khoang` khi `needsRepropose = true` → `/fm/rental-orders/{id}/re-propose`.
+- `Huỷ đơn` khi `availableActions` có `CANCEL` → ô lý do (trống = "Khách không còn nhu cầu") → xác nhận gọi
+  `POST /api/fm/rental-orders/{id}/cancel`; thành công thì tải lại danh sách và hiện thông báo.
 - Deep link `?orderId={id}` mở đúng detail panel của đơn đó.
 
 ## States / UI trạng thái
@@ -46,6 +48,7 @@ cần. Đây là nơi theo dõi đơn sau khi `RentalRequest` đã convert — k
 - `GET /api/fm/facility` — cơ sở FM đang phụ trách (`facilityId`).
 - `GET /api/fm/rental-orders?facilityId=&status=&page=&size=` — danh sách đơn của cơ sở.
 - `GET /api/fm/rental-orders/{id}` — chi tiết đơn, dùng cho trang re-propose.
+- `POST /api/fm/rental-orders/{id}/cancel` — FM huỷ đơn (Cancellation Cascade).
 
 ## Edge case / Lưu ý UX
 

@@ -44,28 +44,100 @@ public class StorageUnit {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Bảo trì sau trả kho (V25); bảo trì FM bật tay để null — cron không tự mở lại. */
+    @Column(name = "maintenance_started_at")
+    private Instant maintenanceStartedAt;
+
+    /** Đơn đang giữ khoang khi {@code Reserved} (V30); {@code null} ở trạng thái khác hoặc khoang Reserved cũ. */
+    @Column(name = "reserved_order_id")
+    private Long reservedOrderId;
+
     /**
-     * Đặt cọc thành công: giữ chỗ {@code Available -> Reserved}.
-     *
-     * <p>Trả {@code false} khi khoang đã rời khỏi {@code Available} — khách khác cọc trước, hoặc
-     * khoang chuyển bảo trì trong lúc phiên thanh toán còn mở. Caller phải xử lý ca đó chứ không
-     * được đè trạng thái.
+     * Spec 1.4: cọc thành công → {@code Available -> Reserved}. Trả {@code false} khi khoang đã rời {@code Available}
+     * (khách khác cọc trước / chuyển bảo trì lúc phiên còn mở) — caller xử lý, không đè trạng thái.
      */
     public boolean reserveIfAvailable() {
+        return reserveIfAvailable(null);
+    }
+
+    /** Như {@link #reserveIfAvailable()} và ghi đơn giữ khoang — chỉ đơn này mới nhả được khoang. */
+    public boolean reserveIfAvailable(Long orderId) {
         if (status != StorageUnitStatus.AVAILABLE) {
             return false;
         }
+        this.reservedOrderId = orderId;
         this.status = StorageUnitStatus.RESERVED;
         this.updatedAt = Instant.now();
         return true;
     }
 
-    /** Cancellation Cascade: khoang đang giữ cho đơn bị huỷ được giải phóng {@code Reserved -> Available}. */
+    /** Spec 2.4: bàn giao hoàn tất → {@code Reserved -> Rented}. */
+    public boolean rentIfReserved() {
+        if (status != StorageUnitStatus.RESERVED) {
+            return false;
+        }
+        this.status = StorageUnitStatus.RENTED;
+        this.reservedOrderId = null;
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
+    /** Cancellation Cascade: {@code Reserved -> Available}. */
     public boolean releaseIfReserved() {
         if (status != StorageUnitStatus.RESERVED) {
             return false;
         }
+        this.reservedOrderId = null;
         this.status = StorageUnitStatus.AVAILABLE;
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
+    /**
+     * Nhả khoang chỉ khi {@code orderId} là đơn đang giữ nó. Khoang Reserved không ghi đơn giữ (trước V30) nhả theo
+     * luật cũ. Đơn trỏ {@code unit_id} tới khoang mà không giữ (khoang đã bị đơn khác cọc trước) → giữ nguyên.
+     */
+    public boolean releaseIfReservedBy(Long orderId) {
+        if (status != StorageUnitStatus.RESERVED
+                || (reservedOrderId != null && !reservedOrderId.equals(orderId))) {
+            return false;
+        }
+        return releaseIfReserved();
+    }
+
+    /** Trả kho hoàn tất → {@code Rented -> Maintenance}, ghi mốc để cron mở lại sau {@code unit.maintenance_days}. */
+    public boolean startMaintenanceAfterReturn(Instant now) {
+        if (status != StorageUnitStatus.RENTED) {
+            return false;
+        }
+        this.status = StorageUnitStatus.MAINTENANCE;
+        this.maintenanceStartedAt = now;
+        this.updatedAt = now;
+        return true;
+    }
+
+    /**
+     * Trả kho hoàn tất nhưng khách mất chìa → {@code Rented -> Maintenance} không ghi {@code maintenance_started_at}
+     * (bảo trì thủ công): khoang chờ thay khoá, cron không tự mở lại — FM mở lại tay.
+     */
+    public boolean startManualMaintenanceAfterReturn(Instant now) {
+        if (status != StorageUnitStatus.RENTED) {
+            return false;
+        }
+        this.status = StorageUnitStatus.MAINTENANCE;
+        this.maintenanceStartedAt = null;
+        this.updatedAt = now;
+        return true;
+    }
+
+    /** Hết thời gian bảo trì sau trả kho → {@code Maintenance -> Available}. Bảo trì bật tay không đổi. */
+    public boolean finishMaintenanceIfDue(Instant cutoff) {
+        if (status != StorageUnitStatus.MAINTENANCE || maintenanceStartedAt == null
+                || maintenanceStartedAt.isAfter(cutoff)) {
+            return false;
+        }
+        this.status = StorageUnitStatus.AVAILABLE;
+        this.maintenanceStartedAt = null;
         this.updatedAt = Instant.now();
         return true;
     }

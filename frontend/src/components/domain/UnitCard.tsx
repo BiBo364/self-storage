@@ -1,52 +1,35 @@
 import { ArrowRight } from "lucide-react";
-import { formatPrice, UnitType } from "../../mocks/catalog";
+import { formatMoney } from "../../app/format";
+import { formatArea, formatDimensions, type UnitTypeOption } from "../../app/services/customer";
 import { Navigate } from "../../app/types";
 
-type UnitCardProps = { unit: UnitType; navigate: Navigate; onDetails?: () => void };
-
-const ACCENT_BACKGROUND: Record<UnitType["accent"], string> = {
-  sand: "bg-unit-sand",
-  teal: "bg-unit-teal",
-  ink: "bg-unit-ink",
-};
+type UnitCardProps = { unit: UnitTypeOption; navigate: Navigate; onDetails?: () => void };
 
 export function UnitCard({ unit, navigate, onDetails }: UnitCardProps) {
   return (
-    <article className="overflow-hidden rounded-md border border-border bg-surface transition-[border-color] duration-[180ms] ease hover:border-brand">
-      <div
-        className={`relative h-[218px] overflow-hidden border-b border-border ${ACCENT_BACKGROUND[unit.accent]}`}
-      >
-        <img
-          className="block h-full w-full object-cover text-[12px] leading-[1.4] text-[rgba(232,242,239,0.68)]"
-          src={unit.image}
-          alt={`Hình ảnh tại kho ${unit.name}`}
-        />
-      </div>
-      <div className="p-[23px]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="m-0 mb-1 text-[20px] font-bold tracking-[-0.025em] text-ink">
-              {unit.name}
-            </h3>
-            <p className="m-0 text-[11px] text-muted">{unit.size}</p>
-          </div>
-          <span className="flex flex-col items-end text-brand">
-            <strong className="text-[14px] font-bold">{formatPrice(unit.monthlyPrice)}đ</strong>
-            <small className="text-[10px] font-medium text-muted">/ tháng</small>
+    <article className="bg-surface p-5 transition-colors duration-[180ms] ease hover:bg-surface-subtle">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="grid h-14 w-14 shrink-0 place-items-center border-2 border-[#101413] bg-brand text-label font-semibold text-signal-ink">
+            {formatArea(unit.area)}
           </span>
+          <div>
+            <h3 className="m-0 text-section text-ink">{unit.name}</h3>
+            <p className="m-0 mt-0.5 text-label text-muted">{formatDimensions(unit)}</p>
+          </div>
         </div>
-        <p className="m-0 mb-[22px] mt-[19px] min-h-[54px] text-[13px] leading-[1.6] text-muted">
-          {unit.description}
-        </p>
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-[15px] text-[11px] text-muted">
-          <span>{unit.idealFor}</span>
-          <button
-            className="inline-flex items-center gap-[5px] border-0 bg-transparent p-0 text-[12px] font-extrabold text-brand hover:text-brand-strong"
-            onClick={onDetails ?? (() => navigate("/rental-requests/new"))}
-          >
-            {onDetails ? "Xem chi tiết" : "Chọn loại này"} <ArrowRight size={15} />
-          </button>
-        </div>
+        <span className="flex flex-col items-end">
+          <strong className="text-data text-ink">{formatMoney(unit.monthlyPrice)}</strong>
+          <small className="text-label text-muted">/ tháng</small>
+        </span>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button
+          className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
+          onClick={onDetails ?? (() => navigate(`/rental-requests/new?type=${unit.id}`))}
+        >
+          {onDetails ? "Xem chi tiết" : "Chọn loại này"} <ArrowRight size={15} />
+        </button>
       </div>
     </article>
   );

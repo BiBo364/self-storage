@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,10 +59,15 @@ public class DepositPaymentListener {
     private final AccountQueryService accounts;
     private final AuditRecorder audit;
     private final OrderNotifier orderNotifier;
+    private final InvoiceRefundService refunds;
+    private final ApplicationEventPublisher events;
 
     public DepositPaymentListener(InvoiceRepository invoices, RentalOrderRepository orders,
             StorageUnitQuery unitQuery, StorageUnitService units, NotificationService notifications,
-            AccountQueryService accounts, AuditRecorder audit, OrderNotifier orderNotifier) {
+            AccountQueryService accounts, AuditRecorder audit, OrderNotifier orderNotifier,
+            InvoiceRefundService refunds, ApplicationEventPublisher events) {
+        this.refunds = refunds;
+        this.events = events;
         this.invoices = invoices;
         this.orders = orders;
         this.unitQuery = unitQuery;
@@ -91,15 +97,18 @@ public class DepositPaymentListener {
             return;
         }
         if (invoice.getStatus() != InvoiceStatus.UNPAID) {
-            reportAlreadySettled(invoice, event);
+            reportAlreadySettled(invoice, order, event);
             return;
         }
 
         // Tiền đã vào thì invoice phải Paid, kể cả khi khoang không còn giữ được.
         invoice.markPaid();
+        audit.record(new AuditEntry(AuditAction.INVOICE_PAID, AuditEntityType.INVOICE,
+                String.valueOf(invoice.getId()), Map.of("status", "Unpaid"),
+                Map.of("status", "Paid", "vnpTxnRef", event.vnpTxnRef()), null, null));
 
         // Khoang có thể đã đổi chủ trong lúc phiên còn mở: cổng retry tới 10 lần × 5 phút.
-        if (!units.reserveIfAvailable(order.getUnitId())) {
+        if (!units.reserveIfAvailable(order.getUnitId(), order.getId())) {
             invoice.markRefundRequired("UNIT_UNAVAILABLE");
             audit.record(new AuditEntry(AuditAction.INVOICE_REFUND_REQUIRED, AuditEntityType.INVOICE,
                     String.valueOf(invoice.getId()), Map.of("status", "Unpaid"),
@@ -115,9 +124,13 @@ public class DepositPaymentListener {
 
         audit.record(new AuditEntry(AuditAction.STORAGE_UNIT_RESERVED, AuditEntityType.STORAGE_UNIT,
                 String.valueOf(order.getUnitId()), Map.of("status", "Available"),
-                Map.of("status", "Reserved"), null, null));
+                Map.of("status", "Reserved", "orderId", order.getId()), null, null));
+        // Khoang đã có chủ: chặn ngay mọi hoá đơn cọc khác trỏ khoang này (sau commit, transaction riêng).
+        events.publishEvent(new UnitReservedByDeposit(order.getUnitId(), order.getId()));
 
-        if (invoice.getType() == InvoiceType.DEPOSIT_SUPPLEMENT) {
+        // Cọc bổ sung trên đơn đã Deposited: chỉ giữ khoang mới. Đơn còn Pending (cọc đầu đã trả nhưng khoang cũ
+        // bị giữ trước, nay bù chênh lệch cho khoang thay thế) thì chốt cọc như hoá đơn Deposit.
+        if (invoice.getType() == InvoiceType.DEPOSIT_SUPPLEMENT && order.getStatus() != RentalOrderStatus.PENDING) {
             // Đổi khoang sau khi đã cọc: đơn đã `Deposited` từ lần cọc đầu, chỉ giữ khoang mới.
             // Không mark lại; gửi thông báo riêng cho khách, không gửi lại "Đặt cọc thành công".
             notifySupplementCustomer(invoice, order);
@@ -127,6 +140,11 @@ public class DepositPaymentListener {
         }
 
         RentalOrderStatus previousStatus = order.getStatus();
+        if (previousStatus != RentalOrderStatus.PENDING) {
+            LOG.error("Cọc đơn {} đã thu nhưng đơn ở trạng thái {} — cần xử lý thủ công", order.getId(),
+                    previousStatus.dbValue());
+            return;
+        }
         order.markDeposited();
         audit.record(new AuditEntry(AuditAction.RENTAL_ORDER_DEPOSITED, AuditEntityType.RENTAL_ORDER,
                 String.valueOf(order.getId()), Map.of("status", previousStatus.dbValue()),
@@ -145,7 +163,7 @@ public class DepositPaymentListener {
      * tới đây chỉ còn là nhiễu. {@code Canceled}/{@code Expired} thì khác hẳn: tiền đã vào thật
      * cho một hóa đơn không còn hiệu lực, phải có người hoàn lại.
      */
-    private void reportAlreadySettled(Invoice invoice, PaymentSucceeded event) {
+    private void reportAlreadySettled(Invoice invoice, RentalOrder order, PaymentSucceeded event) {
         if (invoice.getStatus() == InvoiceStatus.PAID) {
             LOG.info("Hóa đơn {} đã Paid, bỏ qua IPN lặp (vnp_TxnRef={})",
                     invoice.getId(), event.vnpTxnRef());
@@ -154,6 +172,12 @@ public class DepositPaymentListener {
         LOG.error("Đã thu {} cho hóa đơn {} đang ở trạng thái {} (vnp_TxnRef={}) —"
                         + " tiền cần được hoàn thủ công",
                 event.amount(), invoice.getId(), invoice.getStatus().dbValue(), event.vnpTxnRef());
+        // Hoá đơn đã đóng mà tiền vẫn vào (khách quét QR cũ, IPN về muộn): không mở lại đơn — FM hoàn thủ công.
+        refunds.requireFull(invoice, InvoiceRefundReasons.INVOICE_CLOSED, null);
+        orderNotifier.notifyFacilityManager(order.getId(), NotificationType.PAYMENT_REFUND_REQUIRED,
+                Map.of("orderCode", String.valueOf(order.getId()), "amount", event.amount().toPlainString()));
+        orderNotifier.notifyCustomer(order, NotificationType.PAYMENT_REFUND_PENDING,
+                Map.of("orderCode", String.valueOf(order.getId())));
     }
 
     /** Tiền đã vào nhưng khoang đã thuộc về người khác — đơn này không được chuyển Deposited. */

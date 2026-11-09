@@ -19,13 +19,14 @@ import vn.lemar.selfstorage.identity.application.exception.EmailAlreadyExistsExc
 import vn.lemar.selfstorage.identity.application.exception.EmailAlreadyVerifiedException;
 import vn.lemar.selfstorage.identity.application.exception.EmailNotRegisteredException;
 import vn.lemar.selfstorage.identity.application.exception.InvalidVerificationCodeException;
+import vn.lemar.selfstorage.identity.application.exception.RegistrationPendingException;
 import vn.lemar.selfstorage.identity.domain.Account;
 import vn.lemar.selfstorage.identity.repository.AccountRepository;
 
 /**
- * Đăng ký tài khoản khách hàng + vòng đời mã xác minh email (behavior-gap #139).
+ * Đăng ký tài khoản khách hàng + vòng đời mã xác minh email.
  *
- * <p>Luồng verify-first (proposal #152): đăng ký chỉ ghi *pending registration* (email + hash mật
+ * <p>Luồng verify-first: đăng ký chỉ ghi *pending registration* (email + hash mật
  * khẩu trong Redis, cùng TTL với mã) và gửi mã; {@link Account} chỉ được tạo sau khi khách nhập
  * đúng mã — email typo/không kiểm soát không để lại account rác và không chiếm được email của
  * người khác. Gửi email đi qua event {@link VerificationEmailRequested} (module notification lắng
@@ -66,6 +67,11 @@ public class RegistrationService {
             throw new EmailAlreadyExistsException();
         }
         verificationCodes.markResendCooldown(email);
+        // Đang chờ xác minh → không ghi đè hash mật khẩu đã lưu: mã mới đi tới chủ email nhưng account tạo ra sẽ
+        // mang mật khẩu của người gửi register sau. Chủ email dùng resend-verification.
+        if (verificationCodes.hasPending(email)) {
+            throw new RegistrationPendingException();
+        }
         String code = verificationCodes.issue(email, passwordEncoder.encode(request.password()),
                 request.name(), request.phone());
         events.publishEvent(new VerificationEmailRequested(email, code, codeTtl));

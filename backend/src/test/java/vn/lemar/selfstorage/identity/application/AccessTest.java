@@ -148,6 +148,33 @@ class AccessTest {
         assertThatThrownBy(() -> access.can(PERMISSION, 1L)).isInstanceOf(ForbiddenException.class);
     }
 
+    @Test
+    void globalOrAtPassesGlobalMappingWithoutFacilityCheck() {
+        stubAccount(1L, "BOM");
+        stubScope(PermissionScope.GLOBAL);
+
+        assertThatCode(() -> access.canGlobalOrAt(PERMISSION, 2L)).doesNotThrowAnyException();
+        verifyNoInteractions(facilityAccess, assignments);
+    }
+
+    @Test
+    void globalOrAtChecksFacilityForFacilityMapping() {
+        stubAccount(7L, "FM");
+        stubScope(PermissionScope.FACILITY);
+        when(facilityAccess.exists(2L)).thenReturn(true);
+        when(facilityAccess.isManagedBy(7L, 2L)).thenReturn(false);
+
+        assertThatThrownBy(() -> access.canGlobalOrAt(PERMISSION, 2L)).isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void globalOrAtDeniesRoleWithoutMapping() {
+        stubAccount(5L, "CUSTOMER");
+        stubScope(null);
+
+        assertThatThrownBy(() -> access.canGlobalOrAt(PERMISSION, 1L)).isInstanceOf(ForbiddenException.class);
+    }
+
     private void stubScope(PermissionScope scope) {
         when(permissions.findScope(ROLE_ID, PERMISSION)).thenReturn(Optional.ofNullable(scope));
     }

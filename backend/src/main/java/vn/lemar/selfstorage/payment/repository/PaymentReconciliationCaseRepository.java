@@ -110,7 +110,8 @@ public class PaymentReconciliationCaseRepository {
      */
     public List<RefundRow> findRefundRequiredPage(long offset, int limit) {
         String sql = """
-                select i.id as invoice_id, i.code, i.order_id, i.amount, i.refund_status,
+                select i.id as invoice_id, i.code, i.order_id,
+                       coalesce(i.refund_amount, i.amount) as amount, i.refund_status,
                        i.refund_reason, i.refund_requested_at,
                        pt.vnp_txn_ref, pt.gateway_transaction_no, pt.paid_at
                 from invoices i
@@ -123,7 +124,7 @@ public class PaymentReconciliationCaseRepository {
                     order by pt.paid_at desc nulls last, pt.id desc
                     limit 1
                 ) pt on true
-                where i.refund_status = 'Required'
+                where i.refund_status in ('Required', 'Processing')
                 order by i.refund_requested_at nulls last, i.id
                 limit ? offset ?
                 """;
@@ -141,7 +142,8 @@ public class PaymentReconciliationCaseRepository {
     /** Refund Required của một facility — dùng cho queue FM. */
     public List<RefundRow> findRefundRequiredPageForFacility(Long facilityId, long offset, int limit) {
         String sql = """
-                select i.id as invoice_id, i.code, i.order_id, i.amount, i.refund_status,
+                select i.id as invoice_id, i.code, i.order_id,
+                       coalesce(i.refund_amount, i.amount) as amount, i.refund_status,
                        i.refund_reason, i.refund_requested_at,
                        pt.vnp_txn_ref, pt.gateway_transaction_no, pt.paid_at
                 from invoices i
@@ -157,7 +159,7 @@ public class PaymentReconciliationCaseRepository {
                     order by pt.paid_at desc nulls last, pt.id desc
                     limit 1
                 ) pt on true
-                where u.facility_id = ? and i.refund_status = 'Required'
+                where u.facility_id = ? and i.refund_status in ('Required', 'Processing')
                 order by i.refund_requested_at nulls last, i.id
                 limit ? offset ?
                 """;
@@ -179,7 +181,7 @@ public class PaymentReconciliationCaseRepository {
                 left join rental_orders o on o.id = i.order_id
                 left join rental_contracts c on c.id = i.contract_id
                 left join storage_units u on u.id = coalesce(o.unit_id, c.unit_id)
-                where u.facility_id = ? and i.refund_status = 'Required'
+                where u.facility_id = ? and i.refund_status in ('Required', 'Processing')
                 """;
         Long count = jdbc.queryForObject(sql, Long.class, facilityId);
         return count == null ? 0 : count;
@@ -187,7 +189,7 @@ public class PaymentReconciliationCaseRepository {
 
     public long countRefundRequired() {
         Long count = jdbc.queryForObject(
-                "select count(*) from invoices where refund_status = 'Required'", Long.class);
+                "select count(*) from invoices where refund_status in ('Required', 'Processing')", Long.class);
         return count == null ? 0 : count;
     }
 

@@ -44,11 +44,13 @@ FM xem lịch check-in đang `Pending` của cơ sở theo ngày và phân công
 - `GET /api/fm/facilities/{facilityId}/staff` — FS đang hoạt động của cơ sở.
 - `GET /api/fm/appointments?facilityId=&date=` — lịch check-in trong ngày.
 - `POST /api/fm/appointments/{appointmentId}/staff` — phân công FS.
+- `PUT /api/fm/appointments/{appointmentId}/staff` — đổi FS của lịch đã phân công (lịch còn `Pending`).
 
 ## Edge case / Lưu ý UX
 
 - Lịch `RETURN` và lịch đã `Done`/`Canceled` không hiện ở màn này; không phân công lại.
-- Đổi FS đã gán không được ở MVP; BE trả 409.
+- Lịch đã có FS mà còn `Pending` (khách chưa đến): panel hiện "Đổi FS" (danh sách bỏ FS hiện tại) → `PUT`; BE trả
+  409 nếu lịch không còn đổi được.
 - FS phải thuộc đúng cơ sở (`AccountFacilityAssignment`); sai cơ sở là lỗi quyền.
 - Ngày mặc định theo local browser; giờ hiển thị theo `Asia/Ho_Chi_Minh`.
 - `rebooked` chỉ nói "không phải lần đầu"; lý do cụ thể nằm ở `rebookReason` /

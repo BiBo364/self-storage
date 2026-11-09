@@ -20,21 +20,37 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final LoginAttemptLimiter loginAttemptLimiter;
+    private final AccountAdminService loginHistory;
 
     public AuthService(
             AccountRepository accountRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
-            LoginAttemptLimiter loginAttemptLimiter) {
+            LoginAttemptLimiter loginAttemptLimiter,
+            AccountAdminService loginHistory) {
+        this.loginHistory = loginHistory;
         this.accountRepository = accountRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.loginAttemptLimiter = loginAttemptLimiter;
     }
 
+    /** Đăng nhập + ghi lịch sử đăng nhập (thành công / thất bại kèm lý do). */
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request, String clientIp) {
         String normalizedEmail = Account.normalize(request.email());
+        try {
+            LoginResponse response = doLogin(request, normalizedEmail, clientIp);
+            loginHistory.recordLogin(normalizedEmail, true, null, clientIp);
+            return response;
+        } catch (RuntimeException e) {
+            loginHistory.recordLogin(normalizedEmail, false, e.getClass().getSimpleName()
+                    .replace("Exception", ""), clientIp);
+            throw e;
+        }
+    }
+
+    private LoginResponse doLogin(LoginRequest request, String normalizedEmail, String clientIp) {
 
         loginAttemptLimiter.checkOrThrow(normalizedEmail, clientIp);
 

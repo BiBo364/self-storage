@@ -1,8 +1,10 @@
 /**
- * Flow 6 - xử lý quá hạn và gia hạn phía vận hành.
- *
- * <p>Chiều phụ thuộc của F6 chưa được chốt trong issue #15 nên tạm để mở;
- * bài kiểm tra cấu trúc vẫn chặn phụ thuộc vòng. Chốt xong thì khai báo allowedDependencies.
+ * Flow 6 - xử lý quá hạn hợp đồng: nhắc sắp hết hạn, phí quá hạn cộng dồn theo ngày, danh sách quá hạn cho FM.
+ * Gia hạn do tenancy xử lý.
  */
-@org.springframework.modulith.ApplicationModule(displayName = "Overdue (F6)")
+@org.springframework.modulith.ApplicationModule(
+        displayName = "Overdue (F6)",
+        allowedDependencies = {"tenancy::application", "handover::application", "booking::application",
+                "pricing::application", "identity::application", "notification::application",
+                "audit::application"})
 package vn.lemar.selfstorage.overdue;

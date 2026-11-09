@@ -83,6 +83,10 @@ public class RentalRequestService {
     private final RentalRequestConversionService conversionService;
     private final ConversionGuardRepository conversionGuard;
 
+    /** Gốc URL FE cho link trong email; field injection để test dựng service bằng mock không phải truyền. */
+    @org.springframework.beans.factory.annotation.Value("${app.frontend-url:}")
+    private String frontendUrl = "";
+
     public RentalRequestService(RentalRequestRepository repository, FacilityAccess facilityAccess,
                                 StorageUnitQuery storageUnitQuery, Access access,
                                 AccountQueryService accountQueryService,
@@ -113,6 +117,9 @@ public class RentalRequestService {
     public RentalRequestResponse create(CreateRentalRequestRequest request) {
         if (!facilityAccess.exists(request.facilityId())) {
             throw new FacilityNotFoundException();
+        }
+        if (facilityAccess.isInactive(request.facilityId())) {
+            throw new RentalRequestValidationException("Cơ sở đang ngừng hoạt động, không nhận yêu cầu thuê mới");
         }
         if (!unitTypeQueryService.exists(request.unitTypeId())) {
             throw new RentalRequestValidationException("Loại khoang không tồn tại");
@@ -159,7 +166,7 @@ public class RentalRequestService {
      *
      * <p>Guard {@code rental_request.approve} đặt trong service (thay vì controller) vì cần
      * {@code facilityId} từ entity mới guard được theo cơ sở — controller không có sẵn.
-     * Thứ tự đúng spec + #126: 404 nếu request không tồn tại, 403 chéo cơ sở, 409 nếu request
+     * Thứ tự kiểm: 404 nếu request không tồn tại, 403 chéo cơ sở, 409 nếu request
      * không còn Pending, 404 nếu khoang không tồn tại hoặc thuộc cơ sở khác, 409 nếu khoang mất
      * Available, 409 nếu khoang đã gán cho request khác của cùng email (giữ Pending, không noti).
      *
@@ -259,8 +266,8 @@ public class RentalRequestService {
     }
 
     /**
-     * Mail duyệt cho nhánh email chưa có account (template draft.md:156, #126) — after-commit,
-     * lỗi mail chỉ log, không rollback. Nhánh đã có account để B2 thông báo kèm proposal link.
+     * Mail duyệt cho nhánh email chưa có account (template draft.md:156) — after-commit,
+     * lỗi mail chỉ log, không rollback. Nhánh đã có account nhận thông báo kèm link đề xuất ở bước đề xuất khoang.
      */
     private void sendApprovalEmail(RentalRequest request, Instant expiresAt) {
         // findIdByEmail (không throw) thay requireIdByEmail: throw từ @Transactional proxy sẽ mark
@@ -272,7 +279,8 @@ public class RentalRequestService {
         String deadline = VI_DATE.format(expiresAt.atZone(FACILITY_ZONE));
         String title = "Yêu cầu đặt kho của bạn đã được duyệt";
         String body = "Yêu cầu đặt kho của bạn đã được duyệt, nhưng hệ thống nhận thấy email này "
-                + "chưa có tài khoản trên website, vui lòng đăng ký tại /register trước " + deadline
+                + "chưa có tài khoản trên website, vui lòng đăng ký tại " + frontendUrl + "/register trước "
+                + deadline
                 + " và đăng nhập để xác nhận và đặt cọc.\n\nLưu ý: khoang chứa không được giữ "
                 + "trong lúc chờ. Khoang được xác nhận chính thức cho khách hàng hoàn tất thanh "
                 + "toán cọc đầu tiên (cọc trước giữ trước).";

@@ -1,374 +1,320 @@
-import { ArrowLeft, Check, Upload, X } from "lucide-react";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { ApiError } from "../../app/api";
-import { readFsUploadState, writeFsUploadState, type UploadedMedia } from "../../app/fsUploadStore";
-import { attachMediaBatch, deleteMediaBatch, uploadMedia } from "../../app/media";
+import { ArrowLeft, Check, FileText, RefreshCw } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { formatDate, formatDateTime, formatMoney, formatTime, isoDate } from "../../app/format";
+import { errorMessage, errorStatus } from "../../app/http";
+import { pathId, queryParam } from "../../app/routes";
+import {
+  correctHandoverInspection,
+  fetchContractDocumentUrl,
+  fetchStaffHandover,
+  fetchStaffHandovers,
+  handOverKeys,
+  handoverStep,
+  markHandoverNotSigned,
+  requestStartDateOverride,
+  saveHandoverInspection,
+  signContract,
+  verifyHandoverIdentity,
+  type HandoverView,
+} from "../../app/services/staff";
 import type { Navigate } from "../../app/types";
-import { Button, buttonClassName } from "../../components/ui/Button";
+import { Button } from "../../components/ui/Button";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { DemoNotice } from "../../components/ui/DemoNotice";
+import { FIELD_LABEL } from "../../components/ui/FormField";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
-import { formatPrice } from "../../mocks/catalog";
-import { findAppointment } from "../../mocks/fs";
+import {
+  FileUploadField,
+  INPUT_CLASS,
+  TEXTAREA_CLASS,
+  attachUploaded,
+  filesFromUrls,
+  type PickedFile,
+} from "../../components/domain/FileUploadField";
 
-function isAbortError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    (error as { name?: unknown }).name === "AbortError"
-  );
+// ---------------------------------------------------------------- trang checklist
+
+const STEP_ORDER = [
+  { key: "VERIFY_IDENTITY", title: "Xác minh danh tính" },
+  { key: "INSPECTION", title: "Kiểm tra khoang" },
+  { key: "SIGN_CONTRACT", title: "Ký hợp đồng" },
+  { key: "PAY_FIRST_MONTH", title: "Thanh toán tháng đầu" },
+  { key: "CUSTOMER_CONFIRM", title: "Khách xác nhận biên bản" },
+  { key: "HAND_OVER_KEYS", title: "Giao chìa khoá" },
+];
+
+const ACCESS_LABEL: Record<string, string> = {
+  AccessCode: "Mã số",
+  PhysicalKey: "Chìa khoá cơ",
+  Both: "Chìa khoá cơ + mã số",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  Pending: "Đang chờ",
+  Verified: "Đạt",
+  Failed: "Không đạt",
+  Agreed: "Khách đồng ý",
+  Rejected: "Từ chối",
+  Approved: "Đã duyệt",
+  Draft: "Bản nháp",
+  Signed: "Đã ký",
+  Active: "Đang hiệu lực",
+  Canceled: "Đã huỷ",
+  Unpaid: "Chưa thanh toán",
+  Paid: "Đã thanh toán",
+  Expired: "Quá hạn",
+  Revoked: "Đã thu hồi",
+  Lost: "Mất",
+};
+
+function label(value: string | null | undefined) {
+  if (!value) return "—";
+  return STATUS_LABEL[value] ?? value;
+}
+
+function stepIndex(step: string) {
+  if (step === "OVERRIDE_PENDING") return 2;
+  const index = STEP_ORDER.findIndex((item) => item.key === step);
+  return index;
 }
 
 function BackLink({ navigate }: { navigate: Navigate }) {
   return (
     <button
       className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-label font-semibold text-muted hover:text-ink"
-      onClick={() => navigate("/staff/schedule")}
+      onClick={() => navigate("/staff/handovers")}
     >
-      <ArrowLeft size={15} /> Về lịch làm việc
+      <ArrowLeft size={15} /> Về đơn đang bàn giao
     </button>
   );
 }
 
+function Row({ term, children }: { term: string; children: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="text-muted">{term}</dt>
+      <dd className="m-0 text-right text-ink">{children}</dd>
+    </div>
+  );
+}
+
+function WaitingCustomer({
+  title,
+  description,
+  onRefresh,
+  refreshing,
+}: {
+  title: string;
+  description: string;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  return (
+    <div className="mt-4 bg-info-soft p-4 text-info">
+      <strong className="block text-small">{title}</strong>
+      <p className="mb-0 mt-1 text-small">{description}</p>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="mt-3"
+        pending={refreshing}
+        onClick={onRefresh}
+      >
+        <RefreshCw size={14} /> Làm mới trạng thái
+      </Button>
+    </div>
+  );
+}
+
 export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
-  const appointmentId = window.location.pathname.split("/")[3] ?? "";
-  const appointment = findAppointment(appointmentId);
+  const appointmentId = pathId(2);
+  const [handover, setHandover] = useState<HandoverView | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<{ status: number; message: string } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const [identity, setIdentity] = useState<"Pending" | "Verified" | "Failed">("Pending");
-  const [inspection, setInspection] = useState<"Pending" | "Agreed" | "Rejected">("Pending");
-  const [contract, setContract] = useState<"Draft" | "Signed">("Draft");
-  const [payment, setPayment] = useState<"Unpaid" | "Paid">("Unpaid");
-  const [completed, setCompleted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [confirmNotSigned, setConfirmNotSigned] = useState(false);
+
+  const [identityNote, setIdentityNote] = useState("");
   const [inspectionNotes, setInspectionNotes] = useState("");
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [contractGenerated, setContractGenerated] = useState(false);
-  const [accessType, setAccessType] = useState("PhysicalKey");
-  const [quantity, setQuantity] = useState(1);
-  const initialUploads = readFsUploadState(appointmentId);
-  const [inspectionPhotos, setInspectionPhotos] = useState<UploadedMedia[]>(
-    initialUploads.inspectionPhotos,
-  );
-  const [inspectionUploading, setInspectionUploading] = useState(false);
-  const [inspectionUploadError, setInspectionUploadError] = useState<string | null>(null);
-  const [inspectionAttaching, setInspectionAttaching] = useState(false);
-  const [inspectionAttachError, setInspectionAttachError] = useState<string | null>(null);
-  const [contractFile, setContractFile] = useState<UploadedMedia | null>(
-    initialUploads.contractFile,
-  );
-  const [contractUploading, setContractUploading] = useState(false);
-  const [contractUploadError, setContractUploadError] = useState<string | null>(null);
-  const [contractAttaching, setContractAttaching] = useState(false);
-  const [contractAttachError, setContractAttachError] = useState<string | null>(null);
-
-  const inspectionUploadController = useRef<AbortController | null>(null);
-  const contractUploadController = useRef<AbortController | null>(null);
+  const [inspectionPhotos, setInspectionPhotos] = useState<PickedFile[]>([]);
+  const [contractScan, setContractScan] = useState<PickedFile[]>([]);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideDate, setOverrideDate] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [keyQuantity, setKeyQuantity] = useState(1);
+  const [docLoading, setDocLoading] = useState(false);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [correctionNotes, setCorrectionNotes] = useState("");
+  const [correctionPhotos, setCorrectionPhotos] = useState<PickedFile[]>([]);
+  const [correctionReason, setCorrectionReason] = useState("");
 
   useEffect(() => {
-    writeFsUploadState(appointmentId, { inspectionPhotos, contractFile });
-  }, [appointmentId, inspectionPhotos, contractFile]);
+    let active = true;
+    (async () => {
+      try {
+        if (appointmentId === null) return;
+        let found: HandoverView | null = null;
+        const hinted = Number(queryParam("handover"));
+        if (Number.isFinite(hinted) && hinted > 0) {
+          try {
+            const detail = await fetchStaffHandover(hinted);
+            if (detail.appointmentId === appointmentId) found = detail;
+          } catch {
+            // gợi ý sai / không còn quyền — tìm lại trong danh sách
+          }
+        }
+        if (!found) {
+          const queue = await fetchStaffHandovers();
+          const match = queue.find((item) => item.appointmentId === appointmentId);
+          if (match) found = await fetchStaffHandover(match.id);
+        }
+        if (!active) return;
+        setHandover(found);
+        if (found) {
+          setInspectionNotes(found.inspectionNotes ?? "");
+          setInspectionPhotos(filesFromUrls(found.inspectionPhotos));
+        }
+      } catch (caught) {
+        if (active) setError({ status: errorStatus(caught), message: errorMessage(caught) });
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [appointmentId, reloadKey]);
 
-  function cancelInspectionUpload() {
-    inspectionUploadController.current?.abort();
+  function reload() {
+    setIsLoading(true);
+    setError(null);
+    setReloadKey((key) => key + 1);
   }
 
-  function cancelContractUpload() {
-    contractUploadController.current?.abort();
-  }
-
-  async function removeInspectionPhoto(photo: UploadedMedia) {
+  async function refresh() {
+    if (!handover) return;
+    setRefreshing(true);
+    setActionError(null);
     try {
-      const result = await deleteMediaBatch(photo.batchId);
-      if (result.deleted === 0 && result.skipped > 0) {
-        setInspectionUploadError("File đã được gắn với bước trước, không xoá được.");
-        return;
-      }
-    } catch (error) {
-      if (!(error instanceof ApiError && error.status === 404)) {
-        setInspectionUploadError(error instanceof Error ? error.message : "Không xoá được ảnh.");
-        return;
-      }
+      setHandover(await fetchStaffHandover(handover.id));
+    } catch (caught) {
+      setActionError(errorMessage(caught));
+    } finally {
+      setRefreshing(false);
     }
-    setInspectionPhotos((current) => current.filter((item) => item.url !== photo.url));
-    setInspectionUploadError(null);
   }
 
-  async function removeContractFile() {
-    if (!contractFile) return;
+  async function run(task: () => Promise<HandoverView | null>, success: string) {
+    if (!handover) return false;
+    setBusy(true);
+    setActionError(null);
+    setNotice(null);
     try {
-      const result = await deleteMediaBatch(contractFile.batchId);
-      if (result.deleted === 0 && result.skipped > 0) {
-        setContractUploadError("File đã được gắn với bước trước, không xoá được.");
-        return;
-      }
-    } catch (error) {
-      if (!(error instanceof ApiError && error.status === 404)) {
-        setContractUploadError(
-          error instanceof Error ? error.message : "Không xoá được file hợp đồng.",
-        );
-        return;
-      }
-    }
-    setContractFile(null);
-    setContractUploadError(null);
-  }
-
-  async function attachInspectionBatches() {
-    const batchIds = [...new Set(inspectionPhotos.map((photo) => photo.batchId))];
-    if (batchIds.length === 0) return true;
-    setInspectionAttaching(true);
-    setInspectionAttachError(null);
-    try {
-      await Promise.all(batchIds.map((batchId) => attachMediaBatch(batchId)));
+      const next = await task();
+      setHandover(next ?? (await fetchStaffHandover(handover.id)));
+      setNotice(success);
       return true;
-    } catch (error) {
-      setInspectionAttachError(
-        error instanceof Error ? error.message : "Không gắn được batch ảnh.",
-      );
+    } catch (caught) {
+      setActionError(errorMessage(caught));
+      if (errorStatus(caught) === 409) {
+        fetchStaffHandover(handover.id)
+          .then(setHandover)
+          .catch(() => undefined);
+      }
       return false;
     } finally {
-      setInspectionAttaching(false);
+      setBusy(false);
     }
   }
 
-  async function acceptInspection() {
-    if (await attachInspectionBatches()) {
-      setInspection("Agreed");
-    }
-  }
-
-  async function rejectInspection() {
-    const batchIds = [...new Set(inspectionPhotos.map((photo) => photo.batchId))];
-    await Promise.allSettled(batchIds.map((batchId) => attachMediaBatch(batchId)));
-    setInspection("Rejected");
-  }
-
-  async function signContract() {
-    if (contractFile) {
-      setContractAttaching(true);
-      setContractAttachError(null);
-      try {
-        await attachMediaBatch(contractFile.batchId);
-      } catch (error) {
-        setContractAttachError(
-          error instanceof Error ? error.message : "Không gắn được batch hợp đồng.",
-        );
-        return;
-      } finally {
-        setContractAttaching(false);
-      }
-    }
-    setContract("Signed");
-  }
-
-  async function uploadInspectionPhotos(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
-    const files = Array.from(input.files ?? []);
-    if (files.length === 0) return;
-    inspectionUploadController.current?.abort();
-    const controller = new AbortController();
-    inspectionUploadController.current = controller;
-    setInspectionUploading(true);
-    setInspectionUploadError(null);
+  async function openDocument(contractId: number) {
+    const popup = window.open("", "_blank");
+    setDocLoading(true);
+    setActionError(null);
     try {
-      const results = await Promise.allSettled(
-        files.map(async (file) => {
-          const result = await uploadMedia(file, undefined, controller.signal);
-          return {
-            url: result.url,
-            publicId: result.publicId,
-            name: file.name,
-            format: result.format,
-            batchId: result.batchId,
-          };
-        }),
-      );
-      const uploaded = results
-        .filter(
-          (result): result is PromiseFulfilledResult<UploadedMedia> =>
-            result.status === "fulfilled",
-        )
-        .map((result) => result.value);
-      const failed = results.filter(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected" && !isAbortError(result.reason),
-      );
-
-      if (uploaded.length > 0) {
-        setInspectionPhotos((current) => [...current, ...uploaded]);
-        const stored = readFsUploadState(appointmentId);
-        writeFsUploadState(appointmentId, {
-          inspectionPhotos: [...stored.inspectionPhotos, ...uploaded],
-          contractFile: stored.contractFile,
-        });
+      const url = await fetchContractDocumentUrl(contractId);
+      if (popup) {
+        popup.location.href = url;
+      } else {
+        window.open(url, "_blank");
       }
-      if (failed.length > 0) {
-        const firstMessage =
-          failed[0].reason instanceof Error ? failed[0].reason.message : "Không tải được ảnh.";
-        setInspectionUploadError(
-          failed.length === 1
-            ? `1 ảnh không tải được: ${firstMessage}`
-            : `${failed.length} ảnh không tải được. Lỗi đầu tiên: ${firstMessage}`,
-        );
-      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (caught) {
+      popup?.close();
+      setActionError(errorMessage(caught));
     } finally {
-      if (inspectionUploadController.current === controller) {
-        inspectionUploadController.current = null;
-        setInspectionUploading(false);
-      }
-      input.value = "";
+      setDocLoading(false);
     }
   }
 
-  async function uploadContractFile(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    if (!file) return;
-    contractUploadController.current?.abort();
-    const controller = new AbortController();
-    contractUploadController.current = controller;
-    setContractUploading(true);
-    setContractUploadError(null);
-    try {
-      const result = await uploadMedia(file, undefined, controller.signal);
-      const uploaded = {
-        url: result.url,
-        publicId: result.publicId,
-        name: file.name,
-        format: result.format,
-        batchId: result.batchId,
-      };
-      setContractFile(uploaded);
-      const stored = readFsUploadState(appointmentId);
-      writeFsUploadState(appointmentId, {
-        inspectionPhotos: stored.inspectionPhotos,
-        contractFile: uploaded,
-      });
-    } catch (error) {
-      if (!isAbortError(error)) {
-        setContractUploadError(error instanceof Error ? error.message : "Không tải được file.");
-      }
-    } finally {
-      if (contractUploadController.current === controller) {
-        contractUploadController.current = null;
-        setContractUploading(false);
-      }
-      input.value = "";
-    }
+  if (isLoading) {
+    return (
+      <div className="grid gap-6">
+        <BackLink navigate={navigate} />
+        <SurfaceState variant="loading" title="Đang tải phiên bàn giao…" />
+      </div>
+    );
   }
 
-  if (!appointment) {
+  if (error) {
+    return (
+      <div className="grid gap-6">
+        <BackLink navigate={navigate} />
+        {error.status === 403 ? (
+          <SurfaceState
+            variant="forbidden"
+            title="Bạn không có quyền xem phiên bàn giao này"
+            description={error.message}
+          />
+        ) : (
+          <SurfaceState
+            variant="error"
+            title="Không tải được phiên bàn giao"
+            description={error.message}
+            action={{ label: "Thử lại", onClick: reload }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (!handover) {
     return (
       <div className="grid gap-6">
         <BackLink navigate={navigate} />
         <SurfaceState
           variant="not-found"
-          title="Không tìm thấy lịch hẹn"
-          description="Lịch hẹn có thể đã bị huỷ hoặc không thuộc cơ sở của bạn."
+          title="Không có phiên bàn giao đang mở cho lịch này"
+          description="Phiên bàn giao chỉ mở sau khi bạn xác nhận khách đã đến. Phiên đã hoàn tất hoặc đã huỷ không còn trong danh sách."
           action={{ label: "Về lịch làm việc", onClick: () => navigate("/staff/schedule") }}
         />
       </div>
     );
   }
 
-  if (appointment.type !== "CHECKIN") {
-    return (
-      <div className="grid gap-6">
-        <BackLink navigate={navigate} />
-        <SurfaceState
-          variant="empty"
-          title="Checklist trả kho chưa có"
-          description="Prototype mới làm checklist bàn giao. Checklist trả kho thuộc Flow 2.a, đang chờ chốt spec."
-          action={{ label: "Về lịch làm việc", onClick: () => navigate("/staff/schedule") }}
-        />
-      </div>
-    );
-  }
+  const current = handover;
+  const step = current.step;
+  const contract = current.contract;
+  const invoice = current.firstMonthInvoice;
+  const tag = handoverStep(step);
+  const activeIndex = stepIndex(step);
+  const isClosed = current.result !== "IN_PROGRESS";
+  const canCorrectInspection = !isClosed && current.inspectionStatus === "Agreed";
+  const photoCount = current.inspectionPhotos?.length ?? 0;
+  const inspectionSummary = `${current.inspectionNotes || "Không có ghi chú"} · ${photoCount} ảnh`;
 
-  if (appointment.status === "Done") {
-    return (
-      <div className="grid gap-6">
-        <BackLink navigate={navigate} />
-        <SurfaceState
-          variant="empty"
-          title="Bàn giao đã hoàn tất"
-          description={`${appointment.unitCode} đã bàn giao cho ${appointment.customerName}.`}
-          action={{ label: "Về lịch làm việc", onClick: () => navigate("/staff/schedule") }}
-        />
-      </div>
-    );
+  function openCorrection() {
+    setCorrectionNotes(current.inspectionNotes ?? "");
+    setCorrectionPhotos(filesFromUrls(current.inspectionPhotos));
+    setCorrectionReason("");
+    setCorrectionOpen(true);
   }
-
-  if (identity === "Failed") {
-    return (
-      <div className="grid gap-6">
-        <BackLink navigate={navigate} />
-        <SurfaceState
-          variant="error"
-          title="Xác minh danh tính không đạt"
-          description="Đã ghi nhận. Lịch hẹn không bị huỷ; khách cần liên hệ FM để xử lý."
-          action={{ label: "Về lịch làm việc", onClick: () => navigate("/staff/schedule") }}
-        />
-      </div>
-    );
-  }
-
-  if (inspection === "Rejected") {
-    return (
-      <div className="grid gap-6">
-        <BackLink navigate={navigate} />
-        <SurfaceState
-          variant="error"
-          title="Khách từ chối khoang"
-          description="Đã ghi nhận từ chối. FM sẽ đề xuất khoang khác; checklist dừng tại đây."
-          action={{ label: "Về lịch làm việc", onClick: () => navigate("/staff/schedule") }}
-        />
-      </div>
-    );
-  }
-
-  if (completed) {
-    return (
-      <div className="grid gap-6">
-        <div>
-          <BackLink navigate={navigate} />
-          <h1 className="mb-0 mt-3 text-title text-ink">Bàn giao hoàn tất</h1>
-          <p className="mt-1.5 text-small text-muted">
-            {appointment.customerName} · {appointment.unitCode}
-          </p>
-        </div>
-        <div className="border border-success-line bg-success-soft p-6 text-success">
-          <Check size={28} />
-          <h2 className="mb-0 mt-3 text-section">Đã bàn giao khoang {appointment.unitCode}</h2>
-          <p className="mt-1 text-small">
-            Biên bản đã chốt. Khoang chuyển sang trạng thái Đang thuê.
-          </p>
-        </div>
-        <Button className="w-fit" onClick={() => navigate("/staff/schedule")}>
-          Về lịch làm việc
-        </Button>
-      </div>
-    );
-  }
-
-  const steps = [
-    { title: "Xác minh danh tính", done: identity === "Verified" },
-    { title: "Kiểm tra khoang", done: inspection === "Agreed" },
-    { title: "Ký hợp đồng", done: contract === "Signed" },
-    { title: "Thanh toán tháng đầu", done: payment === "Paid" },
-    { title: "Bàn giao khoá", done: completed },
-  ];
-  const currentStep =
-    identity !== "Verified"
-      ? 0
-      : inspection !== "Agreed"
-        ? 1
-        : contract !== "Signed"
-          ? 2
-          : payment !== "Paid"
-            ? 3
-            : 4;
 
   return (
     <div className="grid gap-6">
@@ -377,396 +323,610 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
           <BackLink navigate={navigate} />
           <h1 className="mb-0 mt-3 text-title text-ink">Checklist bàn giao</h1>
           <p className="mt-1.5 text-small text-muted">
-            {appointment.customerName} · {appointment.unitCode} · {appointment.timeSlot}
+            {current.customerName ?? current.customerEmail ?? "—"} · {current.unitCode ?? "—"} · Đơn{" "}
+            {current.orderId}
           </p>
         </div>
-        <StatusTag tone="warning">Đang bàn giao</StatusTag>
+        <StatusTag tone={tag.tone}>{tag.label}</StatusTag>
       </div>
 
-      <DemoNotice tone="info">
-        Prototype — dữ liệu minh hoạ; API handover chưa có. Upload ảnh/hợp đồng đã nối API thật.
-      </DemoNotice>
+      {actionError && <DemoNotice tone="error">{actionError}</DemoNotice>}
+      {notice && !actionError && <DemoNotice tone="success">{notice}</DemoNotice>}
 
       <div className="grid grid-cols-[320px_minmax(0,1fr)] items-start gap-6 max-[980px]:grid-cols-1">
         <aside className="grid gap-4">
-          <div className="border border-border bg-surface p-5">
-            <span className="label text-muted">Thông tin đơn</span>
-            <h2 className="mb-0 mt-1 text-section text-ink">{appointment.customerName}</h2>
-            <dl className="mt-3 grid gap-2 text-small">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted">Khoang</dt>
-                <dd className="m-0 font-semibold text-ink">{appointment.unitCode}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted">Loại khoang</dt>
-                <dd className="m-0 text-ink">{appointment.unitType}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted">Giờ hẹn</dt>
-                <dd className="m-0 text-ink">{appointment.timeSlot}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted">Mã đơn</dt>
-                <dd className="m-0 font-mono text-ink">{appointment.orderCode}</dd>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <dt className="text-muted">Cơ sở</dt>
-                <dd className="m-0 text-right text-ink">{appointment.facility}</dd>
-              </div>
+          <div className="bg-surface p-5">
+            <span className="text-label text-muted">Thông tin đơn</span>
+            <h2 className="mb-0 mt-1 text-section text-ink">
+              {current.customerName ?? current.customerEmail ?? "—"}
+            </h2>
+            <dl className="mb-0 mt-3 grid gap-2 text-small">
+              <Row term="Email">{current.customerEmail ?? "—"}</Row>
+              <Row term="Điện thoại">{current.customerPhone ?? "—"}</Row>
+              <Row term="Khoang">
+                <strong>{current.unitCode ?? "—"}</strong>
+              </Row>
+              <Row term="Loại khoang">{current.unitType ?? "—"}</Row>
+              <Row term="Lịch hẹn">
+                {formatTime(current.appointmentStart)}–{formatTime(current.appointmentEnd)}{" "}
+                {formatDate(current.appointmentDate)}
+              </Row>
+              <Row term="Khách đến">{formatDateTime(current.arrivedAt)}</Row>
+              <Row term="Hạn bàn giao">{formatDateTime(current.dueAt)}</Row>
+              <Row term="Cơ sở">{current.facilityName ?? "—"}</Row>
             </dl>
-            {appointment.note && (
-              <p className="mb-0 mt-3 border-t border-border pt-3 text-label text-muted">
-                {appointment.note}
-              </p>
-            )}
           </div>
 
-          <ol className="grid gap-3 border border-border bg-surface p-5">
-            {steps.map((step, index) => {
-              const isDone = step.done;
-              const isCurrent = index === currentStep;
-              return (
-                <li key={step.title} className="flex items-start gap-3">
-                  <span
-                    className={`grid h-7 w-7 shrink-0 place-items-center text-label font-bold ${
-                      isDone
-                        ? "bg-brand text-signal-ink"
-                        : isCurrent
-                          ? "border border-brand text-brand"
-                          : "border border-border text-muted"
-                    }`}
-                  >
-                    {isDone ? <Check size={14} /> : index + 1}
-                  </span>
-                  <div>
-                    <strong
-                      className={`block text-small ${isDone || isCurrent ? "text-ink" : "text-muted"}`}
+          {!isClosed && (
+            <ol className="m-0 grid list-none gap-3 bg-surface p-5">
+              {STEP_ORDER.map((item, index) => {
+                const isDone = activeIndex > index;
+                const isCurrent = activeIndex === index;
+                return (
+                  <li key={item.key} className="flex items-start gap-3">
+                    <span
+                      className={`grid h-7 w-7 shrink-0 place-items-center text-label font-bold ${
+                        isDone
+                          ? "bg-brand text-signal-ink"
+                          : isCurrent
+                            ? "border-2 border-brand text-ink"
+                            : "border border-border text-muted"
+                      }`}
                     >
-                      {step.title}
-                    </strong>
-                    <span className="mt-0.5 block text-label text-muted">
-                      {isDone ? "Hoàn tất" : isCurrent ? "Đang thực hiện" : "Chưa làm"}
+                      {isDone ? <Check size={14} /> : index + 1}
                     </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+                    <div>
+                      <strong
+                        className={`block text-small ${isDone || isCurrent ? "text-ink" : "text-muted"}`}
+                      >
+                        {item.title}
+                      </strong>
+                      <span className="mt-0.5 block text-label text-muted">
+                        {isDone ? "Hoàn tất" : isCurrent ? "Đang thực hiện" : "Chưa làm"}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
         </aside>
 
-        <section className="border border-border bg-surface p-5">
-          {currentStep === 0 && (
+        <section className="bg-surface p-5">
+          {isClosed && (
+            <ClosedState handover={current} onBack={() => navigate("/staff/handovers")} />
+          )}
+
+          {step === "WAITING_ARRIVAL" && (
             <div>
-              <span className="label text-muted">Bước 01</span>
+              <h2 className="m-0 text-section text-ink">Khách chưa đến</h2>
+              <p className="mt-2 text-small text-muted">
+                Xác nhận “Khách đã đến” trên lịch làm việc trước khi bắt đầu bàn giao.
+              </p>
+              <Button className="mt-4" onClick={() => navigate("/staff/schedule")}>
+                Mở lịch làm việc
+              </Button>
+            </div>
+          )}
+
+          {step === "VERIFY_IDENTITY" && (
+            <div>
+              <span className="text-label text-muted">Bước 01</span>
               <h2 className="mb-0 mt-1 text-section text-ink">Xác minh danh tính</h2>
               <p className="mt-2 text-small leading-relaxed text-muted">
                 Đối chiếu CCCD/Passport bản gốc với thông tin khách trên đơn.
               </p>
-              <div className="mt-4 border border-border bg-surface-subtle p-4 text-small">
-                <strong className="block text-ink">{appointment.customerName}</strong>
+              {current.identityStatus === "Failed" && (
+                <DemoNotice tone="error">
+                  Lần xác minh trước không đạt. Có thể xác minh lại khi khách mang đúng giấy tờ.
+                </DemoNotice>
+              )}
+              <div className="mt-4 bg-surface-subtle p-4 text-small">
+                <strong className="block text-ink">
+                  {current.customerName ?? current.customerEmail ?? "—"}
+                </strong>
                 <span className="mt-1 block text-muted">
-                  {appointment.customerPhone} · {appointment.customerEmail}
+                  {current.customerPhone ?? "—"} · {current.customerEmail ?? "—"}
                 </span>
               </div>
+              <label className={`${FIELD_LABEL} mt-4`} htmlFor="identity-note">
+                Ghi chú (không bắt buộc)
+              </label>
+              <textarea
+                id="identity-note"
+                className={TEXTAREA_CLASS}
+                value={identityNote}
+                maxLength={500}
+                onChange={(event) => setIdentityNote(event.target.value)}
+                placeholder="Ví dụ: CCCD hết hạn, khách sẽ quay lại."
+              />
               <div className="mt-5 flex flex-wrap gap-2">
-                <Button onClick={() => setIdentity("Verified")}>
+                <Button
+                  pending={busy}
+                  onClick={() =>
+                    run(
+                      () => verifyHandoverIdentity(current.id, true, identityNote.trim()),
+                      "Đã xác minh danh tính.",
+                    ).then((ok) => ok && setIdentityNote(""))
+                  }
+                >
                   <Check size={16} /> Xác minh đạt
                 </Button>
-                <Button variant="secondary" onClick={() => setIdentity("Failed")}>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () => verifyHandoverIdentity(current.id, false, identityNote.trim()),
+                      "Đã ghi nhận xác minh không đạt. Phiên bàn giao vẫn mở.",
+                    )
+                  }
+                >
                   Không đạt
                 </Button>
               </div>
             </div>
           )}
 
-          {currentStep === 1 && (
+          {step === "INSPECTION" && (
             <div>
-              <span className="label text-muted">Bước 02</span>
+              <span className="text-label text-muted">Bước 02</span>
               <h2 className="mb-0 mt-1 text-section text-ink">Kiểm tra khoang</h2>
               <p className="mt-2 text-small leading-relaxed text-muted">
-                Ghi chú hiện trạng và ảnh chụp trước khi khách xác nhận.
+                Ghi hiện trạng và ảnh chụp. Sửa được cho tới khi khách xác nhận trên tài khoản.
               </p>
-              <label className="mt-4 grid gap-1.5 text-label text-muted">
+              {current.rejectionCount > 0 && (
+                <DemoNotice tone="info">
+                  Khách đã từ chối {current.rejectionCount}/{current.maxRejectionCount} khoang của
+                  đơn này.
+                </DemoNotice>
+              )}
+              <label className={`${FIELD_LABEL} mt-4`} htmlFor="inspection-notes">
                 Ghi chú hiện trạng
-                <textarea
-                  className="min-h-[90px] border border-border bg-surface p-3 text-small text-ink"
-                  value={inspectionNotes}
-                  onChange={(event) => setInspectionNotes(event.target.value)}
-                  placeholder="Ví dụ: khoang sạch, cửa khoá hoạt động, có vết xước nhỏ ở tường trái."
-                />
               </label>
-              <div className="mt-3 border border-dashed border-border bg-surface-subtle p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-label text-muted">
-                    Ảnh hiện trạng (JPEG/PNG/WebP/PDF, ≤ 10MB)
-                  </span>
-                  <label className={`${buttonClassName("secondary", "sm")} cursor-pointer`}>
-                    <Upload size={16} /> {inspectionUploading ? "Đang tải..." : "Tải ảnh"}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,application/pdf"
-                      multiple
-                      className="hidden"
-                      disabled={inspectionUploading}
-                      onChange={uploadInspectionPhotos}
-                    />
-                  </label>
-                  {inspectionUploading && (
-                    <button
-                      type="button"
-                      className="border-0 bg-transparent p-0 text-label font-semibold text-danger hover:underline"
-                      onClick={cancelInspectionUpload}
-                    >
-                      Hủy
-                    </button>
-                  )}
-                </div>
-                {inspectionUploadError && (
-                  <p className="mt-2 text-label text-danger" role="alert">
-                    {inspectionUploadError}
-                  </p>
-                )}
-                {inspectionPhotos.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {inspectionPhotos.map((photo) => (
-                      <div key={photo.url} className="relative h-20 w-20">
-                        <a
-                          href={photo.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block h-full w-full border border-border"
-                        >
-                          {photo.format === "pdf" ? (
-                            <span className="grid h-full w-full place-items-center bg-surface text-label text-muted">
-                              PDF
-                            </span>
-                          ) : (
-                            <img
-                              src={photo.url}
-                              alt={photo.name}
-                              className="h-full w-full object-cover"
-                            />
-                          )}
-                        </a>
-                        <button
-                          type="button"
-                          className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center border border-border bg-surface text-danger hover:border-danger"
-                          onClick={() => removeInspectionPhoto(photo)}
-                          aria-label={`Xoá ảnh ${photo.name}`}
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <textarea
+                id="inspection-notes"
+                className={TEXTAREA_CLASS}
+                value={inspectionNotes}
+                maxLength={2000}
+                onChange={(event) => setInspectionNotes(event.target.value)}
+                placeholder="Ví dụ: khoang sạch, cửa khoá hoạt động, có vết xước nhỏ ở tường trái."
+              />
+              <div className="mt-3">
+                <FileUploadField
+                  label="Ảnh hiện trạng (JPEG/PNG/WebP/PDF, ≤ 10MB, tối đa 20)"
+                  files={inspectionPhotos}
+                  onChange={setInspectionPhotos}
+                />
               </div>
-              {inspectionAttachError && (
-                <DemoNotice tone="error">{inspectionAttachError}</DemoNotice>
+              <Button
+                className="mt-4"
+                pending={busy}
+                // Biên bản trống thì khách không đồng ý được (backend 409) — cần ghi chú hoặc ảnh.
+                disabled={!inspectionNotes.trim() && inspectionPhotos.length === 0}
+                onClick={async () => {
+                  const ok = await run(
+                    () =>
+                      saveHandoverInspection(
+                        current.id,
+                        inspectionNotes.trim(),
+                        inspectionPhotos.map((photo) => photo.url),
+                      ),
+                    "Đã lưu hiện trạng khoang.",
+                  );
+                  if (ok) {
+                    await attachUploaded(inspectionPhotos);
+                    setInspectionPhotos((list) => list.map((item) => ({ ...item, batchId: null })));
+                  }
+                }}
+              >
+                Lưu hiện trạng
+              </Button>
+              {!inspectionNotes.trim() && inspectionPhotos.length === 0 && (
+                <p className="mb-0 mt-2 text-label text-muted">
+                  Nhập ghi chú hoặc thêm ảnh hiện trạng trước khi lưu.
+                </p>
               )}
-              {rejectOpen ? (
-                <div className="mt-4 border border-border bg-surface-subtle p-4">
-                  <label className="grid gap-1.5 text-label text-muted">
-                    Lý do từ chối
-                    <textarea
-                      className="min-h-[70px] border border-border bg-surface p-3 text-small text-ink"
-                      value={rejectReason}
-                      onChange={(event) => setRejectReason(event.target.value)}
-                      placeholder="Khách từ chối vì..."
-                    />
-                  </label>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      variant="danger"
-                      disabled={!rejectReason.trim()}
-                      onClick={rejectInspection}
-                    >
-                      Xác nhận từ chối
-                    </Button>
-                    <Button variant="secondary" onClick={() => setRejectOpen(false)}>
-                      Huỷ
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Button pending={inspectionAttaching} onClick={acceptInspection}>
-                    <Check size={16} /> Khách đồng ý
-                  </Button>
-                  <Button variant="secondary" onClick={() => setRejectOpen(true)}>
-                    Khách từ chối
-                  </Button>
-                </div>
-              )}
+              {current.unitInspectedAt === null &&
+                (current.inspectionNotes || (current.inspectionPhotos?.length ?? 0) > 0) && (
+                  <WaitingCustomer
+                    title="Chờ khách xác nhận trên tài khoản"
+                    description="Khách xem hiện trạng và bấm đồng ý (hoặc từ chối khoang) trên tài khoản của mình."
+                    onRefresh={refresh}
+                    refreshing={refreshing}
+                  />
+                )}
             </div>
           )}
 
-          {currentStep === 2 && (
+          {(step === "SIGN_CONTRACT" || step === "OVERRIDE_PENDING") && contract && (
             <div>
-              <span className="label text-muted">Bước 03</span>
+              <span className="text-label text-muted">Bước 03</span>
               <h2 className="mb-0 mt-1 text-section text-ink">Ký hợp đồng</h2>
               <p className="mt-2 text-small leading-relaxed text-muted">
-                Sinh hợp đồng từ mẫu đang hiệu lực, in cho khách ký và tải bản scan lên.
+                In hợp đồng cho khách ký, tải bản scan lên để chuyển sang thanh toán tháng đầu.
               </p>
-              {!contractGenerated ? (
-                <Button className="mt-4" onClick={() => setContractGenerated(true)}>
-                  Sinh hợp đồng
-                </Button>
+              <dl className="mb-0 mt-4 grid gap-2 bg-surface-subtle p-4 text-small">
+                <Row term="Mã hợp đồng">
+                  <strong>{contract.code}</strong>
+                </Row>
+                <Row term="Trạng thái">{label(contract.status)}</Row>
+                <Row term="Giá thuê">{formatMoney(contract.monthlyPrice)} / tháng</Row>
+                <Row term="Tiền cọc đã đóng">{formatMoney(contract.depositAmount)}</Row>
+                <Row term="Thời hạn">{contract.period} tháng</Row>
+                <Row term="Mốc tính tiền">
+                  {formatDate(contract.startDate)} – {formatDate(contract.endDate)}
+                </Row>
+                {contract.startDateOverrideStatus && (
+                  <Row term="Đề nghị đổi mốc">
+                    {formatDate(contract.startDateOverrideRequested)} ·{" "}
+                    {label(contract.startDateOverrideStatus)}
+                  </Row>
+                )}
+                {contract.startDateOverrideReason && (
+                  <Row term="Lý do đổi mốc">{contract.startDateOverrideReason}</Row>
+                )}
+              </dl>
+
+              {step === "OVERRIDE_PENDING" ? (
+                <WaitingCustomer
+                  title="Chờ FM duyệt mốc tính tiền"
+                  description="Bước ký và bản in bị khoá cho tới khi FM duyệt hoặc từ chối đề nghị đổi mốc."
+                  onRefresh={refresh}
+                  refreshing={refreshing}
+                />
               ) : (
                 <>
-                  <div className="mt-4 grid gap-2 border border-border bg-surface-subtle p-4 text-small">
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted">Mã hợp đồng</span>
-                      <strong className="text-ink">HD-{appointment.orderCode}</strong>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted">Khách hàng</span>
-                      <span className="text-ink">{appointment.customerName}</span>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted">Khoang</span>
-                      <span className="text-ink">{appointment.unitCode}</span>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted">Giá thuê</span>
-                      <strong className="text-ink">
-                        {formatPrice(appointment.monthlyPrice)} đ / tháng
-                      </strong>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted">Tiền cọc đã đóng</span>
-                      <span className="text-ink">{formatPrice(appointment.depositAmount)} đ</span>
-                    </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      pending={docLoading}
+                      onClick={() => openDocument(contract.id)}
+                    >
+                      <FileText size={16} /> Xem / in hợp đồng
+                    </Button>
+                    <Button variant="secondary" onClick={() => setOverrideOpen((open) => !open)}>
+                      Đề nghị đổi mốc tính tiền
+                    </Button>
                   </div>
-                  <div className="mt-3 border border-dashed border-border bg-surface-subtle p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-label text-muted">
-                        Bản scan hợp đồng đã ký (PDF/ảnh, ≤ 10MB)
-                      </span>
-                      <label className={`${buttonClassName("secondary", "sm")} cursor-pointer`}>
-                        <Upload size={16} /> {contractUploading ? "Đang tải..." : "Tải bản scan"}
+
+                  {overrideOpen && (
+                    <div className="mt-4 grid gap-3 bg-surface-subtle p-4">
+                      <div>
+                        <label className={FIELD_LABEL} htmlFor="override-date">
+                          Ngày bắt đầu tính tiền đề nghị
+                        </label>
                         <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,application/pdf"
-                          className="hidden"
-                          disabled={contractUploading}
-                          onChange={uploadContractFile}
+                          id="override-date"
+                          type="date"
+                          min={isoDate(new Date())}
+                          className={INPUT_CLASS}
+                          value={overrideDate}
+                          onChange={(event) => setOverrideDate(event.target.value)}
                         />
-                      </label>
-                      {contractUploading && (
-                        <button
-                          type="button"
-                          className="border-0 bg-transparent p-0 text-label font-semibold text-danger hover:underline"
-                          onClick={cancelContractUpload}
-                        >
-                          Hủy
-                        </button>
-                      )}
-                    </div>
-                    {contractUploadError && (
-                      <p className="mt-2 text-label text-danger" role="alert">
-                        {contractUploadError}
-                      </p>
-                    )}
-                    {contractFile && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <a
-                          href={contractFile.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-2 text-label font-semibold text-accent hover:underline"
-                        >
-                          <Upload size={14} /> {contractFile.name}
-                        </a>
-                        <button
-                          type="button"
-                          className="grid h-7 w-7 place-items-center border border-border bg-surface text-danger hover:border-danger"
-                          onClick={removeContractFile}
-                          aria-label="Xoá file hợp đồng"
-                        >
-                          <X size={13} />
-                        </button>
                       </div>
-                    )}
-                  </div>
-                  {contractAttachError && (
-                    <DemoNotice tone="error">{contractAttachError}</DemoNotice>
+                      <div>
+                        <label className={FIELD_LABEL} htmlFor="override-reason">
+                          Lý do
+                        </label>
+                        <textarea
+                          id="override-reason"
+                          className={TEXTAREA_CLASS}
+                          value={overrideReason}
+                          maxLength={500}
+                          onChange={(event) => setOverrideReason(event.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          pending={busy}
+                          disabled={!overrideDate || !overrideReason.trim()}
+                          onClick={async () => {
+                            const ok = await run(async () => {
+                              await requestStartDateOverride(
+                                contract.id,
+                                overrideDate,
+                                overrideReason.trim(),
+                              );
+                              return null;
+                            }, "Đã gửi đề nghị đổi mốc tính tiền cho FM.");
+                            if (ok) {
+                              setOverrideOpen(false);
+                              setOverrideDate("");
+                              setOverrideReason("");
+                            }
+                          }}
+                        >
+                          Gửi đề nghị
+                        </Button>
+                        <Button variant="secondary" onClick={() => setOverrideOpen(false)}>
+                          Đóng
+                        </Button>
+                      </div>
+                    </div>
                   )}
+
+                  <div className="mt-4">
+                    <FileUploadField
+                      label="Bản scan hợp đồng đã ký (PDF/ảnh, ≤ 10MB)"
+                      files={contractScan}
+                      onChange={setContractScan}
+                      multiple={false}
+                    />
+                  </div>
                   <Button
                     className="mt-4"
-                    disabled={!contractFile || contractAttaching}
-                    pending={contractAttaching}
-                    onClick={signContract}
+                    pending={busy}
+                    disabled={contractScan.length === 0}
+                    onClick={async () => {
+                      const scan = contractScan[0];
+                      if (!scan) return;
+                      let invoiceText = "";
+                      const ok = await run(async () => {
+                        const issued = await signContract(contract.id, scan.url);
+                        invoiceText = `${issued.code} · ${formatMoney(issued.amount)}`;
+                        return null;
+                      }, "Đã ký hợp đồng.");
+                      if (ok) {
+                        await attachUploaded(contractScan);
+                        setContractScan([]);
+                        setNotice(`Đã ký hợp đồng, tạo hoá đơn tháng đầu ${invoiceText}.`);
+                      }
+                    }}
                   >
                     <Check size={16} /> Xác nhận đã ký
                   </Button>
                 </>
               )}
-            </div>
-          )}
 
-          {currentStep === 3 && (
-            <div>
-              <span className="label text-muted">Bước 04</span>
-              <h2 className="mb-0 mt-1 text-section text-ink">Thanh toán tháng đầu</h2>
-              <p className="mt-2 text-small leading-relaxed text-muted">
-                Trạng thái thật lấy từ IPN; ở prototype, bấm xác nhận để mô phỏng.
-              </p>
-              <div className="mt-4 border border-border bg-surface-subtle p-4">
-                <div className="flex items-center justify-between gap-3 text-small">
-                  <span className="text-muted">Tiền thuê tháng đầu</span>
-                  <strong className="text-ink">{formatPrice(appointment.monthlyPrice)} đ</strong>
-                </div>
-                <div className="mt-2 flex items-center justify-between gap-3 text-small">
-                  <span className="text-muted">Trạng thái</span>
-                  <StatusTag tone="warning">Chờ thanh toán</StatusTag>
-                </div>
-              </div>
-              <p className="mt-3 text-label text-muted">
-                Prototype: không nhập tay trạng thái thanh toán.
-              </p>
-              <Button className="mt-4" onClick={() => setPayment("Paid")}>
-                <Check size={16} /> Xác nhận đã thanh toán
-              </Button>
-            </div>
-          )}
-
-          {currentStep === 4 && (
-            <div>
-              <span className="label text-muted">Bước 05</span>
-              <h2 className="mb-0 mt-1 text-section text-ink">Bàn giao khoá</h2>
-              <p className="mt-2 text-small leading-relaxed text-muted">
-                MVP chỉ hỗ trợ chìa khoá vật lý. Ghi số lượng chìa giao cho khách.
-              </p>
-              <div className="mt-4 grid gap-4">
-                <label className="grid gap-1.5 text-label text-muted">
-                  Hình thức bàn giao
-                  <select
-                    className="min-h-[42px] border border-border bg-surface px-3 text-small text-ink"
-                    value={accessType}
-                    onChange={(event) => setAccessType(event.target.value)}
+              {contract.status === "Draft" && (
+                <div className="mt-6 bg-surface-subtle p-4">
+                  <strong className="block text-small text-ink">Khách không ký hợp đồng?</strong>
+                  <p className="mb-0 mt-1 text-small text-muted">
+                    Đơn sẽ bị huỷ theo luồng “Khách không ký hợp đồng”.
+                  </p>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    className="mt-3"
+                    disabled={busy}
+                    onClick={() => setConfirmNotSigned(true)}
                   >
-                    <option value="PhysicalKey">Chìa khoá vật lý</option>
-                  </select>
-                </label>
-                <label className="grid gap-1.5 text-label text-muted">
-                  Số lượng chìa
-                  <input
-                    type="number"
-                    min={1}
-                    value={quantity}
-                    onChange={(event) => setQuantity(Number(event.target.value))}
-                    className="min-h-[42px] w-[120px] border border-border bg-surface px-3 text-small text-ink"
-                  />
-                </label>
-              </div>
-              <Button className="mt-5" onClick={() => setCompleted(true)}>
+                    Khách không ký
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === "PAY_FIRST_MONTH" && (
+            <div>
+              <span className="text-label text-muted">Bước 04</span>
+              <h2 className="mb-0 mt-1 text-section text-ink">Thanh toán tháng đầu</h2>
+              <dl className="mb-0 mt-4 grid gap-2 bg-surface-subtle p-4 text-small">
+                <Row term="Hoá đơn">{invoice?.code ?? "—"}</Row>
+                <Row term="Số tiền">
+                  <strong>{formatMoney(invoice?.amount)}</strong>
+                </Row>
+                <Row term="Trạng thái">{label(invoice?.status)}</Row>
+                <Row term="Hạn thanh toán">{formatDateTime(invoice?.dueDate)}</Row>
+              </dl>
+              <WaitingCustomer
+                title="Chờ khách thanh toán trên tài khoản"
+                description="Khách thanh toán hoá đơn tháng đầu qua cổng thanh toán; trạng thái cập nhật khi cổng xác nhận."
+                onRefresh={refresh}
+                refreshing={refreshing}
+              />
+            </div>
+          )}
+
+          {step === "CUSTOMER_CONFIRM" && (
+            <div>
+              <span className="text-label text-muted">Bước 05</span>
+              <h2 className="mb-0 mt-1 text-section text-ink">Khách xác nhận biên bản</h2>
+              <p className="mt-2 text-small leading-relaxed text-muted">
+                Hoá đơn tháng đầu đã thanh toán. Khách xác nhận biên bản và chọn hình thức truy cập.
+              </p>
+              <WaitingCustomer
+                title="Chờ khách xác nhận trên tài khoản"
+                description="Chọn mã số thì bàn giao chốt ngay; chọn chìa khoá cơ thì bạn giao chìa ở bước kế tiếp."
+                onRefresh={refresh}
+                refreshing={refreshing}
+              />
+            </div>
+          )}
+
+          {step === "HAND_OVER_KEYS" && (
+            <div>
+              <span className="text-label text-muted">Bước 06</span>
+              <h2 className="mb-0 mt-1 text-section text-ink">Giao chìa khoá</h2>
+              <p className="mt-2 text-small leading-relaxed text-muted">
+                Khách đã chọn:{" "}
+                {ACCESS_LABEL[current.requestedAccess ?? ""] ?? current.requestedAccess}. Ghi số
+                chìa giao cho khách để chốt bàn giao.
+              </p>
+              <label className={`${FIELD_LABEL} mt-4`} htmlFor="key-quantity">
+                Số lượng chìa
+              </label>
+              <input
+                id="key-quantity"
+                type="number"
+                min={1}
+                max={10}
+                className={`${INPUT_CLASS} max-w-[140px]`}
+                value={keyQuantity}
+                onChange={(event) => setKeyQuantity(Number(event.target.value))}
+              />
+              <Button
+                className="mt-5"
+                pending={busy}
+                disabled={!Number.isInteger(keyQuantity) || keyQuantity < 1}
+                onClick={() =>
+                  run(() => handOverKeys(current.id, keyQuantity), "Bàn giao hoàn tất.")
+                }
+              >
                 <Check size={16} /> Hoàn tất bàn giao
               </Button>
             </div>
           )}
+
+          {canCorrectInspection && (
+            <div className="mt-6 bg-surface-subtle p-4">
+              <strong className="block text-small text-ink">
+                Hiện trạng khoang (khách đã đồng ý)
+              </strong>
+              <p className="mb-0 mt-1 whitespace-pre-line text-small text-muted">
+                {inspectionSummary}
+              </p>
+              {!correctionOpen ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-3"
+                  disabled={busy}
+                  onClick={openCorrection}
+                >
+                  Sửa hiện trạng
+                </Button>
+              ) : (
+                <div className="mt-3 grid gap-3">
+                  <p className="m-0 text-label text-muted">
+                    Sửa sau khi khách đã đồng ý cần ghi lý do và được lưu vết. Hợp đồng đã ký giữ
+                    nguyên bản đã chốt.
+                  </p>
+                  <div>
+                    <label className={FIELD_LABEL} htmlFor="correction-notes">
+                      Ghi chú hiện trạng
+                    </label>
+                    <textarea
+                      id="correction-notes"
+                      className={TEXTAREA_CLASS}
+                      value={correctionNotes}
+                      maxLength={2000}
+                      onChange={(event) => setCorrectionNotes(event.target.value)}
+                    />
+                  </div>
+                  <FileUploadField
+                    label="Ảnh hiện trạng (JPEG/PNG/WebP/PDF, ≤ 10MB, tối đa 20)"
+                    files={correctionPhotos}
+                    onChange={setCorrectionPhotos}
+                  />
+                  <div>
+                    <label className={FIELD_LABEL} htmlFor="correction-reason">
+                      Lý do sửa
+                    </label>
+                    <textarea
+                      id="correction-reason"
+                      className={TEXTAREA_CLASS}
+                      value={correctionReason}
+                      maxLength={500}
+                      onChange={(event) => setCorrectionReason(event.target.value)}
+                      placeholder="Ví dụ: bổ sung vết xước khách chỉ ra sau khi đồng ý."
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      pending={busy}
+                      disabled={
+                        !correctionReason.trim() ||
+                        (!correctionNotes.trim() && correctionPhotos.length === 0)
+                      }
+                      onClick={async () => {
+                        const ok = await run(
+                          () =>
+                            correctHandoverInspection(
+                              current.id,
+                              correctionNotes.trim(),
+                              correctionPhotos.map((photo) => photo.url),
+                              correctionReason.trim(),
+                            ),
+                          "Đã sửa hiện trạng khoang.",
+                        );
+                        if (ok) {
+                          await attachUploaded(correctionPhotos);
+                          setCorrectionOpen(false);
+                          setCorrectionPhotos([]);
+                          setCorrectionReason("");
+                        }
+                      }}
+                    >
+                      <Check size={14} /> Lưu hiện trạng đã sửa
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setCorrectionOpen(false)}
+                    >
+                      Đóng
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       </div>
+
+      {confirmNotSigned && (
+        <ConfirmDialog
+          title="Xác nhận khách không ký hợp đồng"
+          description="Phiên bàn giao đóng lại và đơn bị huỷ. Thao tác không hoàn tác được."
+          confirmLabel="Khách không ký"
+          isPending={busy}
+          onCancel={() => setConfirmNotSigned(false)}
+          onConfirm={async () => {
+            await run(
+              () => markHandoverNotSigned(current.id),
+              "Đã huỷ đơn do khách không ký hợp đồng.",
+            );
+            setConfirmNotSigned(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ClosedState({ handover, onBack }: { handover: HandoverView; onBack: () => void }) {
+  if (handover.result === "COMPLETED") {
+    return (
+      <div>
+        <div className="bg-success-soft p-5 text-success">
+          <Check size={26} />
+          <h2 className="mb-0 mt-3 text-section">Đã bàn giao khoang {handover.unitCode ?? ""}</h2>
+          <p className="mb-0 mt-1 text-small">
+            Hoàn tất lúc {formatDateTime(handover.completedAt)}.
+          </p>
+        </div>
+        {handover.accessKeys.length > 0 && (
+          <dl className="mb-0 mt-4 grid gap-2 bg-surface-subtle p-4 text-small">
+            {handover.accessKeys.map((key) => (
+              <Row key={key.id} term={ACCESS_LABEL[key.accessType] ?? key.accessType}>
+                {key.quantity !== null ? `${key.quantity} chìa · ` : ""}
+                {label(key.status)}
+              </Row>
+            ))}
+          </dl>
+        )}
+        <Button className="mt-4" onClick={onBack}>
+          Về đơn đang bàn giao
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <h2 className="m-0 text-section text-ink">
+        {handover.result === "REJECTED" ? "Khách từ chối khoang" : "Phiên bàn giao đã huỷ"}
+      </h2>
+      {handover.rejectReason && (
+        <p className="mt-2 text-small text-muted">Lý do: {handover.rejectReason}</p>
+      )}
+      <Button className="mt-4" onClick={onBack}>
+        Về đơn đang bàn giao
+      </Button>
     </div>
   );
 }

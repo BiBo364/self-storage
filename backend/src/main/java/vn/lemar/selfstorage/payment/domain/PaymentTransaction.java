@@ -69,12 +69,27 @@ public class PaymentTransaction {
     }
 
     public PaymentTransaction(Long invoiceId, String vnpTxnRef, BigDecimal amount, String transactionContent) {
+        // VNPay chỉ nhận mốc giây (yyyyMMddHHmmss); cắt sẵn để vnp_CreateDate và querydr dùng đúng một mốc.
+        this.createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         this.invoiceId = invoiceId;
         this.vnpTxnRef = vnpTxnRef;
         this.amount = amount;
         this.transactionContent = transactionContent;
         this.direction = PaymentDirection.PAY;
         this.status = PaymentStatus.PENDING;
+    }
+
+    /**
+     * Hoàn tiền FM đã chuyển trả khách ngoài hệ thống (payOS không có API hoàn tiền) — ghi nhận lại để đối soát:
+     * {@code direction = REFUND}, {@code Success} ngay.
+     */
+    public static PaymentTransaction manualRefund(Long invoiceId, String ref, BigDecimal amount, String note,
+                                                  Instant now) {
+        PaymentTransaction refund = new PaymentTransaction(invoiceId, ref, amount, note);
+        refund.direction = PaymentDirection.REFUND;
+        refund.status = PaymentStatus.SUCCESS;
+        refund.paidAt = now;
+        return refund;
     }
 
     /** Ghi nhận cổng báo thành công. Chỉ gọi khi giao dịch còn {@code PENDING}. */
@@ -103,6 +118,15 @@ public class PaymentTransaction {
         this.paidAt = paidAt;
         this.failureReason = reason;
         this.responsePayload = responsePayload;
+    }
+
+    /**
+     * Phiên đã đóng {@code FAILED} (huỷ / hết hạn phía mình) nhưng cổng báo khách vẫn trả (quét QR cũ): tiền đã vào nên
+     * ghi {@code SUCCESS} — số này tính vào "đã thu qua cổng" để FM ghi nhận hoàn được. Giữ lý do đóng cũ để tra cứu.
+     */
+    public void markLateSucceeded(String gatewayTransactionNo, Instant paidAt, String responsePayload) {
+        this.failureReason = "Thanh toán muộn sau khi phiên đã đóng: " + failureReason;
+        markSucceeded(gatewayTransactionNo, paidAt, responsePayload);
     }
 
     public boolean isPending() {

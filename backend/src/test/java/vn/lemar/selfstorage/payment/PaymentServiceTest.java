@@ -40,6 +40,7 @@ import vn.lemar.selfstorage.payment.application.dto.PaymentRequest;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationConflictException;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationNotFoundException;
 import vn.lemar.selfstorage.payment.application.exception.ManualReconciliationValidationException;
+import vn.lemar.selfstorage.payment.application.event.PaymentDuplicateDetected;
 import vn.lemar.selfstorage.payment.application.event.PaymentFailed;
 import vn.lemar.selfstorage.payment.application.event.PaymentSucceeded;
 import vn.lemar.selfstorage.payment.config.VnPayProperties;
@@ -488,4 +489,55 @@ class PaymentServiceTest {
                 .isInstanceOf(ManualReconciliationNotFoundException.class);
     }
 
+    /** Phiên đã đóng Failed (huỷ link) mà khách vẫn trả: tiền đã vào, không được bỏ qua. */
+    @Test
+    void lateSuccessOnAFailedTransactionIsSettledAsSuccess() {
+        transaction.markFailed("Đã huỷ phiên: x", "{}");
+
+        var response = service.handleIpn(ipn());
+
+        assertThat(response.rspCode()).isEqualTo("02");
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(transaction.getFailureReason()).startsWith("Thanh toán muộn sau khi phiên đã đóng");
+        verify(repository).lockInvoiceForPayment(7L);
+        verify(events).publishEvent(any(PaymentSucceeded.class));
+    }
+
+    /** Tiền muộn khi invoice đã có PAY/Success khác: không được thành Success thứ hai (V18). */
+    @Test
+    void lateSuccessOnAnInvoiceAlreadyPaidBecomesDuplicate() {
+        transaction.markFailed("Đã huỷ phiên: x", "{}");
+        when(repository.existsByInvoiceIdAndDirectionAndStatus(7L, PaymentDirection.PAY, PaymentStatus.SUCCESS))
+                .thenReturn(true);
+
+        service.handleIpn(ipn());
+
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.DUPLICATE);
+        verify(events).publishEvent(any(PaymentDuplicateDetected.class));
+        verify(events, never()).publishEvent(any(PaymentSucceeded.class));
+    }
+
+    @Test
+    void failedIpnOnAFailedTransactionChangesNothing() {
+        transaction.markFailed("x", "{}");
+        Map<String, String> params = ipn();
+        params.put("vnp_ResponseCode", "24");
+
+        assertThat(service.handleIpn(params).rspCode()).isEqualTo("02");
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void resumeTreatsAGatewayThatCannotRebuildTheLinkAsLostSession() {
+        when(repository.findFirstByInvoiceIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(any(), any(), any()))
+                .thenReturn(Optional.of(transaction));
+        when(gateway.buildPaymentUrl(any(), any(Instant.class))).thenThrow(new IllegalStateException("231"));
+
+        assertThat(service.resumePayment(7L, "127.0.0.1")).isEmpty();
+
+        reset(gateway);
+        when(gateway.buildPaymentUrl(any(), any(Instant.class))).thenReturn(null);
+        assertThat(service.resumePayment(7L, "127.0.0.1")).isEmpty();
+    }
 }

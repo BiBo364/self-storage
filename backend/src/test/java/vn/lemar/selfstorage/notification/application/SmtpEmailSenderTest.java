@@ -64,6 +64,39 @@ class SmtpEmailSenderTest {
     }
 
     @Test
+    void blankFromFallsBackToSmtpUsername() {
+        SmtpEmailSender gmail = new SmtpEmailSender(mailSender, "", "shop@gmail.com");
+
+        gmail.send("a@b.vn", "s", "b");
+
+        ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(captor.capture());
+        assertThat(captor.getValue().getFrom()).isEqualTo("shop@gmail.com");
+    }
+
+    @Test
+    void allBlankFallsBackToDefaultFrom() {
+        SmtpEmailSender unconfigured = new SmtpEmailSender(mailSender, " ", null);
+
+        unconfigured.send("a@b.vn", "s", "b");
+
+        ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(captor.capture());
+        assertThat(captor.getValue().getFrom()).isEqualTo(SmtpEmailSender.DEFAULT_FROM);
+    }
+
+    @Test
+    void explicitFromWinsOverSmtpUsername() {
+        SmtpEmailSender gmail = new SmtpEmailSender(mailSender, "Lemar <shop@gmail.com>", "shop@gmail.com");
+
+        gmail.send("a@b.vn", "s", "b");
+
+        ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(captor.capture());
+        assertThat(captor.getValue().getFrom()).isEqualTo("Lemar <shop@gmail.com>");
+    }
+
+    @Test
     void swallowsMailFailureAndReturnsFalse() {
         doThrow(new MailSendException("smtp down")).when(mailSender).send(any(SimpleMailMessage.class));
 

@@ -151,11 +151,13 @@ class DepositPaymentIntegrationTest {
     }
 
     @Test
-    void successWritesThreeAuditEntries() throws Exception {
+    void successWritesOneAuditEntryPerChangedEntity() throws Exception {
+        // PaymentTransaction (payment) + Invoice + RentalOrder + StorageUnit (booking).
         confirmByIpn(openSessionAndReadTxnRef());
 
         assertThat(jdbc.queryForList("SELECT action FROM audit_logs ORDER BY action", String.class))
-                .containsExactly("PAYMENT_SUCCEEDED", "RENTAL_ORDER_DEPOSITED", "STORAGE_UNIT_RESERVED");
+                .containsExactly("INVOICE_PAID", "PAYMENT_SUCCEEDED", "RENTAL_ORDER_DEPOSITED",
+                        "STORAGE_UNIT_RESERVED");
     }
 
     /**
@@ -333,7 +335,8 @@ class DepositPaymentIntegrationTest {
         assertThat(statusOf("rental_orders", orderId)).isEqualTo("Deposited");
         assertThat(statusOf("storage_units", unitId)).isEqualTo("Reserved");
         assertThat(jdbc.queryForList("SELECT action FROM audit_logs ORDER BY action", String.class))
-                .containsExactly("PAYMENT_SUCCEEDED", "RENTAL_ORDER_DEPOSITED", "STORAGE_UNIT_RESERVED");
+                .containsExactly("INVOICE_PAID", "PAYMENT_SUCCEEDED", "RENTAL_ORDER_DEPOSITED",
+                        "STORAGE_UNIT_RESERVED");
     }
 
     /**

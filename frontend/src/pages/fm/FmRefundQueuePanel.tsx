@@ -3,11 +3,11 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../app/api";
 import { type RefundCase, type RefundCasePage } from "../../app/adminReconciliation";
 import { Button } from "../../components/ui/Button";
-import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 import { formatPrice } from "../../mocks/catalog";
+import { FmRefundRecorder } from "./FmRefundRecorder";
 
 const EMPTY_PAGE: RefundCasePage = {
   items: [],
@@ -24,12 +24,21 @@ function formatDateTime(value: string | null) {
   );
 }
 
+const REFUND_REASON_LABEL: Record<string, string> = {
+  UNIT_UNAVAILABLE: "Khoang không còn khả dụng",
+  INVOICE_CLOSED: "Tiền vào sau khi hoá đơn đã đóng",
+  UNIT_CHANGE_EXCESS: "Cọc dư khi đổi khoang",
+  DEPOSIT_UNSERVED: "Đơn hết hạn khi đã trả cọc",
+  HANDOVER_CANCELED: "Đã trả tháng đầu nhưng bàn giao bị huỷ",
+  CHECKOUT_DEPOSIT: "Hoàn cọc khi trả kho",
+};
+
 function refundReasonLabel(reason: string | null) {
-  if (reason === "UNIT_UNAVAILABLE") return "Khoang không còn khả dụng";
-  return reason ?? "Không rõ";
+  if (!reason) return "Không rõ";
+  return REFUND_REASON_LABEL[reason] ?? reason;
 }
 
-/** Read-only queue: tiền đã vào nhưng chưa có thao tác hoàn tiền. */
+/** Hàng đợi hoàn tiền của cơ sở (`Required` / `Processing`); FM ghi nhận khoản đã chuyển cho khách. */
 type FmRefundQueuePanelProps = {
   loadCases: (page: number, size?: number) => Promise<RefundCasePage>;
 };
@@ -75,8 +84,8 @@ export function FmRefundQueuePanel({ loadCases }: FmRefundQueuePanelProps) {
       <div>
         <h2 className="m-0 text-section text-ink">Chờ hoàn tiền</h2>
         <p className="mt-1.5 text-small text-muted">
-          Tiền đã vào nhưng khoang không còn giữ được. Danh sách chỉ để theo dõi; chưa có thao tác
-          ghi nhận hoàn tiền.
+          Tiền đã vào nhưng phải trả lại khách. Chuyển khoản hoàn rồi ghi nhận tại đây; hoàn đủ số
+          phải hoàn thì khoản rời danh sách.
         </p>
       </div>
 
@@ -114,7 +123,9 @@ export function FmRefundQueuePanel({ loadCases }: FmRefundQueuePanelProps) {
                 <span className="block text-label">Yêu cầu lúc</span>
                 <span className="text-ink">{formatDateTime(item.refundRequestedAt)}</span>
               </div>
-              <StatusTag tone="warning">Chờ hoàn tiền</StatusTag>
+              <StatusTag tone="warning">
+                {item.refundStatus === "Processing" ? "Đã hoàn một phần" : "Chờ hoàn tiền"}
+              </StatusTag>
             </button>
           ))}
         </div>
@@ -159,7 +170,7 @@ export function FmRefundQueuePanel({ loadCases }: FmRefundQueuePanelProps) {
         >
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-3 bg-surface-subtle p-3.5 text-small">
-              <span className="text-muted">Số tiền</span>
+              <span className="text-muted">Số tiền phải hoàn</span>
               <strong className="text-right text-ink">{formatPrice(selected.amount)} đ</strong>
               <span className="text-muted">Đơn thuê</span>
               <strong className="text-right text-ink">
@@ -183,10 +194,7 @@ export function FmRefundQueuePanel({ loadCases }: FmRefundQueuePanelProps) {
               <strong className="text-right text-ink">{formatDateTime(selected.paidAt)}</strong>
             </div>
 
-            <DemoNotice tone="info">
-              Khoản này đang chờ hoàn tiền thủ công. Chưa có thao tác ghi nhận hoàn tiền trong màn
-              hình này.
-            </DemoNotice>
+            <FmRefundRecorder invoiceId={selected.invoiceId} onRecorded={reload} />
           </div>
         </DetailPanel>
       )}

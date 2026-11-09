@@ -1,58 +1,73 @@
 import { AlertTriangle, ArrowRight, Check, MapPin, X } from "lucide-react";
 import { useState } from "react";
 import type { Navigate } from "../app/types";
-import { rentedStorage } from "../mocks/customer";
-import { MAX_REJECTIONS, proposals as initialProposals, type Proposal } from "../mocks/proposals";
+import { formatDateTime, formatMoney } from "../app/format";
+import { errorMessage } from "../app/http";
+import {
+  agreeProposal,
+  fetchProposals,
+  PROPOSAL_STATUS,
+  rejectProposal,
+  useResource,
+  type CustomerProposal,
+} from "../app/services/customer";
 import { Button } from "../components/ui/Button";
 import { DemoNotice } from "../components/ui/DemoNotice";
+import { StatusTag } from "../components/ui/StatusTag";
 import { SurfaceState } from "../components/ui/SurfaceState";
 
-type Tab = "active" | "pending";
+type Tab = "pending" | "history";
+
+type Outcome =
+  | { kind: "agreed"; proposalId: number; hasInvoice: boolean }
+  | { kind: "rejected"; proposalId: number; orderCanceled: boolean }
+  | { kind: "error"; proposalId: number; message: string };
 
 export function ProposalsPage({ navigate }: { navigate: Navigate }) {
+  const proposals = useResource(fetchProposals);
   const [tab, setTab] = useState<Tab>("pending");
-  const [items, setItems] = useState<Proposal[]>(initialProposals);
-  const [agreedIds, setAgreedIds] = useState<Set<string>>(new Set());
-  const [canceledIds, setCanceledIds] = useState<Set<string>>(new Set());
-  const [conflictId, setConflictId] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectNote, setRejectNote] = useState("");
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  const visibleProposals = items.filter((proposal) => !canceledIds.has(proposal.id));
-  const awaitingCount = items.filter(
-    (proposal) => !agreedIds.has(proposal.id) && !canceledIds.has(proposal.id),
-  ).length;
+  const items = proposals.data ?? [];
+  const pending = items.filter((proposal) => proposal.status === "Pending");
+  const history = items.filter((proposal) => proposal.status !== "Pending");
+  const visible = tab === "pending" ? pending : history;
 
-  function agree(proposal: Proposal) {
+  async function agree(proposal: CustomerProposal) {
     setBusyId(proposal.id);
-    setConflictId(null);
-    window.setTimeout(() => {
+    setOutcome(null);
+    try {
+      const result = await agreeProposal(proposal.id);
+      setOutcome({ kind: "agreed", proposalId: proposal.id, hasInvoice: result.invoice !== null });
+    } catch (caught) {
+      setOutcome({ kind: "error", proposalId: proposal.id, message: errorMessage(caught) });
+    } finally {
       setBusyId(null);
-      if (proposal.simulateConflict) {
-        setConflictId(proposal.id);
-        setItems((current) =>
-          current.map((item) => (item.id === proposal.id ? { ...item, status: "expired" } : item)),
-        );
-        return;
-      }
-      setAgreedIds((current) => new Set(current).add(proposal.id));
-    }, 700);
+      proposals.reload();
+    }
   }
 
-  function confirmReject(proposal: Proposal) {
-    const nextCount = proposal.rejectionCount + 1;
-    if (nextCount >= MAX_REJECTIONS) {
-      setCanceledIds((current) => new Set(current).add(proposal.id));
-    } else {
-      setItems((current) =>
-        current.map((item) =>
-          item.id === proposal.id ? { ...item, rejectionCount: nextCount } : item,
-        ),
-      );
+  async function confirmReject(proposal: CustomerProposal) {
+    setBusyId(proposal.id);
+    setOutcome(null);
+    try {
+      const result = await rejectProposal(proposal.id, rejectNote.trim());
+      setOutcome({
+        kind: "rejected",
+        proposalId: proposal.id,
+        orderCanceled: result.orderCanceled,
+      });
+      setRejectingId(null);
+      setRejectNote("");
+      proposals.reload();
+    } catch (caught) {
+      setOutcome({ kind: "error", proposalId: proposal.id, message: errorMessage(caught) });
+    } finally {
+      setBusyId(null);
     }
-    setRejectingId(null);
-    setRejectNote("");
   }
 
   function tabClass(active: boolean) {
@@ -63,225 +78,229 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
     }`;
   }
 
+  function countClass(active: boolean) {
+    return `px-1.5 text-label ${active ? "bg-signal-ink text-brand" : "bg-surface text-muted"}`;
+  }
+
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="m-0 text-title text-ink">Kiểm tra kho của tôi</h1>
+        <h1 className="m-0 text-title text-ink">Đề xuất khoang</h1>
         <p className="mt-1.5 text-small text-muted">
-          Xem lại đề xuất khoang từ đội ngũ vận hành và xác nhận trước khi đặt cọc.
+          Xem lại khoang cơ sở đề xuất cho yêu cầu của bạn và xác nhận trước khi đặt cọc.
         </p>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        <button className={tabClass(tab === "active")} onClick={() => setTab("active")}>
-          Đang sử dụng
-          <span
-            className={`px-1.5 text-label ${
-              tab === "active" ? "bg-signal-ink text-brand" : "bg-surface text-muted"
-            }`}
-          >
-            {rentedStorage.length}
-          </span>
-        </button>
         <button className={tabClass(tab === "pending")} onClick={() => setTab("pending")}>
-          Chờ duyệt
-          <span
-            className={`px-1.5 text-label ${
-              tab === "pending" ? "bg-signal-ink text-brand" : "bg-surface text-muted"
-            }`}
-          >
-            {awaitingCount}
-          </span>
+          Chờ phản hồi
+          <span className={countClass(tab === "pending")}>{pending.length}</span>
+        </button>
+        <button className={tabClass(tab === "history")} onClick={() => setTab("history")}>
+          Đã xử lý
+          <span className={countClass(tab === "history")}>{history.length}</span>
         </button>
       </div>
 
-      {tab === "active" &&
-        (rentedStorage.length === 0 ? (
-          <SurfaceState variant="empty" title="Chưa có kho đang sử dụng" />
-        ) : (
-          <div className="grid gap-2.5">
-            {rentedStorage.map((storage) => (
-              <div
-                key={storage.id}
-                className="flex flex-wrap items-center justify-between gap-4 bg-surface p-4"
-              >
-                <div>
-                  <span className="text-label text-muted">
-                    Khoang {storage.unitCode} · {storage.size}
-                  </span>
-                  <h2 className="mt-1 text-[16px] font-semibold text-ink">{storage.facility}</h2>
-                  <p className="mt-1 flex items-center gap-1.5 text-small text-muted">
-                    <MapPin size={14} /> {storage.district}
-                  </p>
-                </div>
-                <Button variant="secondary" size="sm" onClick={() => navigate("/my-storage")}>
-                  Xem chi tiết <ArrowRight size={15} />
-                </Button>
-              </div>
-            ))}
-          </div>
-        ))}
+      {outcome &&
+        (outcome.kind === "rejected" ||
+          !visible.some((proposal) => proposal.id === outcome.proposalId)) && (
+          <OutcomeNotice outcome={outcome} navigate={navigate} />
+        )}
 
-      {tab === "pending" &&
-        (visibleProposals.length === 0 ? (
-          <SurfaceState
-            variant="empty"
-            title="Chưa có đề xuất nào đang chờ"
-            description="Khi đội ngũ vận hành đề xuất khoang cho yêu cầu của bạn, đề xuất sẽ hiện ở đây."
-          />
-        ) : (
-          <div className="grid gap-2.5">
-            {visibleProposals.map((proposal) => {
-              const isExpired = proposal.status === "expired";
-              const isAgreed = agreedIds.has(proposal.id);
-              const isBusy = busyId === proposal.id;
-              const nearLimit = proposal.rejectionCount >= MAX_REJECTIONS - 1;
-              return (
-                <article key={proposal.id} className="bg-surface p-5">
-                  <div className="flex items-start justify-between gap-5 max-[760px]:flex-col">
-                    <div>
-                      <span className="text-label text-muted">
-                        Khoang {proposal.unitCode} · {proposal.unitType}
-                      </span>
-                      <h2 className="mt-1 text-section text-ink">{proposal.facility}</h2>
+      {proposals.loading && !proposals.data ? (
+        <div className="grid gap-2.5" role="status" aria-label="Đang tải">
+          {[0, 1].map((index) => (
+            <div key={index} className="h-[150px] animate-pulse bg-surface" />
+          ))}
+        </div>
+      ) : proposals.error && !proposals.data ? (
+        <SurfaceState
+          variant="error"
+          title="Không tải được đề xuất khoang"
+          description={proposals.error}
+          action={{ label: "Thử lại", onClick: proposals.reload }}
+        />
+      ) : visible.length === 0 ? (
+        <SurfaceState
+          variant="empty"
+          title={tab === "pending" ? "Chưa có đề xuất nào đang chờ" : "Chưa có đề xuất đã xử lý"}
+          description={
+            tab === "pending"
+              ? "Khi cơ sở đề xuất khoang cho yêu cầu của bạn, đề xuất sẽ hiện ở đây."
+              : undefined
+          }
+          action={
+            tab === "pending"
+              ? { label: "Về Kho của tôi", onClick: () => navigate("/my-storage") }
+              : undefined
+          }
+        />
+      ) : (
+        <div className="grid gap-2.5">
+          {visible.map((proposal) => {
+            const status = PROPOSAL_STATUS[proposal.status] ?? {
+              label: proposal.status,
+              tone: "neutral" as const,
+            };
+            const isPending = proposal.status === "Pending";
+            const isBusy = busyId === proposal.id;
+            const lastRejection = proposal.rejectionCount + 1 >= proposal.maxRejectionCount;
+            const myOutcome = outcome?.proposalId === proposal.id ? outcome : null;
+            return (
+              <article key={proposal.id} className="bg-surface p-5">
+                <div className="flex items-start justify-between gap-5 max-[760px]:flex-col">
+                  <div>
+                    <span className="text-label text-muted">
+                      Đơn #{proposal.orderId} · Khoang {proposal.unitCode}
+                      {proposal.unitTypeName ? ` · ${proposal.unitTypeName}` : ""}
+                      {proposal.unitSize ? ` · ${proposal.unitSize}` : ""}
+                    </span>
+                    <h2 className="mt-1 text-section text-ink">{proposal.facilityName}</h2>
+                    {proposal.facilityAddress && (
                       <p className="mt-1.5 flex items-center gap-1.5 text-small text-muted">
-                        <MapPin size={15} /> {proposal.district} · {proposal.size}
+                        <MapPin size={15} /> {proposal.facilityAddress}
                       </p>
+                    )}
+                    <p className="mt-1.5 text-label text-muted">
+                      Đề xuất lúc {formatDateTime(proposal.createdAt)}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 text-right max-[760px]:text-left">
+                    <div>
+                      <StatusTag tone={status.tone}>{status.label}</StatusTag>
                     </div>
-                    <div className="grid gap-3 text-right max-[760px]:text-left">
-                      <div>
-                        <span className="text-label text-muted">Giá thuê đề xuất</span>
-                        <strong className="mt-0.5 block text-[18px] font-semibold text-ink">
-                          {proposal.monthlyPrice}
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-label text-muted">
-                          {isExpired ? "Đã hết hạn" : "Hạn phản hồi"}
-                        </span>
-                        <strong
-                          className={`mt-0.5 block text-small font-semibold ${
-                            isExpired ? "text-danger" : "text-ink"
-                          }`}
-                        >
-                          {proposal.expiresAt}
-                        </strong>
-                      </div>
+                    <div>
+                      <span className="text-label text-muted">Giá thuê đề xuất</span>
+                      <strong className="mt-0.5 block text-[18px] font-semibold text-ink">
+                        {formatMoney(proposal.monthlyPrice)}
+                        <span className="ml-1 text-label font-normal text-muted">/ tháng</span>
+                      </strong>
                     </div>
                   </div>
+                </div>
 
-                  {conflictId === proposal.id && (
-                    <div className="mt-4">
-                      <DemoNotice tone="error">
-                        Khoang này vừa có người khác đặt cọc trước. Đề xuất đã hết hiệu lực — đội
-                        ngũ vận hành sẽ gửi đề xuất khoang khác cho bạn.
-                      </DemoNotice>
-                    </div>
-                  )}
+                {proposal.note && (
+                  <p className="mt-4 bg-surface-subtle p-3 text-small text-muted">
+                    Lý do từ chối: {proposal.note}
+                  </p>
+                )}
 
-                  {isExpired && conflictId !== proposal.id && (
-                    <div className="mt-4 bg-surface-subtle p-4">
-                      <p className="flex items-center gap-2 text-small font-semibold text-ink">
-                        <AlertTriangle size={16} className="text-warning" /> Đề xuất đã hết hạn
-                      </p>
-                      <p className="mt-1.5 text-label text-muted">
-                        Bạn chưa phản hồi trước hạn. Đội ngũ vận hành sẽ gửi đề xuất khoang mới.
-                      </p>
-                    </div>
-                  )}
+                {myOutcome && myOutcome.kind !== "rejected" && (
+                  <OutcomeNotice outcome={myOutcome} navigate={navigate} />
+                )}
 
-                  {isAgreed && (
-                    <div className="mt-4 bg-surface-subtle p-4">
-                      <DemoNotice tone="success">
-                        Đã đồng ý khoang này. Hoá đơn đặt cọc đang được tạo.
-                      </DemoNotice>
+                {isPending && lastRejection && (
+                  <DemoNotice tone="pending">
+                    Bạn đã từ chối {proposal.rejectionCount}/{proposal.maxRejectionCount} lần cho
+                    phép. Nếu từ chối đề xuất này, đơn sẽ bị huỷ và bạn cần gửi yêu cầu mới.
+                  </DemoNotice>
+                )}
+
+                {isPending && rejectingId !== proposal.id && (
+                  <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                    <Button pending={isBusy} onClick={() => agree(proposal)}>
+                      {!isBusy && <Check size={16} />}
+                      Đồng ý
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={isBusy}
+                      onClick={() => {
+                        setRejectingId(proposal.id);
+                        setRejectNote("");
+                        setOutcome(null);
+                      }}
+                    >
+                      <X size={16} /> Từ chối
+                    </Button>
+                  </div>
+                )}
+
+                {isPending && rejectingId === proposal.id && (
+                  <div className="mt-4 bg-surface-subtle p-4">
+                    <label className="grid gap-1.5 text-label text-muted">
+                      Lý do từ chối *
+                      <textarea
+                        className="min-h-[70px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
+                        value={rejectNote}
+                        onChange={(event) => setRejectNote(event.target.value)}
+                        placeholder="Cho cơ sở biết vì sao khoang này chưa phù hợp…"
+                      />
+                    </label>
+                    <div className="mt-3 flex items-center gap-2.5">
                       <Button
-                        variant="secondary"
-                        size="sm"
-                        className="mt-3"
-                        onClick={() => navigate("/invoices")}
+                        variant={lastRejection ? "danger" : "primary"}
+                        pending={isBusy}
+                        disabled={!rejectNote.trim()}
+                        onClick={() => confirmReject(proposal)}
                       >
-                        Xem hoá đơn <ArrowRight size={15} />
-                      </Button>
-                    </div>
-                  )}
-
-                  {!isExpired && !isAgreed && nearLimit && (
-                    <div className="mt-4">
-                      <DemoNotice tone="pending">
-                        Bạn đã từ chối {proposal.rejectionCount}/{MAX_REJECTIONS} lần cho phép. Từ
-                        chối thêm {MAX_REJECTIONS - proposal.rejectionCount} lần nữa, yêu cầu này sẽ
-                        tự huỷ và bạn cần gửi lại từ đầu.
-                      </DemoNotice>
-                    </div>
-                  )}
-
-                  {!isExpired && !isAgreed && (
-                    <div className="mt-5 flex flex-wrap items-center gap-2.5">
-                      <Button pending={isBusy} onClick={() => agree(proposal)}>
-                        {!isBusy && <Check size={16} />}
-                        Đồng ý
+                        {lastRejection ? "Từ chối và huỷ đơn" : "Xác nhận từ chối"}
                       </Button>
                       <Button
                         variant="secondary"
                         disabled={isBusy}
-                        onClick={() => setRejectingId(proposal.id)}
+                        onClick={() => {
+                          setRejectingId(null);
+                          setRejectNote("");
+                        }}
                       >
-                        <X size={16} /> Từ chối
+                        Huỷ
                       </Button>
                     </div>
-                  )}
-
-                  {rejectingId === proposal.id && (
-                    <div className="mt-4 bg-surface-subtle p-4">
-                      <label className="grid gap-1.5 text-label text-muted">
-                        Lý do từ chối
-                        <textarea
-                          className="min-h-[70px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
-                          value={rejectNote}
-                          onChange={(event) => setRejectNote(event.target.value)}
-                          placeholder="Cho đội ngũ vận hành biết vì sao khoang này chưa phù hợp…"
-                        />
-                      </label>
-                      <div className="mt-3 flex items-center gap-2.5">
-                        <Button onClick={() => confirmReject(proposal)}>Xác nhận từ chối</Button>
-                        <button
-                          className="border-0 bg-transparent px-3 py-2 text-small text-muted hover:text-ink"
-                          onClick={() => {
-                            setRejectingId(null);
-                            setRejectNote("");
-                          }}
-                        >
-                          Huỷ
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-
-            {canceledIds.size > 0 && (
-              <div className="bg-danger-soft p-4">
-                <p className="flex items-center gap-2 text-small font-semibold text-danger">
-                  <AlertTriangle size={16} /> Yêu cầu đã bị huỷ
-                </p>
-                <p className="mt-1.5 text-label text-muted">
-                  Bạn đã từ chối đủ {MAX_REJECTIONS} lần nên yêu cầu này tự động huỷ. Vui lòng gửi
-                  yêu cầu mới nếu vẫn cần thuê kho.
-                </p>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => navigate("/rental-requests/new")}
-                >
-                  Gửi yêu cầu mới <ArrowRight size={15} />
-                </Button>
-              </div>
-            )}
-          </div>
-        ))}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
+  );
+}
+
+function OutcomeNotice({ outcome, navigate }: { outcome: Outcome; navigate: Navigate }) {
+  if (outcome.kind === "error") {
+    return <DemoNotice tone="error">{outcome.message}</DemoNotice>;
+  }
+  if (outcome.kind === "agreed") {
+    return (
+      <div className="bg-surface-subtle p-4">
+        <p className="flex items-center gap-2 text-small font-semibold text-success">
+          <Check size={16} /> Đã đồng ý khoang.
+          {outcome.hasInvoice ? " Vui lòng thanh toán hoá đơn đặt cọc." : ""}
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="mt-3"
+          onClick={() => navigate(outcome.hasInvoice ? "/invoices" : "/my-storage")}
+        >
+          {outcome.hasInvoice ? "Xem hoá đơn" : "Về Kho của tôi"} <ArrowRight size={15} />
+        </Button>
+      </div>
+    );
+  }
+  if (outcome.orderCanceled) {
+    return (
+      <div className="bg-danger-soft p-4">
+        <p className="flex items-center gap-2 text-small font-semibold text-danger">
+          <AlertTriangle size={16} /> Đơn đã bị huỷ do từ chối quá số khoang cho phép
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="mt-3"
+          onClick={() => navigate("/rental-requests/new")}
+        >
+          Gửi yêu cầu mới <ArrowRight size={15} />
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <DemoNotice tone="success">
+      Đã từ chối đề xuất. Cơ sở sẽ gửi đề xuất khoang khác cho bạn.
+    </DemoNotice>
   );
 }

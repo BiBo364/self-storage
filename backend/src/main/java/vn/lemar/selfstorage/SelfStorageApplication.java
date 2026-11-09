@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * Điểm khởi động của hệ thống self-storage.
  *
- * <p>Kiến trúc modular monolith theo issue #15: mỗi flow nghiệp vụ là một package con
+ * <p>Kiến trúc modular monolith: mỗi flow nghiệp vụ là một package con
  * trực tiếp của package này và được Spring Modulith coi là một module độc lập.
  */
 @SpringBootApplication

@@ -19,12 +19,14 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import vn.lemar.selfstorage.audit.application.AuditRecorder;
 import vn.lemar.selfstorage.booking.application.DepositPaymentListener;
+import vn.lemar.selfstorage.booking.application.InvoiceRefundService;
 import vn.lemar.selfstorage.booking.application.OrderNotifier;
 import vn.lemar.selfstorage.booking.domain.Invoice;
 import vn.lemar.selfstorage.booking.domain.InvoiceStatus;
@@ -60,6 +62,8 @@ class DepositPaymentListenerTest {
     private final AccountQueryService accounts = mock(AccountQueryService.class);
     private final AuditRecorder audit = mock(AuditRecorder.class);
     private final OrderNotifier orderNotifier = mock(OrderNotifier.class);
+    private final InvoiceRefundService refunds = mock(InvoiceRefundService.class);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 
     private DepositPaymentListener listener;
     private Invoice invoice;
@@ -68,7 +72,7 @@ class DepositPaymentListenerTest {
     @BeforeEach
     void setUp() {
         listener = new DepositPaymentListener(invoices, orders, unitQuery, units, notifications,
-                accounts, audit, orderNotifier);
+                accounts, audit, orderNotifier, refunds, events);
 
         invoice = mock(Invoice.class);
         when(invoice.getId()).thenReturn(INVOICE_ID);
@@ -85,7 +89,7 @@ class DepositPaymentListenerTest {
         when(invoices.findOrderIdById(INVOICE_ID)).thenReturn(Optional.of(ORDER_ID));
         when(invoices.findByIdForUpdate(INVOICE_ID)).thenReturn(Optional.of(invoice));
         when(orders.findByIdForUpdate(ORDER_ID)).thenReturn(Optional.of(order));
-        when(units.reserveIfAvailable(UNIT_ID)).thenReturn(true);
+        when(units.reserveIfAvailable(UNIT_ID, ORDER_ID)).thenReturn(true);
         when(unitQuery.find(UNIT_ID)).thenReturn(Optional.of(
                 new StorageUnitView(UNIT_ID, "A-03", 1L, 1L, "Reserved")));
         when(accounts.requireEmailById(CUSTOMER_ID)).thenReturn(CUSTOMER_EMAIL);
@@ -102,7 +106,7 @@ class DepositPaymentListenerTest {
 
         verify(invoice).markPaid();
         verify(order).markDeposited();
-        verify(units).reserveIfAvailable(UNIT_ID);
+        verify(units).reserveIfAvailable(UNIT_ID, ORDER_ID);
     }
 
     /** Hạn đơn set một lần khi tạo đơn (`db-table-draft.md` › RentalOrder) — cọc không gia hạn. */
@@ -118,8 +122,10 @@ class DepositPaymentListenerTest {
     void successWritesOneAuditEntryPerChangedEntity() {
         listener.onPaymentSucceeded(succeeded());
 
-        // RentalOrder + StorageUnit; PaymentTransaction do module payment tự ghi.
-        verify(audit, times(2)).record(any());
+        // Invoice + RentalOrder + StorageUnit; PaymentTransaction do module payment tự ghi.
+        verify(audit, times(3)).record(any());
+        // Khoang đã có chủ → hoá đơn cọc khác trên khoang bị chặn sau commit.
+        verify(events).publishEvent(any(Object.class));
     }
 
     @Test
@@ -136,7 +142,7 @@ class DepositPaymentListenerTest {
      */
     @Test
     void lateConfirmationOnATakenUnitDoesNotDepositTheOrder() {
-        when(units.reserveIfAvailable(UNIT_ID)).thenReturn(false);
+        when(units.reserveIfAvailable(UNIT_ID, ORDER_ID)).thenReturn(false);
         when(unitQuery.lock(UNIT_ID)).thenReturn(
                 Optional.of(new StorageUnitView(UNIT_ID, "A-01", 400L, 1L, "Reserved")));
 
@@ -145,7 +151,8 @@ class DepositPaymentListenerTest {
         verify(order, never()).markDeposited();
         verify(invoice).markPaid();
         verify(invoice).markRefundRequired("UNIT_UNAVAILABLE");
-        verify(audit).record(any());
+        // INVOICE_PAID + INVOICE_REFUND_REQUIRED.
+        verify(audit, times(2)).record(any());
         verifyNoInteractions(notifications);
         verify(orderNotifier).notifyFacilityManager(eq(ORDER_ID),
                 eq(NotificationType.PAYMENT_REFUND_REQUIRED), anyMap());
@@ -173,6 +180,34 @@ class DepositPaymentListenerTest {
 
         verify(invoice, never()).markPaid();
         verifyNoInteractions(units);
+        // Tiền đã vào hoá đơn đã đóng → refund_status Required + FM/khách được báo.
+        verify(refunds).requireFull(invoice, "INVOICE_CLOSED", null);
+        verify(orderNotifier).notifyFacilityManager(eq(ORDER_ID),
+                eq(NotificationType.PAYMENT_REFUND_REQUIRED), anyMap());
+        verify(orderNotifier).notifyCustomer(eq(order),
+                eq(NotificationType.PAYMENT_REFUND_PENDING), anyMap());
+    }
+
+    @Test
+    void supplementOnAPendingOrderSettlesTheDeposit() {
+        when(invoice.getType()).thenReturn(InvoiceType.DEPOSIT_SUPPLEMENT);
+
+        listener.onPaymentSucceeded(succeeded());
+
+        verify(order).markDeposited();
+        verify(notifications).notify(eq(CUSTOMER_ID), eq(CUSTOMER_EMAIL), any(),
+                eq(NotificationType.DEPOSIT_PAYMENT_SUCCEEDED), anyMap(), eq(ORDER_ID));
+    }
+
+    @Test
+    void depositOnAnOrderThatLeftPendingIsLeftForManualHandling() {
+        when(order.getStatus()).thenReturn(RentalOrderStatus.SCHEDULED);
+
+        listener.onPaymentSucceeded(succeeded());
+
+        verify(invoice).markPaid();
+        verify(order, never()).markDeposited();
+        verifyNoInteractions(notifications);
     }
 
     /**
@@ -217,18 +252,20 @@ class DepositPaymentListenerTest {
     @Test
     void supplementReservesTheNewUnitAndNotifiesCustomer() {
         when(invoice.getType()).thenReturn(InvoiceType.DEPOSIT_SUPPLEMENT);
+        when(order.getStatus()).thenReturn(RentalOrderStatus.DEPOSITED);
 
         listener.onPaymentSucceeded(succeeded());
 
         verify(invoice).markPaid();
-        verify(units).reserveIfAvailable(UNIT_ID);
+        verify(units).reserveIfAvailable(UNIT_ID, ORDER_ID);
         verify(order, never()).markDeposited();
         verify(notifications).notify(eq(CUSTOMER_ID), eq(CUSTOMER_EMAIL),
                 eq(NotificationRecipient.CUSTOMER),
                 eq(NotificationType.DEPOSIT_SUPPLEMENT_PAYMENT_SUCCEEDED),
                 eq(Map.of("orderCode", String.valueOf(ORDER_ID), "unitCode", "A-03")),
                 eq(ORDER_ID));
-        verify(audit, times(1)).record(any());
+        // INVOICE_PAID + STORAGE_UNIT_RESERVED.
+        verify(audit, times(2)).record(any());
     }
 
     /**

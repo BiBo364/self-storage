@@ -105,7 +105,19 @@ public class ProposalQueryService {
         return new FmRentalOrderSummaryResponse(row.id(), row.status(), row.cancelReason(), row.expiresAt(),
                 row.unitId(), row.unitCode(), row.requestId(), row.customerName(), row.customerEmail(),
                 row.customerPhone(), row.needsReproposal(), needsRepropose(row), row.rejectionCount(),
-                maxRejection, lastProposal);
+                maxRejection, lastProposal, managerActions(row));
+    }
+
+    /** Thao tác FM được làm trên đơn: đề xuất lại khi BE tính cần, huỷ khi đơn chưa đóng. */
+    private static List<String> managerActions(BookingReadRepository.OrderListRow row) {
+        List<String> actions = new java.util.ArrayList<>();
+        if (needsRepropose(row)) {
+            actions.add(OrderOverviewQueryService.ACTION_REPROPOSE);
+        }
+        if (!"Canceled".equals(row.status()) && !"Done".equals(row.status())) {
+            actions.add(OrderOverviewQueryService.ACTION_CANCEL);
+        }
+        return actions;
     }
 
     private static boolean needsRepropose(BookingReadRepository.OrderListRow row) {

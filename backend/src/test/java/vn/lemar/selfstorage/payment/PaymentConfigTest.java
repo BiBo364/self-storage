@@ -24,6 +24,7 @@ class PaymentConfigTest {
     @Test
     void loadsVnpayConfigFromProperties() {
         runner.withPropertyValues(
+                        "payment.provider=vnpay",
                         "vnpay.tmn-code=TESTTMN1",
                         "vnpay.hash-secret=TESTSECRET0123456789TESTSECRET01",
                         "vnpay.pay-url=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
@@ -32,5 +33,14 @@ class PaymentConfigTest {
                     assertThat(context).hasSingleBean(VnPayGateway.class);
                     assertThat(context.getBean(VnPayProperties.class).tmnCode()).isEqualTo("TESTTMN1");
                 });
+    }
+
+    /** VNPay là cổng mặc định: không khai {@code payment.provider} thì VNPay được dựng; payOS phải bật rõ. */
+    @Test
+    void vnpayIsActiveByDefault() {
+        runner.withPropertyValues("vnpay.tmn-code=TESTTMN1", "vnpay.hash-secret=TESTSECRET0123456789TESTSECRET01",
+                        "vnpay.pay-url=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
+                        "vnpay.return-url=http://localhost:8080/api/payments/vnpay/return")
+                .run(context -> assertThat(context).hasSingleBean(VnPayGateway.class));
     }
 }

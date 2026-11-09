@@ -29,7 +29,7 @@ import vn.lemar.selfstorage.identity.application.AccountQueryService;
 
 /**
  * Flow 1.3 phía khách: xem đề xuất khoang, đồng ý, từ chối. Route ownership trong {@code /api/**}
- * ({@code ACCOUNT_ACTIVE}) theo contract #113 và {@code authorization.md} — service lọc / kiểm theo
+ * ({@code ACCOUNT_ACTIVE}) theo {@code authorization.md} — service lọc / kiểm theo
  * {@code customer_id}, nên mỗi account chỉ thấy và thao tác proposal của chính mình.
  */
 @RestController

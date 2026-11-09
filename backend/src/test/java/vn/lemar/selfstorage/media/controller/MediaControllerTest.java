@@ -3,7 +3,10 @@ package vn.lemar.selfstorage.media.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -40,7 +43,9 @@ import vn.lemar.selfstorage.media.application.MediaService;
 import vn.lemar.selfstorage.media.application.dto.MediaBatchAttachResult;
 import vn.lemar.selfstorage.media.application.dto.MediaBatchDeleteResult;
 import vn.lemar.selfstorage.media.application.dto.MediaUploadResult;
+import vn.lemar.selfstorage.media.application.UploadRateLimiter;
 import vn.lemar.selfstorage.media.application.exception.InvalidUploadException;
+import vn.lemar.selfstorage.media.application.exception.MediaRateLimitedException;
 
 @WebMvcTest(controllers = MediaController.class)
 @Import({SecurityConfig.class, JwtConfiguration.class, AccountJwtAuthenticationConverter.class})
@@ -65,6 +70,9 @@ class MediaControllerTest {
 
     @MockBean
     private AccountRepository accountRepository;
+
+    @MockBean
+    private UploadRateLimiter uploadRateLimiter;
 
     @Test
     void uploadRejectsAnonymousRequest() throws Exception {
@@ -103,6 +111,20 @@ class MediaControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(EMAIL)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(INVALID_TYPE_MESSAGE));
+    }
+
+    @Test
+    void uploadReturns429WhenAccountExceedsRateLimit() throws Exception {
+        authenticate();
+        doThrow(new MediaRateLimitedException("Bạn tải lên quá nhiều file"))
+                .when(uploadRateLimiter).acquire(1L);
+
+        mockMvc.perform(multipart("/api/media/uploads")
+                        .file(new MockMultipartFile("file", "anh.png", "image/png", new byte[]{1, 2}))
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(EMAIL)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.message").value("Bạn tải lên quá nhiều file"));
+        verify(mediaService, never()).upload(any(byte[].class), any(), any(), anyLong(), any());
     }
 
     @Test

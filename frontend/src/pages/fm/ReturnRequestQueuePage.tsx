@@ -1,178 +1,237 @@
-import { Check } from "lucide-react";
+import { CalendarClock, Check, User } from "lucide-react";
 import { useState } from "react";
+import { formatDate, formatDateTime, formatTime } from "../../app/format";
+import { fetchFacilityStaff, type FmStaff } from "../../app/fmStaff";
 import {
-  fsStaff,
-  recordReturnAppointment,
-  returnRequests as initialRequests,
+  assignReturnRequest,
+  fetchReturnRequests,
+  labelOf,
+  loadErrorState,
+  toneOf,
+  useFmAction,
+  useFmLoad,
   type ReturnRequest,
-  type ReturnRequestStatus,
-} from "../../mocks/fm";
+} from "../../app/services/fm";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
-import { DetailPanel } from "../../components/ui/DetailPanel";
+import { INPUT_ELEMENT, INPUT_WRAP } from "../../components/ui/FormField";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
-const TAB_LABEL: Record<ReturnRequestStatus, string> = {
+const STATUS_LABEL: Record<string, string> = {
   Pending: "Chờ phân công",
   Assigned: "Đã phân công",
+  Completed: "Đã hoàn tất",
+  Canceled: "Đã huỷ",
 };
 
-function staffName(staffId: string | null) {
-  return fsStaff.find((staff) => staff.id === staffId)?.name ?? null;
+const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "info" | "neutral"> = {
+  Pending: "warning",
+  Assigned: "info",
+  Completed: "success",
+  Canceled: "neutral",
+};
+
+const TABS = ["Pending", "Assigned"];
+
+function staffLabel(staff: FmStaff) {
+  return staff.name ? `${staff.name} · ${staff.email}` : staff.email;
 }
 
 export function ReturnRequestQueuePage() {
-  const [items, setItems] = useState<ReturnRequest[]>(initialRequests);
-  const [tab, setTab] = useState<ReturnRequestStatus>("Pending");
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [selectedStaffId, setSelectedStaffId] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [tab, setTab] = useState("Pending");
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const list = items.filter((request) => request.status === tab);
-  const pendingCount = items.filter((request) => request.status === "Pending").length;
-  const assignedCount = items.filter((request) => request.status === "Assigned").length;
-  const openRequest = items.find((request) => request.id === openId) ?? null;
+  const requests = useFmLoad("return-requests", (facility) => fetchReturnRequests(facility.id));
+  const staff = useFmLoad("staff", (facility) => fetchFacilityStaff(facility.id));
 
-  function openDetails(request: ReturnRequest) {
-    setOpenId(request.id);
-    setSelectedStaffId("");
-  }
-
-  function assign(request: ReturnRequest) {
-    if (!selectedStaffId) return;
-    setBusyId(request.id);
-    window.setTimeout(() => {
-      setBusyId(null);
-      setItems((current) =>
-        current.map((item) =>
-          item.id === request.id ? { ...item, status: "Assigned", staffId: selectedStaffId } : item,
-        ),
-      );
-      recordReturnAppointment(request, selectedStaffId);
-      setOpenId(null);
-    }, 700);
-  }
-
-  const counts: Record<ReturnRequestStatus, number> = {
-    Pending: pendingCount,
-    Assigned: assignedCount,
-  };
+  const all = requests.data ?? [];
+  const list = all.filter((request) => request.status === tab);
 
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="m-0 text-title text-ink">Hàng chờ yêu cầu trả kho</h1>
+        <h1 className="m-0 text-title text-ink">Yêu cầu trả kho</h1>
         <p className="mt-1.5 text-small text-muted">
-          Yêu cầu trả kho khách gửi từ trang chi tiết hợp đồng — phân công FS phụ trách.
+          Phân công FS cho buổi trả kho — hệ thống đặt lịch ở khung trống đầu tiên từ ngày khách
+          chọn. Phân công lại được khi khách chưa đến.
         </p>
       </div>
 
-      <DemoNotice tone="pending">
-        Sau khi phân công, hệ thống tự tạo lịch hẹn trả kho ở trang{" "}
-        <strong>Lịch hẹn &amp; phân công FS</strong> — không cần thao tác gì thêm ở đó.
-      </DemoNotice>
-
-      <div className="flex flex-wrap gap-1.5">
-        {(["Pending", "Assigned"] as const).map((status) => (
-          <button
-            key={status}
-            className={`inline-flex items-center gap-2 border-0 px-2.5 py-1.5 text-small font-semibold ${
-              tab === status
-                ? "bg-brand text-signal-ink"
-                : "bg-transparent text-muted hover:bg-surface-subtle hover:text-ink"
-            }`}
-            onClick={() => setTab(status)}
-          >
-            {TAB_LABEL[status]}
-            <span
-              className={`px-1.5 text-label ${
-                tab === status ? "bg-signal-ink text-brand" : "bg-surface text-muted"
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
+        {TABS.map((value) => {
+          const active = tab === value;
+          const count = all.filter((request) => request.status === value).length;
+          return (
+            <button
+              key={value}
+              role="tab"
+              aria-selected={active}
+              className={`inline-flex items-center gap-2 border-0 px-2.5 py-1.5 text-small font-semibold ${
+                active
+                  ? "bg-brand text-signal-ink"
+                  : "bg-transparent text-muted hover:bg-surface-subtle hover:text-ink"
               }`}
+              onClick={() => setTab(value)}
             >
-              {counts[status]}
-            </span>
-          </button>
-        ))}
+              {STATUS_LABEL[value]}
+              <span
+                className={`px-1.5 text-label ${active ? "bg-signal-ink text-brand" : "bg-surface text-muted"}`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {list.length === 0 ? (
-        <SurfaceState variant="empty" title="Không có yêu cầu nào trong mục này" />
+      {notice && <DemoNotice tone="success">{notice}</DemoNotice>}
+      {staff.error && (
+        <DemoNotice tone="error">Không tải được danh sách FS: {staff.error.message}</DemoNotice>
+      )}
+
+      {requests.error ? (
+        <SurfaceState
+          {...loadErrorState(requests.error, "yêu cầu trả kho")}
+          action={{ label: "Thử lại", onClick: requests.reload }}
+        />
+      ) : !requests.data ? (
+        <SurfaceState variant="loading" title="Đang tải yêu cầu trả kho…" />
+      ) : list.length === 0 ? (
+        <SurfaceState
+          variant="empty"
+          title={
+            tab === "Pending"
+              ? "Không có yêu cầu chờ phân công"
+              : "Chưa có buổi trả kho đã phân công"
+          }
+        />
       ) : (
-        <div className="grid gap-2">
+        <div className={`grid gap-2 ${requests.loading ? "opacity-60" : ""}`}>
           {list.map((request) => (
-            <button
+            <ReturnRow
               key={request.id}
-              className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
-              onClick={() => openDetails(request)}
-            >
-              <div>
-                <strong className="block text-small font-semibold text-ink">
-                  {request.customerName}
-                </strong>
-                <span className="mt-1 block text-label text-muted">
-                  Khoang {request.unitCode} · Mong muốn trả ngày {request.preferredDate}
-                </span>
-              </div>
-              <StatusTag tone={request.status === "Assigned" ? "success" : "warning"}>
-                {request.status === "Assigned"
-                  ? `FS: ${staffName(request.staffId)}`
-                  : "Chờ phân công"}
-              </StatusTag>
-            </button>
+              request={request}
+              staff={staff.data ?? []}
+              onAssigned={(result, member) => {
+                setNotice(
+                  `Đã phân công ${member ? staffLabel(member) : "FS"} cho buổi trả kho khoang ${
+                    result.unitCode ?? "—"
+                  }${result.appointmentStart ? ` lúc ${formatDateTime(result.appointmentStart)}` : ""}.`,
+                );
+                requests.reload();
+              }}
+            />
           ))}
         </div>
       )}
+    </div>
+  );
+}
 
-      {openRequest && (
-        <DetailPanel
-          title={openRequest.customerName}
-          eyebrow={`Trả kho · ${openRequest.unitCode}`}
-          onClose={() => setOpenId(null)}
-        >
-          <p className="text-small text-muted">Mong muốn trả ngày {openRequest.preferredDate}</p>
-          {openRequest.reason && (
-            <p className="mt-4 text-small leading-relaxed text-ink">{openRequest.reason}</p>
-          )}
+function ReturnRow({
+  request,
+  staff,
+  onAssigned,
+}: {
+  request: ReturnRequest;
+  staff: FmStaff[];
+  onAssigned: (result: ReturnRequest, member: FmStaff | undefined) => void;
+}) {
+  const [staffId, setStaffId] = useState("");
+  const action = useFmAction();
+  const assigned = staff.find((member) => member.id === request.assignedStaffId);
+  const selectId = `return-staff-${request.id}`;
 
-          {openRequest.status === "Assigned" ? (
-            <div className="mt-6">
-              <DemoNotice tone="success">
-                Đã phân công {staffName(openRequest.staffId)} phụ trách — lịch hẹn trả kho đã được
-                tạo tự động.
-              </DemoNotice>
-            </div>
-          ) : (
-            <>
-              <label className="mt-6 grid gap-1.5 text-label text-muted">
-                Chọn nhân viên FS
-                <select
-                  className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
-                  value={selectedStaffId}
-                  onChange={(event) => setSelectedStaffId(event.target.value)}
-                >
-                  <option value="">— Chọn nhân viên —</option>
-                  {fsStaff.map((staff) => (
-                    <option key={staff.id} value={staff.id}>
-                      {staff.name} · {staff.phone}
-                    </option>
-                  ))}
-                </select>
+  async function assign() {
+    const outcome = await action.run("assign", () =>
+      assignReturnRequest(request.id, Number(staffId)),
+    );
+    if (outcome.ok) {
+      onAssigned(
+        outcome.value,
+        staff.find((member) => member.id === Number(staffId)),
+      );
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.4fr)] items-start gap-4 bg-surface p-4 max-[900px]:grid-cols-1">
+      <div className="min-w-0">
+        <strong className="block text-small font-semibold text-ink">
+          Khoang {request.unitCode || "—"}
+        </strong>
+        <span className="mt-0.5 block text-label text-muted">
+          Hợp đồng #{request.contractId} · gửi {formatDateTime(request.createdAt)}
+        </span>
+        <span className="mt-1.5 inline-block">
+          <StatusTag tone={toneOf(STATUS_TONE, request.status)}>
+            {labelOf(STATUS_LABEL, request.status)}
+          </StatusTag>
+        </span>
+      </div>
+      <div className="min-w-0 text-small text-ink">
+        <span className="flex items-center gap-2">
+          <CalendarClock size={14} /> Khách muốn trả: {formatDate(request.preferredDate)}
+        </span>
+        {request.appointmentStart && (
+          <span className="mt-1 block text-label text-muted">
+            Lịch đã đặt: {formatTime(request.appointmentStart)}{" "}
+            {formatDate(request.appointmentStart)}
+          </span>
+        )}
+        {request.note && <p className="mt-1.5 text-label text-muted">Ghi chú: {request.note}</p>}
+      </div>
+      <div>
+        {request.assignedStaffId !== null && (
+          <span className="mb-2 flex items-center gap-2 text-small text-ink">
+            <User size={14} /> {assigned ? staffLabel(assigned) : `FS #${request.assignedStaffId}`}
+          </span>
+        )}
+        {request.appointmentArrivedAt !== null ? (
+          // Buổi trả kho đã bắt đầu — backend từ chối (409) phân công lại.
+          <span className="text-label text-muted">
+            Khách đã đến lúc {formatDateTime(request.appointmentArrivedAt)} — không phân công lại.
+          </span>
+        ) : staff.length === 0 ? (
+          <span className="text-label text-muted">Cơ sở chưa có FS để phân công.</span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={`${INPUT_WRAP} min-w-[200px] flex-1`}>
+              <label htmlFor={selectId} className="sr-only">
+                Chọn FS
               </label>
-              <div className="mt-5">
-                <Button
-                  pending={busyId === openRequest.id}
-                  disabled={!selectedStaffId}
-                  onClick={() => assign(openRequest)}
-                >
-                  {busyId !== openRequest.id && <Check size={16} />}
-                  Phân công
-                </Button>
-              </div>
-            </>
-          )}
-        </DetailPanel>
-      )}
+              <select
+                id={selectId}
+                className={INPUT_ELEMENT}
+                value={staffId}
+                onChange={(event) => {
+                  setStaffId(event.target.value);
+                  action.clear();
+                }}
+              >
+                <option value="">— Chọn FS —</option>
+                {staff.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {staffLabel(member)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              size="sm"
+              variant={request.assignedStaffId === null ? "primary" : "secondary"}
+              pending={action.pending === "assign"}
+              disabled={!staffId}
+              onClick={assign}
+            >
+              {action.pending !== "assign" && <Check size={14} />}
+              {request.assignedStaffId === null ? "Phân công" : "Phân công lại"}
+            </Button>
+          </div>
+        )}
+        {action.error && <DemoNotice tone="error">{action.error}</DemoNotice>}
+      </div>
     </div>
   );
 }

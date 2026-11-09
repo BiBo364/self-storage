@@ -111,6 +111,8 @@ class AppointmentArrivedEventListenerIntegrationTest {
                 Long.class, customerId, facilityId, fsId);
         jdbc.update("insert into rental_appointments (appointment_id, order_id) values (?, ?)",
                 appointmentId, orderId);
+        // Điều kiện vào Flow 2: đơn đã cọc thì khoang đang Reserved cho đơn.
+        jdbc.update("update storage_units set status = 'Reserved' where id = ?", unitId);
         return new Fixture(orderId, appointmentId, unitId);
     }
 

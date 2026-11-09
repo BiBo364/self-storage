@@ -16,8 +16,9 @@ cấu hình terminal, dựng IPN URL, test end-to-end và các lỗi thường g
    VNPAY_HASH_SECRET=<chuỗi bí mật VNPay gửi>
    VNPAY_PAY_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
    VNPAY_RETURN_URL=http://localhost:8080/api/payments/vnpay/return
-   VNPAY_IPN_URL=<URL https công khai, xem 1.3>
    ```
+
+   App không đọc biến IPN URL — IPN URL khai trên portal merchant (mục 1.3).
 
    Bốn biến `VNPAY_*` để `@NotBlank` — thiếu là app không khởi động được.
 

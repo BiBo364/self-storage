@@ -10,5 +10,5 @@ import org.springframework.context.annotation.Configuration;
  * để module tự quản cấu hình của mình và không phải sửa file dùng chung.
  */
 @Configuration
-@EnableConfigurationProperties(VnPayProperties.class)
+@EnableConfigurationProperties({VnPayProperties.class, PayOsProperties.class})
 public class PaymentConfig {}

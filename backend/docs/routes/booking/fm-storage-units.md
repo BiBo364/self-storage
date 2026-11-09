@@ -17,16 +17,21 @@ Trả danh sách khoang của cơ sở trong phạm vi FM.
 - `unitTypeId` optional.
 - Order by `code`; MVP không phân trang.
 - Mỗi dòng: `id`, `code`, `facilityId`, `unitTypeId`, `unitTypeName`, `size`, `area`, `status`,
-  `monthlyPrice`.
-- `monthlyPrice = coalesce(storage_units.monthly_price, unit_types.monthly_price)`.
+  `monthlyPrice`, `unitPrice`, `maintenanceStartedAt`.
+- `monthlyPrice = coalesce(storage_units.monthly_price, unit_types.monthly_price)`; `unitPrice` = giá riêng của
+  khoang (`null` = dùng giá loại khoang).
+- `maintenanceStartedAt` = mốc bảo trì sau trả kho (cron tự mở lại sau `unit.maintenance_days`); `null` = khoang không
+  bảo trì hoặc bảo trì thủ công (FM bật tay, trả kho có mất chìa, FM "Giữ bảo trì"). FE dùng field này để hiện nút
+  "Giữ bảo trì" (`POST /api/fm/storage-units/{unitId}/maintenance-hold`,
+  [backoffice/overview.md](../../backoffice/overview.md)).
 - Cơ sở không tồn tại → `404`; ngoài phạm vi FM → `403`.
 
 ## Ghi chú nghiệp vụ
 
 - Controller nằm ở `booking` vì module `facility` không được phụ thuộc `identity` để gọi `Access`;
   dữ liệu vẫn đọc qua public API của `facility`.
-- `facility.access` là permission tạm; khi Flow 5 có permission riêng cho storage unit thì đổi code,
-  không đổi route.
+- Guard bằng `facility.access` theo cơ sở — cùng permission với back-office FM
+  ([permission-catalog.md](../../permission-catalog.md)).
 - Trạng thái trả về giữ PascalCase như DB.
 
 ## Ví dụ

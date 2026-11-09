@@ -26,7 +26,8 @@ Trả toàn bộ hoá đơn của account đang đăng nhập, mới nhất trư
 
 - Route nằm trong `/api/**` chung, không dùng prefix role-bound `/api/customer/**`.
 - Đọc dữ liệu của chính mình nên không kiểm RBAC permission; `invoice.read` trong catalog là `own`.
-- Hoá đơn chi tiết theo id nằm ở route riêng; route này chỉ trả danh sách.
+- Không có route đọc chi tiết một hoá đơn theo id; FE dùng dòng trong danh sách này. Trên `/api/invoices/{id}` chỉ
+  có `POST …/pay` và `POST …/payment-check`.
 
 ## Ví dụ
 

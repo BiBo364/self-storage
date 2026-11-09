@@ -15,7 +15,8 @@ Form public cho khách điền nhu cầu thuê kho mà không cần chỉ địn
 
 - Validate Bean Validation: `facilityId`/`unitTypeId`/`startDate`/`period` bắt buộc; `customerName`
   non-blank; `customerEmail` email hợp lệ; `customerPhone` theo pattern hỗ trợ; `period >= 1`.
-- Service: `facility` phải tồn tại (404 "Không tìm thấy cơ sở"); `unit_type` phải tồn tại
+- Service: `facility` phải tồn tại (404 "Không tìm thấy cơ sở") và đang hoạt động — cơ sở `Inactive` → 400 "Cơ sở
+  đang ngừng hoạt động, không nhận yêu cầu thuê mới"; `unit_type` phải tồn tại
   ("Loại khoang không tồn tại" — 400) + được cơ sở cung cấp (bảng `facility_unit_type`, V4 —
   "Loại khoang không được cung cấp tại cơ sở này" — 400); `start_date >= hôm nay
   theo Asia/Ho_Chi_Minh` (400); phone 7-15 digit (400). Email normalize trim + lowercase

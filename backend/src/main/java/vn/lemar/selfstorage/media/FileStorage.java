@@ -1,7 +1,7 @@
 package vn.lemar.selfstorage.media;
 
 /**
- * Cổng lưu trữ file — cô lập provider theo issue #15 §6 (impl hiện tại: Cloudinary).
+ * Cổng lưu trữ file — cô lập provider (impl hiện tại: Cloudinary).
  */
 public interface FileStorage {
 

@@ -29,6 +29,8 @@ Danh sách `RentalOrder` của cơ sở, sort `expires_at` tăng dần (null cu�
   `Agreed`, `(status = Pending || needs_reproposal)`, proposal gần nhất `null/Rejected/Canceled`.
 - `rejectionCount`, `maxRejectionCount`
 - `lastProposal`: `{id, unitCode, status, note, createdAt}` hoặc null.
+- `availableActions` — thao tác FM được làm, BE tính: `REPROPOSE` khi `needsRepropose`, `CANCEL` khi đơn chưa
+  `Canceled`/`Done` (huỷ qua [fm-rental-order-cancel.md](fm-rental-order-cancel.md)). FE chỉ hiện nút theo danh sách này.
 
 ## Ví dụ
 

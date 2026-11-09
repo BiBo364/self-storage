@@ -18,4 +18,9 @@ public interface StorageUnitRepository extends JpaRepository<StorageUnit, Long> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from StorageUnit u where u.id = :id")
     Optional<StorageUnit> findByIdForUpdate(@Param("id") Long id);
+
+    /** Khoang bảo trì sau trả kho đã đủ ngày — cron mở lại. */
+    @Query("select u.id from StorageUnit u where u.maintenanceStartedAt is not null "
+            + "and u.maintenanceStartedAt <= :cutoff order by u.id")
+    java.util.List<Long> findMaintenanceDueIds(@Param("cutoff") java.time.Instant cutoff);
 }

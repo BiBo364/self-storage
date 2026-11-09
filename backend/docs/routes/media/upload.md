@@ -12,6 +12,10 @@ FE upload ảnh hiện trạng / scan hợp đồng / ảnh giấy tờ trước
 
 ## Luồng / hành vi
 
+- **Rate limit theo account** (`UploadRateLimiter`, chạy trước khi kiểm và lưu file): tối đa
+  `media.upload-rate-limit.max-per-window` (30) lần / `media.upload-rate-limit.window` (10 phút), fixed window trên
+  Redis (key `media:upload:acc:{accountId}`, TTL đặt ở lần đầu). Vượt → **429** "Bạn tải lên quá nhiều file trong thời
+  gian ngắn…"; lần bị chặn vẫn được đếm. Redis lỗi → chỉ log, cho upload qua (fail-open).
 - Nhận `multipart/form-data` field `file`; kiểm loại **hai lớp**: content-type client khai phải nằm
   trong allowlist (JPEG/PNG/WebP/PDF — header kèm tham số như `; charset=binary` vẫn nhận,
   `image/jpg` map về JPEG), và **nội dung phải khớp loại khai báo** theo chữ ký (magic bytes) —
@@ -37,8 +41,11 @@ FE upload ảnh hiện trạng / scan hợp đồng / ảnh giấy tờ trước
 ## Ghi chú nghiệp vụ
 
 - Giới hạn 10MB khớp cap upload của Cloudinary free plan.
-- Ảnh giấy tờ cần chế độ private — hiện chưa có cơ chế delivery riêng (đang dùng URL public).
-- File mồ côi vẫn có thể còn nếu FE không gọi delete batch; xem [follow-up.md](../follow-up.md).
+- Mọi file (kể cả ảnh giấy tờ) dùng URL public của Cloudinary; không có cơ chế delivery private.
+- Upload không được flow nào attach (FE không submit, không gọi delete batch) còn `Pending`; quá
+  `media.orphan-cleanup.max-age` (3 ngày) thì cron `MediaCleanupJob` xoá asset và chuyển row `Deleted`
+  ([index.md › Upload file](../../index.md#upload-file-module-media)).
+- Không dedup: cùng một file upload hai lần thành hai asset.
 
 ## Ví dụ
 

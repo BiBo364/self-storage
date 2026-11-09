@@ -77,7 +77,9 @@ Trong một transaction:
 4. Notification `RENTAL_REQUEST_APPROVED` cho customer, gắn `OrderNotification(order_id)`; email
    cùng nội dung gửi **sau commit**. Lỗi SMTP chỉ log, không rollback (xem
    [index.md › Gửi email](../index.md#gửi-email-module-notification)). Link trong body:
-   `<FRONTEND_URL>/proposals`.
+   `<FRONTEND_URL>/proposals`. Nội dung có `{{unitCode}}`, `{{unitType}}` = tên loại khoang kèm kích thước
+   `rộng × sâu × cao` (vd "Small (1 × 2 × 2,2 m)") và lưu ý khoang chưa được giữ trong lúc chờ — khoang chỉ xác nhận
+   cho khách hoàn tất thanh toán cọc đầu tiên (cọc trước giữ trước).
 5. Audit: trigger duyệt ghi `RENTAL_REQUEST_CONVERTED` (System) + `RENTAL_ORDER_CREATED` +
    `PROPOSAL_CREATED`; trigger claim ghi `RENTAL_REQUEST_CLAIMED` (customer) + order/proposal created.
    Luồng duyệt vẫn ghi `RENTAL_REQUEST_APPROVED` trước khi convert.
@@ -108,10 +110,10 @@ Key này seed ở `V5__order_expiry_days_seed.sql` — thiếu key là lỗi c�
 - Thứ tự khoá ở cả hai trigger: **email trước, row request sau** — trigger duyệt khoá email trước
   pre-check và update row; claim khoá email trước select.
 - Request trùng ở claim giữ nguyên `Approved`, không auto-reject; trùng ở luồng duyệt bị chặn **409**
-  và giữ `Pending`. **Hiện chưa có cron** chuyển request quá
-  hạn sang `Expired`: request trùng hoặc claim lỗi vẫn ở `Approved` kể cả sau `expires_at`. Request
-  quá hạn vẫn không bị convert — select claim và `convertIfApproved` đều yêu cầu `expires_at > now`
-  (cron Flow 1 là việc riêng, chưa triển khai).
+  và giữ `Pending`. Request trùng hoặc claim lỗi ở `Approved` tới `expires_at`; sau mốc đó
+  `BookingExpiryJob` (5 phút) chuyển request `Pending`/`Approved` quá hạn sang `Expired` (audit, lý do
+  "Quá hạn xử lý yêu cầu"). Request quá hạn không bị convert kể cả khi cron chưa chạy — select claim và
+  `convertIfApproved` đều yêu cầu `expires_at > now`.
 
 ## Code map
 

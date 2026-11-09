@@ -199,29 +199,45 @@ class StaffAppointmentActionIntegrationTest {
     }
 
     @Test
-    void arrivingNonCheckinAfterTheSlotConflictsWithoutNoShow() {
+    void arrivingReturnAfterTheSlotStillRecordsArrival() {
+        // Lịch trả kho không có no-show: khách đến trễ vẫn được nhận trả kho.
         jdbc.update("update appointments set type = 'RETURN', started_at = now() - interval '3 hours', "
                 + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
         loginAs("fs1@lemar.vn");
 
         StaffAppointmentActionService.ActionResult result = service.arrive(appointmentId);
 
-        assertThat(result.conflict()).isTrue();
+        assertThat(result.conflict()).isFalse();
         assertThat(result.noShow()).isFalse();
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
+                .isEqualTo("Done");
+    }
+
+    @Test
+    void arrivingCheckinWhenUnitIsNotReservedConflicts() {
+        // Điều kiện vào bàn giao: khoang của đơn phải đang Reserved.
+        jdbc.update("update storage_units set status = 'Available' where code = 'A-01'");
+        // Trong khung giờ hẹn — FS chỉ xác nhận khách đến sớm tối đa 15 phút.
+        jdbc.update("update appointments set started_at = now(), end_at = now() + interval '1 hour' where id = ?",
+                appointmentId);
+        loginAs("fs1@lemar.vn");
+
+        assertThatThrownBy(() -> service.arrive(appointmentId))
+                .isInstanceOf(vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException.class)
+                .hasMessageContaining("giữ chỗ");
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Pending");
     }
 
     @Test
-    void cancellingNonCheckinAfterTheSlotConflictsWithoutNoShow() {
+    void cancellingReturnAppointmentIsRejected() {
+        // Lịch trả kho không huỷ qua route huỷ check-in (FM phân công lại / khách huỷ yêu cầu trả kho).
         jdbc.update("update appointments set type = 'RETURN', started_at = now() - interval '3 hours', "
                 + "end_at = now() - interval '1 hour' where id = ?", appointmentId);
         loginAs("fs1@lemar.vn");
 
-        StaffAppointmentActionService.ActionResult result = service.cancel(appointmentId, "Quá giờ và khách không đến");
-
-        assertThat(result.conflict()).isTrue();
-        assertThat(result.noShow()).isFalse();
+        assertThatThrownBy(() -> service.cancel(appointmentId, "Khách báo bận"))
+                .isInstanceOf(vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException.class);
         assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class, appointmentId))
                 .isEqualTo("Pending");
     }

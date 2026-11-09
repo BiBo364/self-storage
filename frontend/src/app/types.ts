@@ -20,6 +20,8 @@ export type FmRentalOrderSummary = {
     note: string | null;
     createdAt: string;
   } | null;
+  /** Thao tác FM được làm trên đơn — BE tính: REPROPOSE, CANCEL. */
+  availableActions: string[];
 };
 
 export type FmRentalOrderPage = {
@@ -56,7 +58,23 @@ export type View =
   | "fm-orders"
   | "admin-payments"
   | "fs-schedule"
-  | "fs-handover";
+  | "fs-handover"
+  | "fs-handovers"
+  | "fs-returns"
+  | "fs-return-detail"
+  | "fs-support"
+  | "handover"
+  | "payment-result"
+  | "support"
+  | "bom-dashboard"
+  | "bom-facilities"
+  | "bom-staff"
+  | "bom-pricing"
+  | "bom-invoices"
+  | "admin-accounts"
+  | "admin-permissions"
+  | "admin-login-events"
+  | "admin-audit-logs";
 export type Navigate = (path: string) => void;
 export type NoticeTone = "info" | "success" | "error" | "pending";
 export type Notice = { tone: NoticeTone; message: string } | null;

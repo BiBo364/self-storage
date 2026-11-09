@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Public API của pricing cho module khác kiểm tra unit_types tồn tại.
- * Ràng buộc facility cung cấp loại nào nằm ở bảng facility_unit_type (V4, #126).
+ * Ràng buộc facility cung cấp loại nào nằm ở bảng facility_unit_type (V4).
  */
 @Service
 public class UnitTypeQueryService {
@@ -34,7 +34,7 @@ public class UnitTypeQueryService {
     }
 
     /**
-     * Các loại khoang một cơ sở cung cấp (V4, #126) — cho form public lọc dropdown.
+     * Các loại khoang một cơ sở cung cấp (V4) — cho form public lọc dropdown.
      */
     @Transactional(readOnly = true)
     public List<UnitTypeOption> listByFacility(Long facilityId) {
@@ -46,6 +46,17 @@ public class UnitTypeQueryService {
                         rs.getBigDecimal(3), rs.getBigDecimal(4), rs.getBigDecimal(5),
                         rs.getBigDecimal(6), rs.getBigDecimal(7)),
                 facilityId);
+    }
+
+    /** Một loại khoang theo id. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<UnitTypeOption> find(Long unitTypeId) {
+        return jdbc.query(
+                "select id, name, width, depth, height, area, monthly_price from unit_types where id = ?",
+                (rs, row) -> new UnitTypeOption(rs.getLong(1), rs.getString(2),
+                        rs.getBigDecimal(3), rs.getBigDecimal(4), rs.getBigDecimal(5),
+                        rs.getBigDecimal(6), rs.getBigDecimal(7)),
+                unitTypeId).stream().findFirst();
     }
 
     /** Một dòng trong dropdown loại khoang của form. */

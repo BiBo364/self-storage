@@ -1,15 +1,29 @@
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, LogIn, ScrollText, ShieldCheck, Users } from "lucide-react";
 import { authGateway } from "../../app/auth";
 import type { Navigate, View } from "../../app/types";
 import type { Theme } from "../ui/ThemeToggle";
 import { WorkspaceShell, type WorkspaceNavItem } from "./WorkspaceShell";
 
 const navigation: (WorkspaceNavItem & { view: View })[] = [
+  { label: "Tài khoản", path: "/admin/accounts", view: "admin-accounts", icon: Users },
+  { label: "Phân quyền", path: "/admin/permissions", view: "admin-permissions", icon: ShieldCheck },
   {
     label: "Đối soát thanh toán",
     path: "/admin/reconciliation",
     view: "admin-payments",
     icon: ClipboardCheck,
+  },
+  {
+    label: "Lịch sử đăng nhập",
+    path: "/admin/login-events",
+    view: "admin-login-events",
+    icon: LogIn,
+  },
+  {
+    label: "Nhật ký thao tác",
+    path: "/admin/audit-logs",
+    view: "admin-audit-logs",
+    icon: ScrollText,
   },
 ];
 
@@ -36,11 +50,11 @@ export function AdminShell({
 
   return (
     <WorkspaceShell
-      roleLabel="Admin"
+      roleLabel="System Administrator"
       navItems={navigation}
       activePath={activeItem?.path ?? ""}
-      onNavigate={navigate}
-      onBrandClick={() => navigate("/admin/reconciliation")}
+      onNavigate={(path) => navigate(path)}
+      onBrandClick={() => navigate("/admin/accounts")}
       user={{ name: session?.user.name ?? "", email: session?.user.email ?? "" }}
       onLogout={logout}
       theme={theme}

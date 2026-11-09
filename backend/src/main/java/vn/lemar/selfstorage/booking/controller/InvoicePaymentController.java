@@ -7,7 +7,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,31 +17,41 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.ApiError;
-import vn.lemar.selfstorage.booking.application.DepositPaymentService;
-import vn.lemar.selfstorage.booking.application.InvoiceQueryService;
 import vn.lemar.selfstorage.booking.application.InvoiceListView;
+import vn.lemar.selfstorage.booking.application.InvoicePaymentService;
+import vn.lemar.selfstorage.booking.application.InvoicePaymentService.PayResult;
+import vn.lemar.selfstorage.booking.application.InvoicePaymentService.PaymentCheck;
+import vn.lemar.selfstorage.booking.application.InvoiceQueryService;
 import vn.lemar.selfstorage.booking.application.dto.StartDepositResponse;
+import vn.lemar.selfstorage.identity.application.AccountQueryService;
 
-/** Khách xem và tự mở phiên thanh toán cho hóa đơn của mình. */
+/**
+ * Khách xem và tự mở phiên thanh toán cho hóa đơn của mình (spec 1.4 / 2.3 / 3.x). Route ownership trong
+ * {@code /api/**} ({@code ACCOUNT_ACTIVE}); service kiểm hoá đơn thuộc khách đang đăng nhập.
+ */
 @RestController
 @RequestMapping("/api/invoices")
 public class InvoicePaymentController {
 
     static final String DETAIL_MESSAGE = "Lấy hóa đơn thành công";
+    static final String PAY_MESSAGE = "Đã tạo phiên thanh toán";
+    static final String CHECK_MESSAGE = "Đã kiểm tra trạng thái thanh toán";
 
-    private final DepositPaymentService depositPayments;
+    private final InvoicePaymentService paymentService;
     private final InvoiceQueryService invoiceQuery;
+    private final AccountQueryService accountQueryService;
 
-    public InvoicePaymentController(DepositPaymentService depositPayments,
-            InvoiceQueryService invoiceQuery) {
-        this.depositPayments = depositPayments;
+    public InvoicePaymentController(InvoicePaymentService paymentService, InvoiceQueryService invoiceQuery,
+                                    AccountQueryService accountQueryService) {
+        this.paymentService = paymentService;
         this.invoiceQuery = invoiceQuery;
+        this.accountQueryService = accountQueryService;
     }
 
     @Operation(summary = "Hóa đơn của tôi",
             description = "Hóa đơn theo id, chỉ chủ hóa đơn đọc được. FE gọi lại đường này sau khi "
                     + "cổng thanh toán redirect về để lấy trạng thái thật — return URL chỉ nói giao "
-                    + "dịch thành công hay không, trạng thái hóa đơn do IPN chốt ở server.")
+                    + "dịch thành công hay không, trạng thái hóa đơn do IPN / webhook chốt ở server.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy hóa đơn thành công"),
             @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
@@ -58,9 +70,11 @@ public class InvoicePaymentController {
         return ResponseEntity.ok(ApiEnvelope.ok(DETAIL_MESSAGE, invoiceQuery.findOwn(invoiceId)));
     }
 
-    @Operation(summary = "Mở phiên thanh toán hóa đơn cọc",
-            description = "Kiểm năm nhánh theo spec Flow 1.4 rồi tạo `PaymentTransaction(Pending)` "
-                    + "và trả URL VNPay. **Không** ghi nhận đã thu tiền — việc đó do IPN làm. "
+    @Operation(summary = "Mở phiên thanh toán hóa đơn",
+            description = "Hoá đơn cọc (`Deposit`/`DepositSupplement`): kiểm năm nhánh theo spec Flow 1.4. Hoá đơn "
+                    + "gắn hợp đồng (tháng đầu, gia hạn, tiền thuê, phạt): hoá đơn còn `Unpaid`, chưa quá hạn, "
+                    + "đơn chưa đóng. Rồi tạo `PaymentTransaction(Pending)` và trả URL cổng; phiên còn mở trong 15' "
+                    + "thì trả lại URL cũ. **Không** ghi nhận đã thu tiền — việc đó do IPN / webhook làm. "
                     + "Số tiền lấy từ hóa đơn trong DB, không nhận từ client.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Đã mở phiên, FE redirect sang `paymentUrl`"),
@@ -81,7 +95,8 @@ public class InvoicePaymentController {
             @ApiResponse(responseCode = "409",
                     description = "Các nhánh từ chối: đơn quá hạn · khoang đã được đặt cọc · khoang "
                             + "đang bảo trì · khoang đang có phiên thanh toán khác · hoá đơn không còn "
-                            + "chờ thanh toán cọc · hoá đơn đã có giao dịch thành công nhưng chưa chốt",
+                            + "chờ thanh toán / quá hạn · đơn đã đóng · hoá đơn đã có giao dịch thành công "
+                            + "nhưng chưa chốt · phiên cũ không dựng lại được",
                     content = @Content(mediaType = "application/json",
                             schema = @Schema(implementation = ApiError.class),
                             examples = {
@@ -94,19 +109,56 @@ public class InvoicePaymentController {
                             }))
     })
     @PostMapping("/{invoiceId}/pay")
-    public ResponseEntity<ApiEnvelope<StartDepositResponse>> pay(
-            @PathVariable Long invoiceId, HttpServletRequest request) {
-        String paymentUrl = depositPayments.startDeposit(invoiceId, clientIp(request));
-        return ResponseEntity.ok(ApiEnvelope.ok("Đã tạo phiên thanh toán",
-                new StartDepositResponse(paymentUrl)));
+    public ResponseEntity<?> pay(Authentication authentication, @PathVariable Long invoiceId,
+                                 HttpServletRequest request) {
+        PayResult result = paymentService.start(invoiceId, currentAccountId(authentication), clientIp(request));
+        if (result.rejected()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new PayRejected(result.rejectionMessage(), result.invoiceCanceled(),
+                            ApiError.now(result.rejectionMessage()).timestamp()));
+        }
+        return ResponseEntity.ok(ApiEnvelope.ok(PAY_MESSAGE, new StartDepositResponse(result.paymentUrl())));
     }
 
-    /** VNPay bắt buộc `vnp_IpAddr`; sau proxy thì lấy IP đầu tiên trong `X-Forwarded-For`. */
-    private String clientIp(HttpServletRequest request) {
+    @Operation(summary = "Kiểm tra kết quả thanh toán",
+            description = "Gọi khi khách quay về từ cổng: hỏi cổng về giao dịch mới nhất của hoá đơn (VNPay "
+                    + "`querydr` / tra cứu payOS — server-to-server, có chữ ký; nguồn dự phòng khi IPN / webhook chưa "
+                    + "tới) rồi trả trạng thái hoá đơn + giao dịch. Giao dịch đã chốt thì không gọi cổng; cổng chưa có "
+                    + "kết quả thì giao dịch giữ `Pending`.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Trạng thái hoá đơn/giao dịch sau khi hỏi cổng"),
+            @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
+            @ApiResponse(responseCode = "404", description = "Hoá đơn không tồn tại hoặc không thuộc khách")
+    })
+    @PostMapping("/{invoiceId}/payment-check")
+    public ResponseEntity<ApiEnvelope<PaymentCheck>> check(Authentication authentication,
+                                                           @PathVariable Long invoiceId,
+                                                           HttpServletRequest request) {
+        PaymentCheck check = paymentService.check(invoiceId, currentAccountId(authentication), clientIp(request));
+        return ResponseEntity.ok(ApiEnvelope.ok(CHECK_MESSAGE, check));
+    }
+
+    private Long currentAccountId(Authentication authentication) {
+        return accountQueryService.requireIdByEmail(authentication.getName());
+    }
+
+    /**
+     * VNPay bắt buộc {@code vnp_IpAddr}: sau proxy lấy IP đầu tiên trong {@code X-Forwarded-For}; loopback IPv6 quy
+     * về IPv4.
+     */
+    static String clientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
             return forwarded.split(",")[0].trim();
         }
-        return request.getRemoteAddr();
+        String ip = request.getRemoteAddr();
+        if (ip == null || ip.isBlank() || "0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
+            return "127.0.0.1";
+        }
+        return ip;
+    }
+
+    @Schema(description = "Từ chối thanh toán (409) — `invoiceCanceled` cho biết hoá đơn đã bị huỷ")
+    public record PayRejected(String message, boolean invoiceCanceled, String timestamp) {
     }
 }

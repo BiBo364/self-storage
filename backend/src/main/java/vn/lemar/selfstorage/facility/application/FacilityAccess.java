@@ -20,6 +20,12 @@ public class FacilityAccess {
         return facilityAccessRepository.isManagedBy(accountId, facilityId);
     }
 
+    /** Cơ sở ngừng hoạt động — không nhận yêu cầu thuê mới (catalog public cũng ẩn cơ sở này). */
+    @Transactional(readOnly = true)
+    public boolean isInactive(Long facilityId) {
+        return facilityAccessRepository.isInactive(facilityId);
+    }
+
     @Transactional(readOnly = true)
     public boolean exists(Long facilityId) {
         return facilityAccessRepository.exists(facilityId);
@@ -29,6 +35,12 @@ public class FacilityAccess {
     @Transactional(readOnly = true)
     public Optional<String> code(Long facilityId) {
         return facilityAccessRepository.findCode(facilityId);
+    }
+
+    /** Loại quyền truy cập cơ sở đang bật; rỗng nếu cơ sở không tồn tại. */
+    @Transactional(readOnly = true)
+    public Optional<FacilityAccessOptions> accessOptions(Long facilityId) {
+        return facilityAccessRepository.findAccessOptions(facilityId);
     }
 
     /** FM phụ trách cơ sở ({@code facilities.fm_account_id}); rỗng nếu chưa gán FM. */

@@ -17,8 +17,11 @@ purpose: Đăng ký tài khoản khách hàng — ghi nhận yêu cầu và gử
 1. Chuẩn hoá email (`trim` + lowercase — `Account.normalize`); email đã có account → **409**
    (pending registration không tính là account — dùng [resend-verification](resend-verification.md)).
 2. Băm mật khẩu BCrypt và **chưa tạo `Account`**: ghi pending registration (email + hash mật khẩu +
-   `name` + `phone`) vào Redis cùng mã xác minh, TTL 10 phút. Đăng ký lại khi đang pending chịu
-   cooldown 60 giây (429).
+   `name` + `phone`) vào Redis cùng mã xác minh, TTL 10 phút. Đăng ký lại khi đang pending: trong
+   cooldown 60 giây → 429; sau cooldown → **409** "Email này đang chờ xác minh…" và **không** ghi đè hash
+   mật khẩu/hồ sơ đã lưu (nếu ghi đè, người khác biết email có thể đăng ký lại bằng mật khẩu của họ, chủ email
+   xác minh xong sẽ nhận account mang mật khẩu đó). Chủ email dùng [resend-verification](resend-verification.md);
+   pending hết TTL thì đăng ký lại bình thường.
 3. Phát mã xác minh (6 số) — lưu Redis dạng BCRYPT hash, không lưu plaintext — rồi phát event
    `VerificationEmailRequested`; module notification gửi email **sau commit**: rollback thì không
    gửi, SMTP lỗi không rollback (best-effort, chỉ log).
@@ -50,8 +53,8 @@ curl -s -X POST http://localhost:8080/api/auth/register \
 # {"message":"Dữ liệu không hợp lệ","timestamp":"2026-10-15T10:07:56.947684468Z"}
 ```
 
-Email xác minh (render qua `NotificationEmailLayout` — HTML chuẩn; xem tại MailHog dev
-`http://localhost:8025` hoặc hộp thư thật theo `MAIL_*`):
+Email xác minh (render qua `NotificationEmailLayout` — HTML chuẩn; gửi thật qua Gmail SMTP
+theo `MAIL_*`, xem ở hộp thư của email đăng ký):
 
 ```text
 Subject: Mã xác minh email đăng ký Kho Mộc

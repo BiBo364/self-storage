@@ -43,3 +43,15 @@ export function assignAppointmentStaff(
     accessToken: accessToken(),
   });
 }
+
+/** Đổi FS của lịch check-in đã phân công (khách chưa đến) — PUT cùng route. */
+export function reassignAppointmentStaff(
+  appointmentId: number,
+  staffId: number,
+): Promise<FmAppointment> {
+  return apiRequest<FmAppointment>(`/api/fm/appointments/${appointmentId}/staff`, {
+    method: "PUT",
+    body: { staffId },
+    accessToken: accessToken(),
+  });
+}

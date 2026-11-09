@@ -16,7 +16,7 @@ import vn.lemar.selfstorage.booking.application.dto.FmRentalOrderResponse;
 
 /**
  * Màn FM xem đơn để đề xuất lại. Role-bound {@code /api/fm/**} (FM) + permission {@code rental_order.read} theo cơ sở
- * — giữ nguyên theo chốt PR #136 (màn FM, cùng cách B1 #126). Thao tác đề xuất lại nằm ở
+ * (cùng cách màn duyệt yêu cầu đặt kho của FM). Thao tác đề xuất lại nằm ở
  * {@link RentalOrderProposalController}.
  */
 @RestController

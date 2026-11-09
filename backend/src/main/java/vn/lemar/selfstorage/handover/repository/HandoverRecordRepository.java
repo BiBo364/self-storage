@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import vn.lemar.selfstorage.handover.domain.HandoverRecord;
+import vn.lemar.selfstorage.handover.domain.HandoverResult;
 
 public interface HandoverRecordRepository extends JpaRepository<HandoverRecord, Long> {
 
@@ -44,8 +45,16 @@ public interface HandoverRecordRepository extends JpaRepository<HandoverRecord, 
             + "and r.dueAt < :now order by r.id")
     List<Long> findOverdueIds(@Param("now") Instant now);
 
+    /** Đơn của record (projection, không nạp entity) — khoá đơn trước rồi mới khoá record. */
+    @Query("select r.orderId from HandoverRecord r where r.id = :id")
+    Optional<Long> findOrderIdById(@Param("id") Long id);
+
     /** Khoá record theo id trước khi cron huỷ; phải gọi trong transaction. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from HandoverRecord r where r.id = :id")
     Optional<HandoverRecord> findByIdForUpdate(@Param("id") Long id);
+
+    /** Spec 2.5: số lần khách từ chối khoang tại chỗ trên đơn (không đếm {@code CANCELED}). */
+    long countByOrderIdAndResult(Long orderId, HandoverResult result);
+
 }

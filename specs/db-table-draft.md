@@ -46,6 +46,8 @@
 - operating_hours
 - status (Active/Inactive)
 - fm_account_id (N - 1: Account, nullable, unique) - FM phụ trách cơ sở; quan hệ 1–1
+- enabled_key_access (Boolean, default true) - cơ sở giao khóa cơ (Flow 2.4)
+- enabled_code_access (Boolean, default true) - cơ sở cấp mã khóa số (Flow 2.4)
 
 **NOTES:**
 - `fm_account_id` là nguồn duy nhất lưu quan hệ FM–Facility (1–1): mỗi facility có tối đa một FM; mỗi FM phụ trách tối đa một facility. Account không lưu `facility_id` cho FM — cần biết FM phụ trách facility nào thì truy vấn ngược từ `Facility`.
@@ -75,6 +77,18 @@
 - Đổi giá không ảnh hưởng hợp đồng đã ký — `RentalContract.monthly_price` là snapshot lúc ký.
 - `StorageUnit.monthly_price` là override từng khoang; MVP để null → dùng giá UnitType.
 
+# FacilityUnitType
+**Overview:** loại khoang mà mỗi cơ sở cung cấp — form đặt kho và catalog public chỉ hiện loại khoang có ở cơ sở.
+Bảng `facility_unit_type` (V4).
+- facility_id (N - 1: Facility)
+- unit_type_id (N - 1: UnitType)
+
+**CONSTRAINTS:**
+- Khoá chính `(facility_id, unit_type_id)`; xoá cơ sở / loại khoang thì xoá dòng nối (`ON DELETE CASCADE`).
+
+**NOTES:**
+- FM thêm khoang có loại mới tại cơ sở thì cơ sở tự "cung cấp" loại khoang đó (thêm dòng nếu chưa có).
+
 # StorageUnit
 **Overview:** thông tin và trạng thái của khoang chứa tại mỗi cơ sở.
 
@@ -83,6 +97,7 @@
 - unit_type_id (N - 1: UnitType)
 - size - kích thước khoang
 - monthly_price (Decimal, nullable) - Giá override được BOM phê duyệt
+- reserved_order_id (N - 1: RentalOrder, nullable) - đơn đang giữ khoang khi `Reserved`; chỉ đơn này nhả được khoang. NULL ở trạng thái khác (và khoang `Reserved` trước V30 không xác định được đơn giữ)
 - maintenance_started_at (nullable) - chỉ do Flow 2.a set khi `Maintenance` phát sinh từ trả kho, để cron tính `unit.maintenance_days`; FM chuyển `Maintenance` do sự cố thì để trống
 - status:
   - Available: khoang sẵn sàng cho thuê
@@ -155,6 +170,8 @@
 - expires_at (nullable)
   - Hạn hoàn thành của đơn, set một lần khi tạo đơn (`now + order.expiry_days`); quá hạn mà chưa `Done` → `Canceled`
   - Mọi hạn con gắn với đơn (hóa đơn, lịch hẹn, `due_at`) không được vượt `expires_at`
+- canceled_at (Timestamptz, nullable, V28) - lúc đơn chuyển `Canceled`; mốc ghi nhận cọc bị giữ lại trong báo cáo doanh
+  thu. Đơn huỷ trước V28 lấy từ audit `RENTAL_ORDER_CANCELED`
 - needs_reproposal (BOOLEAN, default false): Flow 2 bật khi khách từ chối khoang tại check-in; gate đề xuất lại
   của Flow 1.3 đọc cờ này và clear khi proposal mới được tạo
 
@@ -226,6 +243,8 @@ Các bước:
 - signature - URL ảnh chữ ký, chỉ dùng khi ký trên thiết bị; MVP ký giấy nên để trống (chữ ký nằm trong bản scan ở `pdf_url`)
 - document_url - file PDF hợp đồng được render từ template và thông tin của phiên (bản gốc dùng để đối chiếu, không ký)
 - pdf_url - file hợp đồng lưu trữ đã ký
+- document_html (Text, nullable, V27) - bản hợp đồng HTML render một lần lúc ký và chốt lại; endpoint in hợp đồng trả bản này sau khi ký. `NULL` = chưa ký (render động) hoặc ký trước V27
+- access_suspended_at (Timestamptz, nullable, V27) - mốc tạm khoá truy cập do quá hạn kéo dài (`overdue.escalation_days`); mã khoá số đã thu hồi; `NULL` = không khoá
 - status (Draft/Signed/Active/Ended/Canceled)
   - Signed: đã ký nhưng chưa bàn giao
   - Active: đã bàn giao, đang có hiệu lực
@@ -258,10 +277,13 @@ Các bước:
 - amount - snapshot của giá hiệu lực tại thời điểm tạo hóa đơn.
 - created_at
 - due_date
-- refund_status (None/Required/Processing/Refunded) — tiền đã vào nhưng cần hoàn; tách khỏi `status`
-- refund_reason (nullable)
+- refund_status (None/Required/Processing/Refunded) — tiền đã vào nhưng cần hoàn; tách khỏi `status`. `Processing`
+  = đã ghi nhận hoàn một phần, `Refunded` = đã hoàn đủ số phải hoàn
+- refund_reason (nullable) - mã lý do (`UNIT_UNAVAILABLE`, `INVOICE_CLOSED`, `UNIT_CHANGE_EXCESS`, `DEPOSIT_UNSERVED`,
+  `HANDOVER_CANCELED`, `CHECKOUT_DEPOSIT`)
 - refund_requested_at (nullable)
 - refunded_at (nullable)
+- refund_amount (Decimal, nullable, V31) - số phải hoàn khi chỉ hoàn một phần; `NULL` = cả số tiền hoá đơn
 
 **Constraints**
 - Một `RentalOrder` tối đa một hoá đơn `Deposit` còn hiệu lực (`Unpaid`/`Paid`).
@@ -269,11 +291,15 @@ Các bước:
 - Hoá đơn bổ sung dùng type `DepositSupplement`, không dùng lại `Deposit`.
 
 **Service Code:**
-- DEP: đặt cọc khoang chứa
-- RNT: tiền thuê hằng tháng
-- CLN: phí dọn dẹp khoang sau khi trả
-- DMG: phí hư hại kho sau khi trả
-- EXT: dịch vụ phát sinh (nếu chưa có mã)
+- DEP: đặt cọc khoang chứa (`Deposit`, `DepositSupplement`)
+- RNT: tiền thuê — tháng đầu lúc ký hợp đồng và các tháng sau do cron lập (`Rental`)
+- EXT: gia hạn hợp đồng (`Extension`)
+- OVD: phí quá hạn hợp đồng (`Penalty`)
+- CLN: phí vệ sinh khoang khi trả kho (`Penalty`)
+- DMG: phí hư hỏng khi trả kho (`Penalty`)
+- KEY: phí mất chìa khi trả kho (`Penalty`)
+- PEN: quyết toán trả kho — hoá đơn chưa trả gộp vào và phần còn thiếu khi phí vượt cọc (`Penalty`)
+- SVC: phí dịch vụ của yêu cầu hỗ trợ (`Service`)
 
 
 **NOTES:**
@@ -286,6 +312,8 @@ Các bước:
 - status (Pending/Agreed/Rejected/Canceled)
 - note
 - created_at
+- agreed_at (Timestamptz, nullable, V28) - lúc khách đồng ý; mốc tính lại cửa sổ đặt lịch check-in khi đơn đã cọc phải
+  đổi khoang
 
 **Constraints**
 - Mọi lần đề xuất lại đều tạo bản ghi mới cho cùng `RentalOrder`; bản ghi cũ giữ nguyên (lịch sử). Khoang hiệu lực = proposal `Agreed` mới nhất.
@@ -368,6 +396,8 @@ Các bước:
 - created_at
 - updated_at
 - due_at - hạn khách phải hoàn tất bàn giao, set khi ghi nhận khách đến
+- requested_access (nullable: AccessCode/PhysicalKey/Both) - hình thức nhận quyền truy cập khách chọn khi xác nhận biên bản
+- customer_confirmed_at (nullable) - lúc khách xác nhận biên bản trong tài khoản
 
 **NOTES:**
 - `HandoverRecord` là checklist tiến trình bàn giao theo **thứ tự bắt buộc**: xác minh danh tính → kiểm tra hiện trạng khoang → ký hợp đồng → thanh toán tháng đầu → bàn giao.
@@ -390,40 +420,54 @@ Các bước:
 - Một `RentalOrder` chỉ có tối đa một `HandoverRecord` đang mở (`result = IN_PROGRESS`).
 - MVP chỉ có tối đa một appointment `CHECKIN` đang hoạt động cho mỗi `RentalOrder`; reschedule tạo nhiều appointment chỉ được bật ở giai đoạn sau.
 - Reschedule không thuộc MVP. Nếu được bật ở giai đoạn sau, appointment cũ phải chuyển `Canceled` trước khi tạo appointment mới.
+# ReturnRequest
+**Overview:** yêu cầu trả kho của khách trên một hợp đồng `Active` (Flow 3). Bảng `return_requests` (V25).
+- contract_id (N - 1: RentalContract)
+- customer_id (N - 1: Account)
+- facility_id (N - 1: Facility)
+- preferred_date - ngày khách mong muốn, trong 30 ngày tới
+- note (nullable)
+- status (`Pending`/`Assigned`/`Completed`/`Canceled`) - default `Pending`
+- assigned_staff_id (N - 1: Account, nullable) - FS được FM phân công
+- appointment_id (N - 1: Appointment, nullable) - lịch `RETURN` hiện tại
+- cancel_reason (nullable)
+- no_show_count (Int, default 0, V28) - số lần khách không đến buổi trả kho; chạm `return.max_no_shows` → huỷ yêu cầu
+- created_at, assigned_at, completed_at, updated_at
+
+**CONSTRAINTS:**
+- Mỗi hợp đồng tối đa một yêu cầu `Pending`/`Assigned` (partial unique index `uq_return_requests_open_per_contract`).
+
 # CheckoutRecord
-**Overview:** biên bản trả kho (Flow 2.a). Tách riêng khỏi `HandoverRecord` vì `HandoverRecord` chỉ chịu trách nhiệm tới khâu bàn giao.
-**Trạng thái baseline:** chưa đưa vào migration — Flow 2.a chưa review; thêm khi 2.a được duyệt.
-- order_id (1 - 1: RentalOrder)
-- appointment_id (1 - 1: Appointment) - lịch hẹn trả kho **đang xử lý**; cập nhật sang lịch mới khi khách phải quay lại dọn nốt
+**Overview:** biên bản trả kho. Tách riêng khỏi `HandoverRecord` vì `HandoverRecord` chỉ chịu trách nhiệm tới khâu bàn
+giao. Bảng `checkout_records` (V25) theo dạng rút gọn của Flow 2.a (quyết định của chủ dự án) — hành vi ở
+`backend/docs/checkout/return.md`.
+- return_request_id (1 - 1: ReturnRequest, unique)
+- contract_id (N - 1: RentalContract)
 - unit_id (N - 1: StorageUnit)
-- **Checklist cột mốc trả kho** (buổi trả kho có thể kéo dài vài ngày, mỗi cột mốc có timestamp để FM/FS theo dõi tiến độ):
-  - is_unit_emptied (default: false) - khoang đã dọn trống hoàn toàn
-  - unit_emptied_at (nullable)
-  - is_inspected (default: false) - FS đã kiểm tra hiện trạng và khách đã ký biên bản
-  - inspected_at (nullable)
-  - is_access_revoked (default: false) - đã thu chìa / vô hiệu hóa mã truy cập
-  - access_revoked_at (nullable)
-  - is_fee_settled (default: false) - các hóa đơn phát sinh đã `Paid`
-  - fee_settled_at (nullable)
-  - is_deposit_settled (default: false) - đã đối trừ và xử lý xong tiền cọc
-  - deposit_settled_at (nullable)
-- **Kết quả kiểm tra:**
-  - cleanliness - tình trạng vệ sinh
-  - damages - danh sách hư hỏng ghi nhận so với `HandoverRecord`
-  - photos - List<String>, ảnh hiện trạng lúc trả
-  - returned_key_quantity - số chìa thu lại, đối chiếu `UnitAccessKey.quantity`
-  - customer_signature
-- **Trạng thái cuối cùng của biên bản:**
-  - result (IN_PROGRESS/COMPLETED/PENDING_ITEMS) - default: IN_PROGRESS
-  - completed_at (nullable)
-- note
-- created_at
-- updated_at
+- appointment_id (N - 1: Appointment, nullable) - lịch `RETURN` của buổi trả kho
+- is_unit_emptied (default false), unit_emptied_at (nullable)
+- cleaning_required (default false)
+- damage_amount (default 0, ≥ 0) - FS nhập số tiền hư hỏng
+- damages (nullable) - mô tả hư hỏng
+- returned_key_quantity (nullable, ≥ 0) - số chìa thu lại
+- photos - List<String>, ảnh hiện trạng lúc trả
+- note (nullable)
+- deposit_amount, total_charges, refund_amount (nullable) - kết quả quyết toán cọc
+- shortfall_invoice_id (N - 1: Invoice, nullable) - hoá đơn phần phí vượt cọc
+- result (`IN_PROGRESS`/`PENDING_ITEMS`/`AWAITING_PAYMENT`/`COMPLETED`) - default `IN_PROGRESS`
+- inspected_at, access_revoked_at, completed_at (nullable)
+- created_at, updated_at
 
 **NOTES:**
-- **Không có `staff_id`**, giống `HandoverRecord`: FS đang xử lý lấy qua `appointment_id -> Appointment.staff_id`. Một biên bản có thể trải qua nhiều `Appointment` ở nhánh `PENDING_ITEMS`, `appointment_id` luôn trỏ lịch đang xử lý nên vẫn xác định được FS của buổi hiện tại; lịch sử FS các buổi trước tra qua `AuditLog`.
-- `PENDING_ITEMS`: khoang còn tài sản, chưa hoàn tất trả kho, **chưa thu hồi `UnitAccessKey`** vì khách còn cần vào lấy đồ. Khách quay lại dọn thì cập nhật tiếp trên **cùng một bản ghi**, không tạo mới: `PENDING_ITEMS -> IN_PROGRESS` khi FS mở lại buổi kiểm tra, rồi `-> COMPLETED` hoặc quay lại `PENDING_ITEMS`. Mỗi lần cập nhật ghi `updated_at`.
-- `COMPLETED`: đủ 5 cột mốc `true`, khoang sẵn sàng chuyển `Maintenance`.
+- **Không có `staff_id`**, giống `HandoverRecord`: FS lấy qua `ReturnRequest.assigned_staff_id` / `appointment_id`.
+- `PENDING_ITEMS`: khoang còn tài sản, chưa chốt được, **chưa thu hồi `UnitAccessKey`** vì khách còn cần vào lấy đồ.
+  Khách quay lại dọn thì FS kiểm lại trên **cùng một bản ghi** (`PENDING_ITEMS -> IN_PROGRESS`), không tạo bản ghi
+  hay lịch `RETURN` mới.
+- `AWAITING_PAYMENT`: tổng phí vượt cọc, chờ khách trả `shortfall_invoice_id`; trả xong thì `COMPLETED`.
+- `COMPLETED`: quyền truy cập đã thu hồi, cọc đã quyết toán; khoang chuyển `Maintenance`.
+- Khác bản nháp 2.a: không có checklist cờ `is_inspected`/`is_access_revoked`/`is_fee_settled`/`is_deposit_settled`
+  (trạng thái suy ra từ `result`, `access_revoked_at`, `shortfall_invoice_id`); không có `cleanliness` (thay bằng
+  `cleaning_required`) và `customer_signature`; liên kết qua `return_request_id` thay vì `order_id`.
 # PaymentTransaction
 - invoice_id (N - 1: Invoice)
 - gateway_transaction_no (unique) - Mã giao dịch định danh từ cổng thanh toán/ngân hàng trả về (ví dụ mã vnpay_TransactionNo, payOS reference code, ...) -> Dùng để tra cứu, đối soát khi có khiếu nại
@@ -486,15 +530,17 @@ Các bước:
 | `PROPOSAL_CANCELED` | Proposal bị huỷ do khoang hết khả dụng lúc khách đồng ý hoặc đơn bị huỷ | `ProposalFeedback` | Customer/System |
 | `INVOICE_CREATED` | Hệ thống tạo hóa đơn cọc | `Invoice` | Customer/FM |
 | `INVOICE_CANCELED` | Hóa đơn bị vô hiệu hóa | `Invoice` | Customer/FM |
-| `INVOICE_REFUND_REQUIRED` | Tiền đã vào nhưng unit không còn giữ được; invoice Paid + refund Required | `Invoice` | System |
+| `INVOICE_PAID` | Hóa đơn được cổng xác nhận đã thanh toán | `Invoice` | System |
+| `INVOICE_EXPIRED` | Hóa đơn quá `due_date` chưa thanh toán (cron) | `Invoice` | System |
+| `INVOICE_REFUND_REQUIRED` | Tiền đã vào phải trả lại khách (unit mất, hoá đơn đã đóng, cọc dư, hoàn cọc khi trả kho…); `refund_status = Required` | `Invoice` | System/Customer/FM/FS |
 | `PAYMENT_SUCCEEDED` | Thanh toán được xác nhận | `PaymentTransaction` | System/IPN/Admin |
 | `PAYMENT_FAILED` | Thanh toán thất bại | `PaymentTransaction` | System/IPN/Admin |
 | `PAYMENT_DUPLICATE` | Giao dịch Success thứ hai cho cùng invoice; không ghi Success lần hai | `PaymentTransaction` | System/IPN/Admin |
 | `RENTAL_ORDER_DEPOSITED` | Đơn chuyển sang đã đặt cọc | `RentalOrder` | System |
 | `STORAGE_UNIT_RESERVED` | Khoang chuyển sang Reserved | `StorageUnit` | System |
-| `MANUAL_REFUND_RECORDED` | Ghi nhận hoàn tiền thủ công | `PaymentTransaction` | Admin/FM |
+| `MANUAL_REFUND_RECORDED` | FM ghi nhận hoàn tiền thủ công (`POST /api/fm/invoices/{id}/refunds`) | `PaymentTransaction` | FM |
 | `DEPOSIT_REFUND_REQUIRED` | Đổi khoang sau khi cọc dư — cần hoàn tiền | `RentalOrder` | Customer |
-| `APPOINTMENT_CREATED` | Tạo lịch hẹn check-in | `Appointment` | System |
+| `APPOINTMENT_CREATED` | Tạo lịch hẹn check-in / trả kho | `Appointment`, `RentalOrder` | Customer/FM/System |
 | `FS_ASSIGNED` | FM phân công FS | `Appointment`, `RentalOrder` | FM |
 | `APPOINTMENT_RESCHEDULED` | Lịch hẹn được đặt lại | `Appointment` | Customer/FM |
 | `APPOINTMENT_CANCELED_NO_SHOW` | Cron xử lý khách không đến | `Appointment` | System |
@@ -502,6 +548,7 @@ Các bước:
 | `APPOINTMENT_ARRIVED` | FS xác nhận khách đến (Pending → Done) | `Appointment` | FS |
 | `IDENTITY_VERIFIED` | FS xác minh danh tính người đến | `HandoverRecord` | FS |
 | `UNIT_INSPECTED` | Khách xác nhận hiện trạng khoang | `HandoverRecord` | FS |
+| `INSPECTION_CORRECTED` | FS sửa hiện trạng sau khi khách đã đồng ý (lý do bắt buộc) | `HandoverRecord` | FS |
 | `HANDOVER_REJECTED` | Khách từ chối khoang tại chỗ | `HandoverRecord` | FS |
 | `RENTAL_ORDER_CANCELED` | Hủy đơn do khách/FM/hệ thống: quá ngưỡng từ chối, quá hạn hoặc khách không còn nhu cầu | `RentalOrder`, `StorageUnit`, `ProposalFeedback`, `RentalContract` | Customer/FM/System |
 | `HANDOVER_COMPLETED` | Hoàn tất bàn giao, đủ các cờ bắt buộc | `HandoverRecord` | FS/System |
@@ -524,9 +571,72 @@ Các bước:
 | `STORAGE_UNIT_AVAILABLE` | Cron mở lại khoang sau bảo trì hoặc giải phóng khoang khi đơn bị hủy | `StorageUnit` | System |
 | `UNIT_CHANGE_RELEASED` | Nhả khoang cũ khi khách đổi khoang sau khi đã cọc | `StorageUnit` | Customer |
 | `ACCOUNT_REGISTERED` | Tạo tài khoản mới | `Account` | Customer/Admin |
+| `RENTAL_REQUEST_CONVERTED` | Request đã duyệt được convert thành đơn + proposal | `RentalRequest` | FM/System |
+| `RENTAL_REQUEST_EXPIRED` | Cron chuyển request `Pending`/`Approved` quá `expires_at` sang `Expired` | `RentalRequest` | System |
+| `RENTAL_ORDER_CREATED` | Tạo `RentalOrder` khi convert | `RentalOrder` | FM/System |
+| `PROPOSAL_CREATED` | Tạo proposal đầu tiên khi convert | `ProposalFeedback` | FM/System |
+| `CONTRACT_EXTENDED` | Hoá đơn gia hạn `Paid` → cộng kỳ thuê | `RentalContract` | System |
+| `CONTRACT_ACCESS_SUSPENDED` | Cron tạm khoá truy cập (thu hồi mã khoá số) do quá hạn kéo dài | `RentalContract` | System |
+| `CONTRACT_ACCESS_RESTORED` | Cron mở lại truy cập khi không còn phí quá hạn chưa trả và hợp đồng hết quá hạn hoặc có yêu cầu trả kho mở | `RentalContract` | System |
+| `OVERDUE_FEE_ACCRUED` | Cron tạo / cập nhật hoá đơn phí quá hạn | `Invoice` | System |
+| `RETURN_REQUESTED` | Khách gửi yêu cầu trả kho | `ReturnRequest` | Customer |
+| `RETURN_ASSIGNED` | FM phân công FS, tạo lịch `RETURN` | `ReturnRequest` | FM |
+| `RETURN_CANCELED` | Khách huỷ yêu cầu trả kho | `ReturnRequest` | Customer |
+| `RETURN_COMPLETED` | Trả kho hoàn tất | `ReturnRequest` | System |
+| `RETURN_NO_SHOW` | Cron: khách không đến buổi trả kho — yêu cầu về `Pending` hoặc bị huỷ khi chạm ngưỡng | `ReturnRequest` | System |
+| `SUPPORT_REQUEST_CREATED` | Khách gửi yêu cầu hỗ trợ | `SupportRequest` | Customer |
+| `SUPPORT_REQUEST_ASSIGNED` | FM giao FS xử lý | `SupportRequest` | FM |
+| `SUPPORT_REQUEST_RESOLVED` | FS / FM ghi kết quả xử lý | `SupportRequest` | FS/FM |
+| `SUPPORT_REQUEST_CANCELED` | Khách huỷ yêu cầu hỗ trợ | `SupportRequest` | Customer |
+| `FACILITY_CREATED` | BOM tạo cơ sở | `Facility` | BOM |
+| `FACILITY_UPDATED` | BOM sửa / gán FM, FM/BOM đổi hình thức truy cập | `Facility` | BOM/FM |
+| `STORAGE_UNIT_CREATED` | FM thêm khoang | `StorageUnit` | FM |
+| `STORAGE_UNIT_UPDATED` | FM/BOM sửa loại / giá khoang | `StorageUnit` | FM/BOM |
+| `POLICY_UPDATED` | BOM đổi policy | `Policy` | BOM |
+| `UNIT_TYPE_UPDATED` | BOM đổi giá loại khoang | `UnitType` | BOM |
+| `ACCOUNT_CREATED` | Admin tạo tài khoản | `Account` | Admin |
+| `ACCOUNT_UPDATED` | Admin đổi role / trạng thái / thông tin | `Account` | Admin |
+| `ROLE_PERMISSIONS_UPDATED` | Admin thay quyền của một role | `Role` | Admin |
+
+- Entity type (`audit_logs.entity_type`, CHECK theo migration): `RentalRequest`, `ProposalFeedback`, `Invoice`,
+  `PaymentTransaction`, `RentalOrder`, `StorageUnit`, `Appointment`, `HandoverRecord`, `RentalContract`,
+  `UnitAccessKey`, `CheckoutRecord`, `Account`, `ReturnRequest`, `SupportRequest`, `Facility`, `Policy`, `UnitType`,
+  `Role`.
 
 - Xác minh email không tạo `AuditLog`; bản ghi là `Account.email_verified_at`. Nếu sau này có đường
   verify khác self-service (admin verify hộ, đổi email re-verify), phải bổ sung action tương ứng.
+
+# SupportRequest
+**Overview:** yêu cầu hỗ trợ / sự cố của khách (Flow 7). Bảng `support_requests` (V26); hành vi ở
+`backend/docs/support/requests.md`.
+- customer_id (N - 1: Account)
+- facility_id (N - 1: Facility)
+- contract_id (N - 1: RentalContract, nullable) - bắt buộc với `LOST_KEY`
+- category (`LOST_KEY`/`ACCESS_CODE`/`UNIT_ISSUE`/`BILLING`/`OTHER`)
+- title (≤ 255), description
+- photos - List<String>
+- status (`Open`/`Assigned`/`Resolved`/`Canceled`) - default `Open`
+- assigned_staff_id (N - 1: Account, nullable)
+- resolution (nullable)
+- fee_invoice_id (N - 1: Invoice, nullable) - hoá đơn `Service` khi xử lý có thu phí
+- created_at, assigned_at, resolved_at, updated_at
+
+**CONSTRAINTS:**
+- Index `(facility_id, status)` cho hàng chờ FM, `(customer_id)` cho danh sách của khách.
+
+# LoginEvent
+**Overview:** lịch sử đăng nhập cho Admin — mọi lần thử, thành công hay thất bại. Bảng `login_events` (V26).
+- account_id (N - 1: Account, nullable) - null khi email không khớp tài khoản nào
+- email
+- success (Boolean)
+- reason (nullable) - tên lỗi khi thất bại (`InvalidCredentials`, `AccountNotAllowed`, `EmailNotVerified`,
+  `TooManyLoginAttempts`…)
+- ip_address (nullable)
+- created_at
+
+**CONSTRAINTS:**
+- Index `(created_at DESC)` và `(account_id, created_at DESC)`.
+- Ghi trong transaction riêng: login lỗi vẫn để lại bản ghi.
 
 # Policy
 **Owner:** Flow 4 (business rules & phí); các flow chỉ đọc qua key.
@@ -536,8 +646,16 @@ Các bước:
 - updated_at
 
 **NOTES:**
-- Bảng key-value để BOM cấu hình (MVP chưa có UI — Flow 4).
+- Bảng key-value để BOM cấu hình qua `GET`/`PUT /api/bom/policies` (policy đang là số chỉ nhận số ≥ 0).
 - Danh sách key + giá trị mặc định đang dùng nằm trong `draft.md` (Flow 1 §1.1, Flow 2 §2.1); key "chờ BOM" chưa seed.
+- V27: thêm `rent.invoice_lead_days = 5` (lập hoá đơn tiền thuê tháng kế tiếp trước ngày bắt đầu tháng N ngày),
+  `overdue.escalation_days = 30` (quá hạn N ngày từ `end_date` → tạm khoá mã khoá số, báo FM); xoá
+  `order.deposit_expiry_days` (không có code đọc — hạn giữ đơn sau cọc dùng `order.expiry_days`); đổi mô tả
+  `appointment.booking_window_days` (chỉ áp cho lần đặt lịch check-in đầu tiên; đặt lại sau khi lịch bị huỷ chỉ cần
+  còn trong hạn giữ đơn).
+- V28: thêm `return.no_show_grace_minutes = 120` (lịch trả kho quá giờ kết thúc N phút mà khách chưa đến → no-show),
+  `return.max_no_shows = 2` (no-show N lần → huỷ yêu cầu trả kho).
+- `appointment.checkin_reschedule_enabled` không được seed — khách không đổi được lịch check-in `Pending`.
 
 # OrderNotification
 **Overview:** liên kết RentalOrder với 1 Notification, chủ ý rằng thông báo dành cho đơn hàng.
@@ -595,7 +713,14 @@ Các bước:
 | `UNIT_CHANGE_PAYMENT_REQUIRED` | Khách đổi khoang sau cọc và cần thanh toán phần thiếu để giữ khoang mới | Customer |
 | `DEPOSIT_REFUND_REQUIRED` | Đổi khoang sau cọc dư — FM cần hoàn tiền | FM |
 | `DEPOSIT_REFUND_PENDING` | Cọc dư sẽ được hoàn | Customer |
-| `HANDOVER_COMPLETED` | Hoàn tất check-in và bàn giao khoang | Customer |
+| `HANDOVER_COMPLETED` | Hoàn tất check-in và bàn giao khoang (link biên bản + kho đang thuê; kiểu `Both` kèm nhắc lấy mã khoá số) | Customer |
+| `RENT_INVOICE_ISSUED` | Cron lập hoá đơn tiền thuê tháng kế tiếp (kỳ, số tiền, hạn, link hoá đơn) | Customer |
+| `RENT_UNPAID` | Hoá đơn tiền thuê tháng (không phải tháng đầu) quá hạn chưa trả | FM |
+| `CONTRACT_ACCESS_SUSPENDED` | Hợp đồng quá hạn kéo dài, mã khoá số tạm khoá | Customer, FM |
+| `CONTRACT_ACCESS_RESTORED` | Quyền truy cập mở lại (khách lấy mã mới): hợp đồng hết quá hạn, hoặc mở để dọn đồ khi đã gửi yêu cầu trả kho | Customer |
+| `RETURN_DATE_SHIFTED` | Ngày trả kho khách chọn đã kín, lịch được dời sang ngày giờ khác | Customer |
+| `RETURN_NO_SHOW` | Khách không đến buổi trả kho — chờ phân công lại hoặc yêu cầu bị huỷ | Customer, FM |
+| `CHECKOUT_SHORTFALL_UNPAID` | Trả kho đã đóng nhưng hoá đơn phần còn thiếu quá hạn chưa trả — cần thu thủ công | FM |
 | `OTHER` | Thông báo khẩn cấp thủ công khi chưa có type phù hợp | Recipient do người tạo chọn |
 
 # MediaUpload

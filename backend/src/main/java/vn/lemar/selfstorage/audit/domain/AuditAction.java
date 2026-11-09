@@ -27,18 +27,20 @@ public enum AuditAction {
     INVOICE_CANCELED(AuditEntityType.INVOICE),
     /** Tiền đã vào nhưng khoang không còn giữ được — invoice Paid + refund Required. */
     INVOICE_REFUND_REQUIRED(AuditEntityType.INVOICE),
+    INVOICE_PAID(AuditEntityType.INVOICE),
+    INVOICE_EXPIRED(AuditEntityType.INVOICE),
     PAYMENT_SUCCEEDED(AuditEntityType.PAYMENT_TRANSACTION),
     PAYMENT_FAILED(AuditEntityType.PAYMENT_TRANSACTION),
     PAYMENT_DUPLICATE(AuditEntityType.PAYMENT_TRANSACTION),
     MANUAL_REFUND_RECORDED(AuditEntityType.PAYMENT_TRANSACTION),
-    /** Đổi khoang sau khi cọc dư — FM phải hoàn tiền thủ công (behavior-gap #165). */
+    /** Đổi khoang sau khi cọc dư — FM phải hoàn tiền thủ công. */
     DEPOSIT_REFUND_REQUIRED(AuditEntityType.RENTAL_ORDER),
-    /** Khách đồng ý khoang mới sau khi đã cọc — khoang cũ được nhả (behavior-gap #172). */
+    /** Khách đồng ý khoang mới sau khi đã cọc — khoang cũ được nhả. */
     UNIT_CHANGE_RELEASED(AuditEntityType.STORAGE_UNIT),
     RENTAL_ORDER_DEPOSITED(AuditEntityType.RENTAL_ORDER),
     RENTAL_ORDER_CREATED(AuditEntityType.RENTAL_ORDER),
     STORAGE_UNIT_RESERVED(AuditEntityType.STORAGE_UNIT),
-    APPOINTMENT_CREATED(AuditEntityType.APPOINTMENT),
+    APPOINTMENT_CREATED(AuditEntityType.APPOINTMENT, AuditEntityType.RENTAL_ORDER),
     /** Gán FS: một bản ghi cho Appointment (staff) và một cho RentalOrder (Scheduled → InProgress). */
     FS_ASSIGNED(AuditEntityType.APPOINTMENT, AuditEntityType.RENTAL_ORDER),
     APPOINTMENT_RESCHEDULED(AuditEntityType.APPOINTMENT),
@@ -58,6 +60,7 @@ public enum AuditAction {
     CONTRACT_ACTIVATED(AuditEntityType.RENTAL_CONTRACT),
     CONTRACT_CANCELED(AuditEntityType.RENTAL_CONTRACT),
     CONTRACT_ENDED(AuditEntityType.RENTAL_CONTRACT),
+    CONTRACT_EXTENDED(AuditEntityType.RENTAL_CONTRACT),
     HANDOVER_CANCELED(AuditEntityType.HANDOVER_RECORD),
     ACCESS_KEY_ISSUED(AuditEntityType.UNIT_ACCESS_KEY),
     ACCESS_KEY_REVOKED(AuditEntityType.UNIT_ACCESS_KEY),
@@ -66,9 +69,33 @@ public enum AuditAction {
     STORAGE_UNIT_AVAILABLE(AuditEntityType.STORAGE_UNIT),
     RENTAL_ORDER_DONE(AuditEntityType.RENTAL_ORDER),
     HANDOVER_RECORD_CREATED(AuditEntityType.HANDOVER_RECORD),
+    RETURN_REQUESTED(AuditEntityType.RETURN_REQUEST),
+    RETURN_ASSIGNED(AuditEntityType.RETURN_REQUEST),
+    RETURN_CANCELED(AuditEntityType.RETURN_REQUEST),
+    RETURN_COMPLETED(AuditEntityType.RETURN_REQUEST),
+    RETURN_NO_SHOW(AuditEntityType.RETURN_REQUEST),
     CHECKOUT_INSPECTED(AuditEntityType.CHECKOUT_RECORD),
     CHECKOUT_COMPLETED(AuditEntityType.CHECKOUT_RECORD),
-    ACCOUNT_REGISTERED(AuditEntityType.ACCOUNT);
+    OVERDUE_FEE_ACCRUED(AuditEntityType.INVOICE),
+    SUPPORT_REQUEST_CREATED(AuditEntityType.SUPPORT_REQUEST),
+    SUPPORT_REQUEST_ASSIGNED(AuditEntityType.SUPPORT_REQUEST),
+    SUPPORT_REQUEST_RESOLVED(AuditEntityType.SUPPORT_REQUEST),
+    SUPPORT_REQUEST_CANCELED(AuditEntityType.SUPPORT_REQUEST),
+    FACILITY_CREATED(AuditEntityType.FACILITY),
+    FACILITY_UPDATED(AuditEntityType.FACILITY),
+    STORAGE_UNIT_CREATED(AuditEntityType.STORAGE_UNIT),
+    STORAGE_UNIT_UPDATED(AuditEntityType.STORAGE_UNIT),
+    POLICY_UPDATED(AuditEntityType.POLICY),
+    UNIT_TYPE_UPDATED(AuditEntityType.UNIT_TYPE),
+    ACCOUNT_CREATED(AuditEntityType.ACCOUNT),
+    ACCOUNT_UPDATED(AuditEntityType.ACCOUNT),
+    ROLE_PERMISSIONS_UPDATED(AuditEntityType.ROLE),
+    ACCOUNT_REGISTERED(AuditEntityType.ACCOUNT),
+    /** FS/FM sửa hiện trạng bàn giao sau khi khách đã chốt (kèm lý do). */
+    INSPECTION_CORRECTED(AuditEntityType.HANDOVER_RECORD),
+    /** Quá hạn kéo dài: tạm khoá mã khoá số / mở lại khi hết quá hạn. */
+    CONTRACT_ACCESS_SUSPENDED(AuditEntityType.RENTAL_CONTRACT),
+    CONTRACT_ACCESS_RESTORED(AuditEntityType.RENTAL_CONTRACT);
 
     private final Set<AuditEntityType> entityTypes;
 

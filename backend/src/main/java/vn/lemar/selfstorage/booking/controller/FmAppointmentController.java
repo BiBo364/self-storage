@@ -14,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -36,6 +37,7 @@ public class FmAppointmentController {
     static final String LIST_MESSAGE = "Lấy danh sách lịch hẹn thành công";
     static final String STAFF_MESSAGE = "Lấy danh sách nhân viên cơ sở thành công";
     static final String ASSIGN_MESSAGE = "Đã phân công nhân viên phụ trách lịch hẹn";
+    static final String REASSIGN_MESSAGE = "Đã đổi nhân viên phụ trách lịch hẹn";
 
     private final AppointmentQueryService queryService;
     private final AppointmentService appointmentService;
@@ -81,8 +83,8 @@ public class FmAppointmentController {
 
     @Operation(summary = "Phân công FS cho lịch check-in",
             description = "Gán `Appointment.staff_id`, đơn `Scheduled → InProgress`, AuditLog `FS_ASSIGNED`, FS nhận "
-                    + "notification `FS_ASSIGNED`. Chỉ lịch `CHECKIN` đang `Pending` và chưa có FS (đổi FS đã gán "
-                    + "không cho ở MVP → 409); FS phải thuộc cơ sở của lịch. Quyền `appointment.assign` theo cơ sở.")
+                    + "notification `FS_ASSIGNED`. Chỉ lịch `CHECKIN` đang `Pending` và chưa có FS (lịch đã có FS → "
+                    + "409; đổi FS dùng `PUT`); FS phải thuộc cơ sở của lịch. Quyền `appointment.assign` theo cơ sở.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Đã phân công"),
             @ApiResponse(responseCode = "400", description = "Thiếu `staffId`, hoặc nhân viên không phải FS của cơ sở"),
@@ -99,6 +101,29 @@ public class FmAppointmentController {
         FmAppointmentResponse appointment = appointmentService.assignStaff(appointmentId, request.staffId(),
                 accountQueryService.requireIdByEmail(authentication.getName()));
         return ResponseEntity.ok(ApiEnvelope.ok(ASSIGN_MESSAGE, appointment));
+    }
+
+    @Operation(summary = "Đổi FS của lịch check-in",
+            description = "Lịch `CHECKIN` `Pending` đã có FS (khách chưa đến), đơn `InProgress`: đổi "
+                    + "`Appointment.staff_id` sang FS khác của cùng cơ sở. Đơn giữ nguyên trạng thái; một AuditLog "
+                    + "`FS_ASSIGNED` cho `Appointment` (`old_value.staffId` = FS cũ); FS mới nhận notification "
+                    + "`FS_ASSIGNED`. Quyền `appointment.assign` theo cơ sở.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Đã đổi FS"),
+            @ApiResponse(responseCode = "400", description = "Thiếu `staffId`, hoặc nhân viên không phải FS của cơ sở"),
+            @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
+            @ApiResponse(responseCode = "403", description = "Không phải role FM, hoặc ngoài phạm vi cơ sở"),
+            @ApiResponse(responseCode = "404", description = "Lịch hẹn không tồn tại"),
+            @ApiResponse(responseCode = "409", description = "Lịch không phải check-in, không còn Pending, chưa có FS, "
+                    + "đã là FS này, hoặc đơn không ở InProgress")
+    })
+    @PutMapping("/appointments/{appointmentId}/staff")
+    public ResponseEntity<ApiEnvelope<FmAppointmentResponse>> reassignStaff(
+            Authentication authentication, @PathVariable Long appointmentId,
+            @Valid @RequestBody AssignStaffRequest request) {
+        FmAppointmentResponse appointment = appointmentService.reassignStaff(appointmentId, request.staffId(),
+                accountQueryService.requireIdByEmail(authentication.getName()));
+        return ResponseEntity.ok(ApiEnvelope.ok(REASSIGN_MESSAGE, appointment));
     }
 
     @Schema(description = "FS được phân công")

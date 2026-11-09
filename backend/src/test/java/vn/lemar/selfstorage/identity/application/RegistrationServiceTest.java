@@ -78,6 +78,18 @@ class RegistrationServiceTest {
     }
 
     @Test
+    void registerWhilePendingDoesNotOverwriteStoredPassword() {
+        when(accountRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(verificationCodes.hasPending(EMAIL)).thenReturn(true);
+
+        assertThatThrownBy(() -> registrationService.register(new RegisterRequest(EMAIL, "attacker-pass")))
+                .isInstanceOf(vn.lemar.selfstorage.identity.application.exception.RegistrationPendingException.class);
+
+        verify(verificationCodes, never()).issue(any(), any(), any(), any());
+        verifyNoInteractions(events);
+    }
+
+    @Test
     void registerAndVerifyPassProfileToAccount() {
         when(accountRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("password-hash");

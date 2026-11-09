@@ -26,9 +26,9 @@ import vn.lemar.selfstorage.pricing.application.PricingQuery;
 /**
  * Lập hoá đơn đặt cọc khi khách đồng ý proposal ({@code specs/draft.md} › 1.3 › Đồng ý).
  *
- * <p>Số tiền theo chốt #113: giá thuê hiệu lực × {@code invoice.deposit_months}. Hạn thanh toán
+ * <p>Số tiền: giá thuê hiệu lực × {@code invoice.deposit_months}. Hạn thanh toán
  * {@code due_date = min(now + invoice.deposit_due_days, RentalOrder.expires_at)}. Đổi khoang sau khi đã cọc
- * dùng {@link #issueSupplemental} cho phần chênh lệch (behavior-gap #165).
+ * dùng {@link #issueSupplemental} cho phần chênh lệch.
  */
 @Component
 class DepositInvoiceIssuer {
@@ -80,6 +80,28 @@ class DepositInvoiceIssuer {
                 actorAccountId);
     }
 
+    /**
+     * Spec 2.3: hoá đơn tháng đầu {@code INV-RNT-…} gắn hợp đồng, hạn do caller tính
+     * ({@code min(now + handover.payment_grace_hours, expires_at)}).
+     */
+    Invoice issueFirstMonth(RentalOrder order, Long contractId, String unitCode, BigDecimal amount,
+                            Instant dueDate, Long actorAccountId) {
+        Instant now = Instant.now();
+        Invoice invoice = Invoice.forContract(contractId, order.getCustomerId(), InvoiceType.RENTAL,
+                code(order, now, "RNT"),
+                "Tiền thuê tháng đầu khoang " + unitCode,
+                "Thanh toán tiền thuê tháng đầu theo hợp đồng để nhận bàn giao khoang " + unitCode + ".",
+                amount, dueDate);
+        invoiceRepository.save(invoice);
+        auditRecorder.record(new AuditEntry(AuditAction.INVOICE_CREATED, AuditEntityType.INVOICE,
+                String.valueOf(invoice.getId()), null,
+                Map.of("code", invoice.getCode(), "type", invoice.getType().dbValue(),
+                        "status", invoice.getStatus().dbValue(), "amount", invoice.getAmount(),
+                        "orderId", order.getId(), "contractId", contractId, "dueDate", dueDate.toString()),
+                null, actorAccountId));
+        return invoice;
+    }
+
     private Invoice create(RentalOrder order, StorageUnitView unit, BigDecimal amount, InvoiceType type,
                            String title, String description, Long actorAccountId) {
         Instant now = Instant.now();
@@ -89,8 +111,8 @@ class DepositInvoiceIssuer {
         }
 
         Invoice invoice = type == InvoiceType.DEPOSIT
-                ? Invoice.deposit(order, code(order, now), title, description, amount, dueDate)
-                : Invoice.depositSupplement(order, code(order, now), title, description, amount, dueDate);
+                ? Invoice.deposit(order, code(order, now, "DEP"), title, description, amount, dueDate)
+                : Invoice.depositSupplement(order, code(order, now, "DEP"), title, description, amount, dueDate);
         invoiceRepository.save(invoice);
         auditRecorder.record(new AuditEntry(AuditAction.INVOICE_CREATED, AuditEntityType.INVOICE,
                 String.valueOf(invoice.getId()), null,
@@ -101,8 +123,8 @@ class DepositInvoiceIssuer {
         return invoice;
     }
 
-    /** Spec: {@code INV-DEP-{facility_code}-{YYMMDD}-{rand}}. */
-    private String code(RentalOrder order, Instant now) {
+    /** Spec: {@code INV-{DEP|RNT}-{facility_code}-{YYMMDD}-{rand}}. */
+    String code(RentalOrder order, Instant now, String kind) {
         Long facilityId = orderRepository.findFacilityId(order.getId())
                 .orElseThrow(RentalOrderNotFoundException::new);
         String facilityCode = facilityAccess.code(facilityId)
@@ -111,6 +133,6 @@ class DepositInvoiceIssuer {
         for (int i = 0; i < CODE_RANDOM_LENGTH; i++) {
             suffix.append(CODE_ALPHABET.charAt(random.nextInt(CODE_ALPHABET.length())));
         }
-        return "INV-DEP-" + facilityCode + "-" + CODE_DATE.format(now.atZone(CODE_ZONE)) + "-" + suffix;
+        return "INV-" + kind + "-" + facilityCode + "-" + CODE_DATE.format(now.atZone(CODE_ZONE)) + "-" + suffix;
     }
 }

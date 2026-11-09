@@ -76,6 +76,25 @@ export function notificationPath(
     case "RENTAL_ORDER_EXPIRING_SOON":
     case "HANDOVER_COMPLETED":
       return role === "CUSTOMER" ? "/my-storage" : undefined;
+    case "HANDOVER_KEY_REQUESTED":
+      return role === "FS" ? "/staff/handovers" : undefined;
+    case "FIRST_MONTH_REFUND_REQUIRED":
+    case "DEPOSIT_REFUND_REQUIRED":
+    case "CHECKOUT_REFUND_REQUIRED":
+    case "CHECKOUT_SHORTFALL_UNPAID":
+    case "RENT_UNPAID":
+      return role === "FM" ? "/fm/invoices" : role === "CUSTOMER" ? "/invoices" : undefined;
+    case "RENT_INVOICE_ISSUED":
+      return role === "CUSTOMER" ? "/invoices" : undefined;
+    case "CONTRACT_ACCESS_SUSPENDED":
+      return role === "FM"
+        ? "/fm/extend-requests"
+        : role === "CUSTOMER"
+          ? "/my-storage"
+          : undefined;
+    case "CONTRACT_ACCESS_RESTORED":
+    case "RETURN_DATE_SHIFTED":
+      return role === "CUSTOMER" ? "/my-storage" : undefined;
     default:
       return undefined;
   }

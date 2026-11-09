@@ -6,7 +6,7 @@ package vn.lemar.selfstorage.booking.domain;
  * <p>DB lưu dạng PascalCase theo CHECK constraint của {@code proposal_feedbacks}; quy đổi qua
  * {@link ProposalStatusConverter}.
  *
- * <p>{@code Canceled} thay cho {@code Expired} của spec (chốt #113): proposal không có TTL, chỉ bị huỷ
+ * <p>{@code Canceled} thay cho {@code Expired} của spec: proposal không có TTL, chỉ bị huỷ
  * khi khoang hết khả dụng lúc khách đồng ý hoặc khi đơn chạy Cancellation Cascade.
  */
 public enum ProposalStatus {

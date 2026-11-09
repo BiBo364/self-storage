@@ -9,7 +9,17 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.security.SecureRandom;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
+import vn.lemar.selfstorage.payment.application.dto.GatewayQueryResult;
 import java.util.TreeMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -25,6 +35,7 @@ import vn.lemar.selfstorage.payment.config.VnPayProperties;
  * và chữ ký HMAC-SHA512 tính trên chuỗi tham số đã sắp xếp theo thứ tự alphabet.
  */
 @Component
+@ConditionalOnProperty(prefix = "payment", name = "provider", havingValue = "vnpay", matchIfMissing = true)
 public class VnPayGateway implements PaymentGateway {
 
     private static final String VERSION = "2.1.0";
@@ -42,20 +53,44 @@ public class VnPayGateway implements PaymentGateway {
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final Duration PAYMENT_WINDOW = PaymentSession.WINDOW;
 
+    private static final String QUERY_COMMAND = "querydr";
+    private static final Logger LOG = LoggerFactory.getLogger(VnPayGateway.class);
+
     private final VnPayProperties properties;
+    private final RestClient restClient;
+    private final SecureRandom random = new SecureRandom();
+
+    @Autowired
+    public VnPayGateway(VnPayProperties properties, ObjectProvider<RestClient.Builder> restClientBuilder) {
+        requireConfigured(properties);
+        this.properties = properties;
+        this.restClient = restClientBuilder.getIfAvailable(RestClient::builder)
+                .requestFactory(GatewayHttp.requestFactory()).build();
+    }
 
     public VnPayGateway(VnPayProperties properties) {
+        requireConfigured(properties);
         this.properties = properties;
+        this.restClient = RestClient.builder().requestFactory(GatewayHttp.requestFactory()).build();
+    }
+
+    /** Fail-fast lúc khởi động khi VNPay là cổng đang dùng mà thiếu một trong bốn biến bắt buộc. */
+    private static void requireConfigured(VnPayProperties p) {
+        if (blank(p.tmnCode()) || blank(p.hashSecret()) || blank(p.payUrl()) || blank(p.returnUrl())) {
+            throw new IllegalStateException("payment.provider=vnpay nhưng thiếu VNPAY_TMN_CODE / VNPAY_HASH_SECRET / "
+                    + "VNPAY_PAY_URL / VNPAY_RETURN_URL");
+        }
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 
     @Override
     public String buildPaymentUrl(PaymentRequest request) {
-        return buildPaymentUrl(request, Instant.now());
-    }
-
-    @Override
-    public String buildPaymentUrl(PaymentRequest request, Instant createdAt) {
-        LocalDateTime now = LocalDateTime.ofInstant(createdAt, VNPAY_ZONE);
+        LocalDateTime now = request.createdAt() == null
+                ? LocalDateTime.now(VNPAY_ZONE)
+                : LocalDateTime.ofInstant(request.createdAt(), VNPAY_ZONE);
 
         Map<String, String> params = new TreeMap<>();
         params.put("vnp_Version", VERSION);
@@ -99,6 +134,91 @@ public class VnPayGateway implements PaymentGateway {
         }
         String folded = Normalizer.normalize(value, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
         return folded.replace('đ', 'd').replace('Đ', 'D');
+    }
+
+    @Override
+    public GatewayQueryResult query(String txnRef, Instant createdAt, String orderInfo, String ipAddr) {
+        String requestId = Long.toString(Math.abs(random.nextLong()), 36);
+        String createDate = LocalDateTime.now(VNPAY_ZONE).format(TIMESTAMP);
+        String transactionDate = LocalDateTime.ofInstant(createdAt, VNPAY_ZONE).format(TIMESTAMP);
+        String info = orderInfo == null || orderInfo.isBlank() ? "Truy van giao dich " + txnRef : orderInfo;
+        String ip = ipAddr == null || ipAddr.isBlank() ? "127.0.0.1" : ipAddr;
+
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("vnp_RequestId", requestId);
+        body.put("vnp_Version", VERSION);
+        body.put("vnp_Command", QUERY_COMMAND);
+        body.put("vnp_TmnCode", properties.tmnCode());
+        body.put("vnp_TxnRef", txnRef);
+        body.put("vnp_OrderInfo", info);
+        body.put("vnp_TransactionDate", transactionDate);
+        body.put("vnp_CreateDate", createDate);
+        body.put("vnp_IpAddr", ip);
+        // querydr ký chuỗi nối bằng '|' theo thứ tự cố định (khác lệnh pay).
+        body.put(HASH_FIELD, sign(String.join("|", requestId, VERSION, QUERY_COMMAND, properties.tmnCode(),
+                txnRef, transactionDate, createDate, ip, info)));
+
+        Map<?, ?> raw = restClient.post().uri(properties.apiUrl())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .body(Map.class);
+        return toQueryResult(raw);
+    }
+
+    /** Đọc response querydr; tách riêng để test chữ ký không cần gọi mạng. */
+    GatewayQueryResult toQueryResult(Map<?, ?> raw) {
+        Map<String, String> response = new LinkedHashMap<>();
+        if (raw != null) {
+            raw.forEach((k, v) -> response.put(String.valueOf(k), v == null ? "" : String.valueOf(v)));
+        }
+        boolean signatureValid = verifyQuerySignature(response);
+        if (!signatureValid) {
+            LOG.warn("querydr {}: chữ ký response không hợp lệ (vnp_ResponseCode={})", response.get("vnp_TxnRef"),
+                    response.get("vnp_ResponseCode"));
+        }
+        return new GatewayQueryResult(response.get("vnp_ResponseCode"), response.get("vnp_TransactionStatus"),
+                response.get("vnp_TransactionNo"), parseAmount(response.get("vnp_Amount")),
+                response.get("vnp_PayDate"), signatureValid, response);
+    }
+
+    /** Chuỗi ký của response querydr theo thứ tự cố định của VNPay. */
+    String querySignatureData(Map<String, String> r) {
+        return String.join("|", v(r, "vnp_ResponseId"), v(r, "vnp_Command"), v(r, "vnp_ResponseCode"),
+                v(r, "vnp_Message"), v(r, "vnp_TmnCode"), v(r, "vnp_TxnRef"), v(r, "vnp_Amount"),
+                v(r, "vnp_BankCode"), v(r, "vnp_PayDate"), v(r, "vnp_TransactionNo"),
+                v(r, "vnp_TransactionType"), v(r, "vnp_TransactionStatus"), v(r, "vnp_OrderInfo"),
+                v(r, "vnp_PromotionCode"), v(r, "vnp_PromotionAmount"));
+    }
+
+    /** Ký chuỗi bằng HashSecret của merchant (HMAC-SHA512, hex thường). */
+    String signData(String data) {
+        return sign(data);
+    }
+
+    /** Response lỗi (không có hash) coi là không hợp lệ. */
+    private boolean verifyQuerySignature(Map<String, String> r) {
+        String received = r.get(HASH_FIELD);
+        if (received == null || received.isBlank()) {
+            return false;
+        }
+        return constantTimeEquals(sign(querySignatureData(r)), received);
+    }
+
+    private static String v(Map<String, String> map, String key) {
+        String value = map.get(key);
+        return value == null ? "" : value;
+    }
+
+    private static BigDecimal parseAmount(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(raw).divide(AMOUNT_SCALE);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /** Ghép tham số đã sắp xếp thành chuỗi url-encoded — đây chính là dữ liệu đem ký. */

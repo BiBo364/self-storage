@@ -22,8 +22,7 @@ phase). Không gọi khi rời trang hoặc Hủy upload — batch Pending đư�
 - Row `Uploading` chưa có `public_id`: giữ `Canceled`; upload completion (sau khi Cloudinary trả về)
   thấy row `Canceled` sẽ xoá asset vừa lưu. Nhánh này là phòng thủ: row `Uploading` nằm trong
   transaction upload, delete batch từ transaction khác chỉ thấy row sau khi upload commit. FE chỉ
-  hiện X sau khi upload xong nên flow thực tế không trúng; muốn guarantee xoá giữa lúc upload cần
-  batch marker/table riêng.
+  hiện X sau khi upload xong nên flow thực tế không trúng; xoá giữa lúc upload không được bảo đảm.
 - Row `Attached` bỏ qua (phase đã submit, file không được xoá nữa); row `Canceled` / `Deleted` bỏ qua.
 - Idempotent: gọi lại trả `deleted=0`, `skipped=n`.
 
@@ -33,7 +32,8 @@ phase). Không gọi khi rời trang hoặc Hủy upload — batch Pending đư�
 - Gọi Cloudinary nằm trong transaction; provider lỗi → rollback row, client có thể retry.
 - Không audit — hành vi dọn file, không đổi state nghiệp vụ của flow.
 - Sau khi phase chuyển, FE không còn hiển thị nút X; file đã attach và delete batch sẽ bỏ qua.
-- Batch Pending bị bỏ ngang (không X, không attach) do job sweep/retention xử lý, không xoá ngay.
+- Batch `Pending` bị bỏ ngang (không X, không attach) không bị xoá ở đây; quá `media.orphan-cleanup.max-age`
+  (3 ngày) thì cron `MediaCleanupJob` dọn ([upload.md](upload.md)).
 
 ## Ví dụ
 

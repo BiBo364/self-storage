@@ -127,6 +127,33 @@ public class MediaService {
         return new MediaBatchAttachResult(attached);
     }
 
+    /** Upload bỏ ngang ({@code Uploading}/{@code Pending}, không đổi từ trước {@code cutoff}). */
+    @Transactional(readOnly = true)
+    public List<Long> abandonedIds(java.time.Instant cutoff) {
+        return mediaUploads.findIdsByStatusInAndUpdatedBefore(
+                List.of(MediaUploadStatus.UPLOADING, MediaUploadStatus.PENDING), cutoff);
+    }
+
+    /**
+     * Dọn một upload bỏ ngang: khoá row, kiểm lại trạng thái + mốc (có thể vừa được attach), xoá asset trên storage
+     * rồi {@code Deleted}. Storage lỗi → exception, transaction rollback, row giữ nguyên.
+     */
+    @Transactional
+    public boolean cleanupAbandoned(Long uploadId, java.time.Instant cutoff) {
+        MediaUpload row = mediaUploads.findByIdForUpdate(uploadId).orElse(null);
+        if (row == null || !row.getUpdatedAt().isBefore(cutoff)
+                || (row.getStatus() != MediaUploadStatus.UPLOADING && row.getStatus() != MediaUploadStatus.PENDING)) {
+            return false;
+        }
+        if (row.getPublicId() != null) {
+            fileStorage.delete(row.getPublicId());
+        }
+        row.markCanceled();
+        row.markDeleted();
+        mediaUploads.save(row);
+        return true;
+    }
+
     private void assertBatchOwned(UUID batchId, List<MediaUpload> rows) {
         if (!rows.isEmpty()) {
             return;

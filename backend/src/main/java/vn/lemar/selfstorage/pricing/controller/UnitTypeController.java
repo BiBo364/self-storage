@@ -17,7 +17,7 @@ import vn.lemar.selfstorage.ApiError;
 import vn.lemar.selfstorage.pricing.application.UnitTypeQueryService;
 
 /**
- * Danh mục loại khoang một cơ sở cung cấp — public cho form đặt kho lọc dropdown (B1, #126).
+ * Danh mục loại khoang một cơ sở cung cấp — public cho form đặt kho lọc dropdown.
  */
 @RestController
 @RequestMapping("/api/unit-types")

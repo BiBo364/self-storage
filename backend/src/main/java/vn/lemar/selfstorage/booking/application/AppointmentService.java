@@ -18,6 +18,7 @@ import vn.lemar.selfstorage.booking.domain.Appointment;
 import vn.lemar.selfstorage.booking.domain.AppointmentStatus;
 import vn.lemar.selfstorage.booking.domain.AppointmentType;
 import vn.lemar.selfstorage.booking.domain.RentalOrder;
+import vn.lemar.selfstorage.booking.domain.RentalOrderStatus;
 import vn.lemar.selfstorage.booking.repository.AppointmentReadRepository;
 import vn.lemar.selfstorage.booking.repository.AppointmentReadRepository.AppointmentRow;
 import vn.lemar.selfstorage.booking.repository.AppointmentRepository;
@@ -111,6 +112,56 @@ public class AppointmentService {
                 String.valueOf(orderId), Map.of("status", previousOrderStatus),
                 Map.of("status", order.getStatus().dbValue()), null, actorAccountId));
 
+        return notifyAssigned(appointmentId, staffAccountId, orderId);
+    }
+
+    /**
+     * FM đổi FS của lịch check-in đã phân công, khách chưa đến (lịch {@code Pending}, đơn {@code InProgress}). Đơn
+     * giữ nguyên trạng thái — chỉ ghi một AuditLog {@code FS_ASSIGNED} cho {@code Appointment}; FS mới nhận
+     * notification {@code FS_ASSIGNED}. Dùng khi FS cũ nghỉ / chuyển cơ sở.
+     */
+    @Transactional
+    public FmAppointmentResponse reassignStaff(Long appointmentId, Long staffAccountId, Long actorAccountId) {
+        Long facilityId = appointmentRepository.findFacilityId(appointmentId)
+                .orElseThrow(AppointmentNotFoundException::new);
+        access.can(AppointmentQueryService.PERMISSION_ASSIGN, facilityId);
+
+        Long orderId = appointmentRepository.findOrderId(appointmentId)
+                .orElseThrow(() -> new AppointmentConflictException("Lịch hẹn không gắn với đơn thuê"));
+        RentalOrder order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new AppointmentConflictException("Lịch hẹn không gắn với đơn thuê"));
+        Appointment appointment = appointmentRepository.findByIdForUpdate(appointmentId)
+                .orElseThrow(AppointmentNotFoundException::new);
+        if (appointment.getType() != AppointmentType.CHECKIN) {
+            throw new AppointmentConflictException("Chỉ phân công FS cho lịch check-in");
+        }
+        if (appointment.getStatus() != AppointmentStatus.Pending) {
+            throw new AppointmentConflictException("Lịch hẹn không còn ở trạng thái chờ");
+        }
+        if (!appointment.hasStaff()) {
+            throw new AppointmentConflictException("Lịch hẹn chưa có FS — dùng phân công lần đầu");
+        }
+        Long previousStaffId = appointment.getStaffId();
+        if (previousStaffId.equals(staffAccountId)) {
+            throw new AppointmentConflictException("FS này đang phụ trách lịch hẹn");
+        }
+        if (!facilityStaffQuery.isActiveStaffOf(staffAccountId, facilityId)) {
+            throw new AppointmentValidationException("Nhân viên không phải FS của cơ sở này");
+        }
+        if (order.getStatus() != RentalOrderStatus.IN_PROGRESS) {
+            throw new AppointmentConflictException("Đơn thuê không ở trạng thái đang thực hiện");
+        }
+
+        appointment.reassignStaff(staffAccountId);
+        Map<String, Object> newValue = new HashMap<>();
+        newValue.put("staffId", staffAccountId);
+        newValue.put("orderId", orderId);
+        auditRecorder.record(new AuditEntry(AuditAction.FS_ASSIGNED, AuditEntityType.APPOINTMENT,
+                String.valueOf(appointmentId), Map.of("staffId", previousStaffId), newValue, null, actorAccountId));
+        return notifyAssigned(appointmentId, staffAccountId, orderId);
+    }
+
+    private FmAppointmentResponse notifyAssigned(Long appointmentId, Long staffAccountId, Long orderId) {
         appointmentRepository.flush();
         AppointmentRow row = readRepository.findById(appointmentId).orElseThrow(AppointmentNotFoundException::new);
         notificationService.notify(staffAccountId, accountQueryService.requireEmailById(staffAccountId),

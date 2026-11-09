@@ -1,192 +1,255 @@
-import { AlertTriangle, Package, TrendingUp, Warehouse } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CalendarDays, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import { formatDate, formatMoney } from "../../app/format";
+import {
+  fetchFacilityReport,
+  INVOICE_TYPE_LABEL,
+  labelOf,
+  loadErrorState,
+  UNIT_STATUS_LABEL,
+  useFmLoad,
+  type FacilityReport,
+} from "../../app/services/fm";
 import type { Navigate } from "../../app/types";
-import { formatPrice, unitTypes } from "../../mocks/catalog";
-import { FACILITY_OVERDUE_COUNT, fmUnits, type FmUnitStatus } from "../../mocks/fm";
-import { DemoNotice } from "../../components/ui/DemoNotice";
-import { FilterSelect } from "../../components/ui/FilterSelect";
+import { Button } from "../../components/ui/Button";
+import { INPUT_ELEMENT, INPUT_WRAP } from "../../components/ui/FormField";
+import { SectionTitle } from "../../components/ui/SectionTitle";
+import { SurfaceState } from "../../components/ui/SurfaceState";
 
-type PeriodFilter = "7d" | "30d" | "quarter";
-
-const PERIOD_LABEL: Record<PeriodFilter, string> = {
-  "7d": "7 ngày qua",
-  "30d": "30 ngày qua",
-  quarter: "Quý này",
-};
-
-const PERIOD_MULTIPLIER: Record<PeriodFilter, number> = {
-  "7d": 0.25,
-  "30d": 1,
-  quarter: 3,
-};
-
-const STATUS_LABEL: Record<FmUnitStatus, string> = {
-  Available: "Trống",
-  OnHold: "Đang giữ",
-  Reserved: "Đã đặt trước",
-  Rented: "Đang cho thuê",
-  Maintenance: "Bảo trì",
-};
-
-const STATUS_BAR_COLOR: Record<FmUnitStatus, string> = {
+const UNIT_STATUS_BAR: Record<string, string> = {
   Available: "bg-success",
-  OnHold: "bg-warning",
   Reserved: "bg-warning",
   Rented: "bg-info",
   Maintenance: "bg-muted",
 };
 
-function unitMonthlyPrice(unitTypeId: string) {
-  return unitTypes.find((type) => type.id === unitTypeId)?.monthlyPrice ?? 0;
+function monthLabel(month: string) {
+  const [year, value] = month.split("-");
+  return value && year ? `${value}/${year}` : month;
+}
+
+function groupRevenue(report: FacilityReport) {
+  const months = new Map<string, { total: number; rows: FacilityReport["revenue"] }>();
+  for (const row of report.revenue) {
+    const bucket = months.get(row.month) ?? { total: 0, rows: [] };
+    bucket.total += Number(row.amount);
+    bucket.rows.push(row);
+    months.set(row.month, bucket);
+  }
+  return Array.from(months.entries());
 }
 
 export function FacilityReportPage({ navigate }: { navigate: Navigate }) {
-  const [period, setPeriod] = useState<PeriodFilter>("30d");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [loading, setLoading] = useState(true);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setLoading(false), 500);
-    return () => window.clearTimeout(timer);
-  }, [period, typeFilter]);
-
-  const units = fmUnits.filter((unit) => typeFilter === "all" || unit.unitTypeId === typeFilter);
-  const total = units.length;
-  const rentedUnits = units.filter((unit) => unit.status === "Rented");
-  const availableCount = units.filter((unit) => unit.status === "Available").length;
-  const occupancyRate = total === 0 ? 0 : Math.round((rentedUnits.length / total) * 100);
-  const estimatedRevenue = Math.round(
-    rentedUnits.reduce((sum, unit) => sum + unitMonthlyPrice(unit.unitTypeId), 0) *
-      PERIOD_MULTIPLIER[period],
+  const report = useFmLoad(`report:${from}:${to}`, (facility) =>
+    fetchFacilityReport(facility.id, { from, to }),
   );
-
-  const statusBreakdown = (
-    ["Available", "OnHold", "Reserved", "Rented", "Maintenance"] as const
-  ).map((status) => ({
-    status,
-    count: units.filter((unit) => unit.status === status).length,
-  }));
 
   return (
     <div className="grid gap-6">
       <div>
         <h1 className="m-0 text-title text-ink">Báo cáo cơ sở</h1>
         <p className="mt-1.5 text-small text-muted">
-          Tình hình vận hành của cơ sở bạn phụ trách — không bao gồm số liệu cơ sở khác.
+          Tình hình vận hành của{" "}
+          {report.facility ? `cơ sở ${report.facility.name}` : "cơ sở bạn phụ trách"}. Doanh thu
+          tính trên hoá đơn đã thanh toán, theo ngày thanh toán.
         </p>
       </div>
 
-      <DemoNotice tone="pending">
-        Số liệu chỉ tính trong phạm vi cơ sở bạn quản lý — kiểm tra facility phải nằm ở tầng API,
-        không chỉ ẩn ở giao diện, để tránh rủi ro xem được số liệu cơ sở khác.
-      </DemoNotice>
-
-      <div className="grid grid-cols-2 items-end gap-3 max-[760px]:grid-cols-1">
-        <FilterSelect
-          label="Khoảng thời gian"
-          value={period}
-          onChange={(value) => {
-            setPeriod(value as PeriodFilter);
-            setLoading(true);
-          }}
-        >
-          {(Object.keys(PERIOD_LABEL) as PeriodFilter[]).map((value) => (
-            <option key={value} value={value}>
-              {PERIOD_LABEL[value]}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect
-          label="Loại kho"
-          value={typeFilter}
-          onChange={(value) => {
-            setTypeFilter(value);
-            setLoading(true);
-          }}
-        >
-          <option value="all">Tất cả loại kho</option>
-          {unitTypes.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.name}
-            </option>
-          ))}
-        </FilterSelect>
+      <div className="flex flex-wrap items-end gap-3">
+        <DateInput label="Từ ngày" value={from} onChange={setFrom} />
+        <DateInput label="Đến ngày" value={to} onChange={setTo} />
+        {(from || to) && (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setFrom("");
+              setTo("");
+            }}
+          >
+            6 tháng gần nhất
+          </Button>
+        )}
       </div>
 
-      {loading ? (
-        <div className="grid gap-2 bg-surface p-6" aria-label="Đang tính số liệu">
-          <span className="h-4 w-1/3 bg-surface-subtle" />
-          <span className="h-4 w-2/3 bg-surface-subtle" />
-          <span className="h-4 w-1/2 bg-surface-subtle" />
-        </div>
+      {report.error ? (
+        <SurfaceState
+          {...loadErrorState(report.error, "báo cáo cơ sở")}
+          action={{ label: "Thử lại", onClick: report.reload }}
+        />
+      ) : !report.data ? (
+        <SurfaceState variant="loading" title="Đang tính số liệu…" />
       ) : (
-        <>
-          <div className="grid grid-cols-4 gap-2 max-[900px]:grid-cols-2 max-[520px]:grid-cols-1">
-            <button
-              className="bg-surface p-5 text-left transition-colors hover:bg-surface-subtle"
-              onClick={() => navigate("/fm/storage-units")}
-            >
-              <span className="flex items-center gap-1.5 text-label text-muted">
-                <Warehouse size={13} /> Tỷ lệ lấp đầy
-              </span>
-              <strong className="mt-2 block text-stat text-ink">{occupancyRate}%</strong>
-              <span className="mt-1 block text-label text-muted">
-                {rentedUnits.length}/{total} khoang đang cho thuê
-              </span>
-            </button>
+        <ReportBody report={report.data} loading={report.loading} navigate={navigate} />
+      )}
+    </div>
+  );
+}
 
-            <button
-              className="bg-surface p-5 text-left transition-colors hover:bg-surface-subtle"
-              onClick={() => navigate("/fm/storage-units")}
-            >
-              <span className="flex items-center gap-1.5 text-label text-muted">
-                <Package size={13} /> Khoang trống
-              </span>
-              <strong className="mt-2 block text-stat text-ink">{availableCount}</strong>
-              <span className="mt-1 block text-label text-muted">Sẵn sàng cho thuê ngay</span>
-            </button>
+function DateInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="grid gap-1.5">
+      <span className="text-label text-muted">{label}</span>
+      <div className={INPUT_WRAP}>
+        <CalendarDays size={15} />
+        <input
+          type="date"
+          className={INPUT_ELEMENT}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+    </label>
+  );
+}
 
-            <div className="bg-surface p-5">
-              <span className="flex items-center gap-1.5 text-label text-muted">
-                <TrendingUp size={13} /> Doanh thu ước tính
-              </span>
-              <strong className="mt-2 block text-[22px] font-semibold text-ink">
-                {formatPrice(estimatedRevenue)} đ
-              </strong>
-              <span className="mt-1 block text-label text-muted">Theo {PERIOD_LABEL[period]}</span>
-            </div>
+function ReportBody({
+  report,
+  loading,
+  navigate,
+}: {
+  report: FacilityReport;
+  loading: boolean;
+  navigate: Navigate;
+}) {
+  const { kpis } = report;
+  const tiles: { label: string; value: string; path: string }[] = [
+    {
+      label: "Yêu cầu đặt kho chờ xử lý",
+      value: String(kpis.pendingRequests),
+      path: "/fm/rental-requests",
+    },
+    { label: "Đơn thuê đang mở", value: String(kpis.activeOrders), path: "/fm/rental-orders" },
+    { label: "Hợp đồng đang hiệu lực", value: String(kpis.activeContracts), path: "/fm/contracts" },
+    {
+      label: "Hợp đồng quá hạn",
+      value: String(kpis.overdueContracts),
+      path: "/fm/extend-requests",
+    },
+    {
+      label: "Yêu cầu trả kho đang mở",
+      value: String(kpis.openReturnRequests),
+      path: "/fm/return-requests",
+    },
+    {
+      label: "Yêu cầu hỗ trợ đang mở",
+      value: String(kpis.openSupportRequests),
+      path: "/fm/support-requests",
+    },
+    {
+      label: "Hoá đơn chưa thanh toán",
+      value: formatMoney(kpis.unpaidAmount),
+      path: "/fm/invoices",
+    },
+    { label: "Cọc đang giữ", value: formatMoney(kpis.depositHeld), path: "/fm/invoices" },
+  ];
+  const months = groupRevenue(report);
+  const maxMonth = Math.max(0, ...months.map(([, bucket]) => bucket.total));
+  const occupancyTotal = report.occupancy.reduce((sum, row) => sum + Number(row.count), 0);
 
-            <button
-              className="bg-surface p-5 text-left transition-colors hover:bg-surface-subtle"
-              onClick={() => navigate("/fm/support-requests")}
-            >
-              <span className="flex items-center gap-1.5 text-label text-danger">
-                <AlertTriangle size={13} /> Ca quá hạn
-              </span>
-              <strong className="mt-2 block text-stat text-ink">{FACILITY_OVERDUE_COUNT}</strong>
-              <span className="mt-1 block text-label text-muted">Số liệu mẫu, chờ Flow 6</span>
-            </button>
-          </div>
+  return (
+    <div className={`grid gap-6 ${loading ? "opacity-60" : ""}`} aria-busy={loading}>
+      <div className="grid grid-cols-4 gap-2 max-[900px]:grid-cols-2 max-[520px]:grid-cols-1">
+        {tiles.map((tile) => (
+          <button
+            key={tile.label}
+            className="bg-surface p-5 text-left transition-colors hover:bg-surface-subtle"
+            onClick={() => navigate(tile.path)}
+          >
+            <span className="block text-label text-muted">{tile.label}</span>
+            <strong className="mt-2 block text-stat text-ink tabular-nums">{tile.value}</strong>
+          </button>
+        ))}
+      </div>
 
-          <section className="bg-surface p-5">
-            <h2 className="text-[15px] font-semibold text-ink">Phân bố khoang theo trạng thái</h2>
-            <div className="mt-4 grid gap-3">
-              {statusBreakdown.map(({ status, count }) => (
-                <div key={status} className="grid grid-cols-[120px_1fr_40px] items-center gap-3">
-                  <span className="text-label text-muted">{STATUS_LABEL[status]}</span>
+      <section className="bg-surface p-5">
+        <SectionTitle
+          action={
+            <span className="flex items-center gap-1.5 text-small font-semibold text-ink tabular-nums">
+              <TrendingUp size={14} /> {formatMoney(report.totalRevenue)}
+            </span>
+          }
+        >
+          Doanh thu {formatDate(report.from)} – {formatDate(report.to)}
+        </SectionTitle>
+        {months.length === 0 ? (
+          <p className="mt-4 text-small text-muted">
+            Chưa có hoá đơn nào được thanh toán trong khoảng này.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-4">
+            {months.map(([month, bucket]) => (
+              <div key={month}>
+                <div className="grid grid-cols-[80px_1fr_140px] items-center gap-3">
+                  <span className="text-label font-semibold text-ink tabular-nums">
+                    {monthLabel(month)}
+                  </span>
                   <div className="h-2 bg-surface-subtle">
                     <div
-                      className={`h-full ${STATUS_BAR_COLOR[status]}`}
-                      style={{ width: total === 0 ? "0%" : `${(count / total) * 100}%` }}
+                      className="h-full bg-brand"
+                      style={{
+                        width: maxMonth === 0 ? "0%" : `${(bucket.total / maxMonth) * 100}%`,
+                      }}
                     />
                   </div>
-                  <span className="text-right text-label font-semibold text-ink">{count}</span>
+                  <span className="text-right text-label font-semibold text-ink tabular-nums">
+                    {formatMoney(bucket.total)}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </section>
-        </>
-      )}
+                <p className="mt-1 pl-[92px] text-label text-muted max-[520px]:pl-0">
+                  {bucket.rows
+                    .map(
+                      (row) =>
+                        `${labelOf(INVOICE_TYPE_LABEL, row.type)}: ${formatMoney(row.amount)} (${row.count} hoá đơn)`,
+                    )
+                    .join(" · ")}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="bg-surface p-5">
+        <SectionTitle>Khoang theo trạng thái · {occupancyTotal} khoang</SectionTitle>
+        {report.occupancy.length === 0 ? (
+          <p className="mt-4 text-small text-muted">Cơ sở chưa có khoang nào.</p>
+        ) : (
+          <div className="mt-4 grid gap-3">
+            {report.occupancy.map((row) => (
+              <div
+                key={`${row.facilityId}-${row.status}`}
+                className="grid grid-cols-[120px_1fr_40px] items-center gap-3"
+              >
+                <span className="text-label text-muted">
+                  {labelOf(UNIT_STATUS_LABEL, row.status)}
+                </span>
+                <div className="h-2 bg-surface-subtle">
+                  <div
+                    className={`h-full ${UNIT_STATUS_BAR[row.status] ?? "bg-muted"}`}
+                    style={{
+                      width: occupancyTotal === 0 ? "0%" : `${(row.count / occupancyTotal) * 100}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-right text-label font-semibold text-ink tabular-nums">
+                  {row.count}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

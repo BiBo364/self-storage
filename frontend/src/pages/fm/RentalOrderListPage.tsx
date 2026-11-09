@@ -1,12 +1,15 @@
 import { ChevronRight, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../app/api";
+import { cancelRentalOrder } from "../../app/services/fm";
 import { fetchCurrentFmFacility } from "../../app/fmFacility";
 import { fetchFmRentalOrders } from "../../app/fmOrders";
 import type { FmRentalOrderSummary, Navigate } from "../../app/types";
 import { Button } from "../../components/ui/Button";
+import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
 import { FilterSelect } from "../../components/ui/FilterSelect";
+import { INPUT_ELEMENT, INPUT_WRAP } from "../../components/ui/FormField";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
@@ -43,6 +46,11 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelPending, setCancelPending] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -86,6 +94,29 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
   const activeCount = items.filter((order) => ACTIVE_STATUSES.includes(order.status)).length;
   const closedCount = items.length - activeCount;
 
+  function openDetails(orderId: number | null) {
+    setOpenId(orderId);
+    setCancelling(false);
+    setCancelReason("");
+    setCancelError(null);
+  }
+
+  async function cancelOrder(orderId: number) {
+    setCancelPending(true);
+    setCancelError(null);
+    try {
+      const result = await cancelRentalOrder(orderId, cancelReason);
+      setNotice(`Đã huỷ đơn #${orderId}: ${result.cancelReason}`);
+      openDetails(null);
+      setIsLoading(true);
+      setReloadKey((key) => key + 1);
+    } catch (caught) {
+      setCancelError(caught instanceof Error ? caught.message : "Không huỷ được đơn.");
+    } finally {
+      setCancelPending(false);
+    }
+  }
+
   if (isLoading) {
     return <SurfaceState variant="loading" title="Đang tải đơn thuê…" />;
   }
@@ -125,6 +156,8 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
           Theo dõi toàn bộ đơn của cơ sở và mở chi tiết khi cần xử lý.
         </p>
       </div>
+
+      {notice && <DemoNotice tone="success">{notice}</DemoNotice>}
 
       <div className="grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
         <div className="bg-surface p-4">
@@ -183,7 +216,7 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
               <button
                 key={order.id}
                 className="flex flex-wrap items-start justify-between gap-4 bg-surface p-4 text-left transition-colors hover:bg-surface-subtle"
-                onClick={() => setOpenId(order.id)}
+                onClick={() => openDetails(order.id)}
               >
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -213,7 +246,7 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
         <DetailPanel
           title={`Đơn #${openOrder.id}`}
           eyebrow={`${STATUS[openOrder.status]?.label ?? openOrder.status} · ${openOrder.customerName}`}
-          onClose={() => setOpenId(null)}
+          onClose={() => openDetails(null)}
         >
           <div className="grid gap-2 text-small text-muted">
             <span>{openOrder.customerEmail}</span>
@@ -233,22 +266,65 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
             </span>
           </div>
 
+          {cancelError && (
+            <div className="mt-4">
+              <DemoNotice tone="error">{cancelError}</DemoNotice>
+            </div>
+          )}
+
           {openOrder.needsRepropose && (
             <Button
               className="mt-6 w-full"
               onClick={() => {
-                setOpenId(null);
+                openDetails(null);
                 navigate(`/fm/rental-orders/${openOrder.id}/re-propose`);
               }}
             >
               Đề xuất lại khoang <ChevronRight size={16} />
             </Button>
           )}
+          {openOrder.availableActions.includes("CANCEL") && !cancelling && (
+            <Button variant="danger" className="mt-3 w-full" onClick={() => setCancelling(true)}>
+              Huỷ đơn
+            </Button>
+          )}
+          {cancelling && (
+            <div className="mt-4 bg-surface-subtle p-4">
+              <label className="grid gap-1.5 text-label text-muted" htmlFor="cancel-reason">
+                Lý do huỷ (để trống: “Khách không còn nhu cầu”)
+                <div className={INPUT_WRAP}>
+                  <textarea
+                    id="cancel-reason"
+                    className={`${INPUT_ELEMENT} min-h-[72px] py-2`}
+                    value={cancelReason}
+                    maxLength={500}
+                    onChange={(event) => setCancelReason(event.target.value)}
+                  />
+                </div>
+              </label>
+              <p className="mt-2 text-label text-muted">
+                Huỷ đơn sẽ huỷ đề xuất, hoá đơn chưa thanh toán, lịch hẹn và biên bản đang mở của
+                đơn.
+              </p>
+              <div className="mt-3 flex gap-2.5">
+                <Button
+                  variant="danger"
+                  pending={cancelPending}
+                  onClick={() => cancelOrder(openOrder.id)}
+                >
+                  Xác nhận huỷ đơn
+                </Button>
+                <Button variant="secondary" onClick={() => setCancelling(false)}>
+                  Quay lại
+                </Button>
+              </div>
+            </div>
+          )}
           <Button
             variant="secondary"
             className="mt-3 w-full"
             onClick={() => {
-              setOpenId(null);
+              openDetails(null);
               navigate("/fm/rental-orders");
             }}
           >

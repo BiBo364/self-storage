@@ -69,21 +69,54 @@ public class Appointment {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Spec 1.5: khách chọn khung giờ → lịch {@code CHECKIN}/{@code Pending}, chưa có FS. */
+    public static Appointment checkin(Long customerId, Long facilityId, LocalDate date, Instant startedAt,
+                                      Instant endAt) {
+        Appointment appointment = new Appointment();
+        appointment.customerId = customerId;
+        appointment.facilityId = facilityId;
+        appointment.type = AppointmentType.CHECKIN;
+        appointment.date = date;
+        appointment.startedAt = startedAt;
+        appointment.endAt = endAt;
+        appointment.status = AppointmentStatus.Pending;
+        appointment.updatedAt = Instant.now();
+        return appointment;
+    }
+
+    /** Trả kho: FM đã phân công FS nên lịch {@code RETURN} tạo kèm {@code staff_id}. */
+    public static Appointment returnVisit(Long customerId, Long facilityId, Long staffId, LocalDate date,
+                                          Instant startedAt, Instant endAt) {
+        Appointment appointment = checkin(customerId, facilityId, date, startedAt, endAt);
+        appointment.type = AppointmentType.RETURN;
+        appointment.staffId = staffId;
+        return appointment;
+    }
+
     /** Đã có FS phụ trách. */
     public boolean hasStaff() {
         return staffId != null;
     }
 
-    /**
-     * Spec 1.5: FM chỉ định FS phụ trách ca tiếp đón. Chỉ lịch {@code Pending} chưa có FS — đổi FS đã gán không
-     * cho ở MVP (đã có FS → 409).
-     */
+    /** Spec 1.5: FM chỉ định FS phụ trách ca tiếp đón. Chỉ lịch {@code Pending} chưa có FS. */
     public void assignStaff(Long staffAccountId) {
         if (status != AppointmentStatus.Pending) {
             throw new IllegalStateException("Lịch hẹn " + id + " không còn Pending: " + status);
         }
         if (staffId != null) {
             throw new IllegalStateException("Lịch hẹn " + id + " đã có FS phụ trách");
+        }
+        this.staffId = staffAccountId;
+        this.updatedAt = Instant.now();
+    }
+
+    /** FM đổi FS của lịch {@code Pending} đã có FS (khách chưa đến) sang FS khác. */
+    public void reassignStaff(Long staffAccountId) {
+        if (status != AppointmentStatus.Pending) {
+            throw new IllegalStateException("Lịch hẹn " + id + " không còn Pending: " + status);
+        }
+        if (staffId == null || staffId.equals(staffAccountId)) {
+            throw new IllegalStateException("Lịch hẹn " + id + " chưa có FS hoặc đã là FS này");
         }
         this.staffId = staffAccountId;
         this.updatedAt = Instant.now();

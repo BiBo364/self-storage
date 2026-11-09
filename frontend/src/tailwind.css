@@ -5,7 +5,7 @@
  * the base reset; it sits in the `base` layer so utilities can still win.
  * Tailwind ships without its preflight on purpose: the reset above already
  * normalises box-sizing, buttons, inputs and focus rings, and running both
- * resets changes form/button/heading behaviour (see issue #25).
+ * resets changes form/button/heading behaviour.
  */
 @layer theme, base, utilities;
 

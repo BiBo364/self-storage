@@ -59,7 +59,9 @@ class NotificationServiceTest {
     @Test
     void notifyRendersTemplateAndSendsEmail() {
         stubSaveAssignsId(1L);
-        Map<String, Object> values = Map.of("unitCode", "A-01", "proposalLink", "https://lemar.vn/p/1");
+        // Template duyệt có thêm loại + kích thước khoang (spec 1.1).
+        Map<String, Object> values = Map.of("unitCode", "A-01", "unitType", "Small (1 × 2 × 2.2 m)",
+                "proposalLink", "https://lemar.vn/p/1");
 
         Notification result = notificationService.notify(1L, "customer1@lemar.vn", NotificationRecipient.CUSTOMER,
                 NotificationType.RENTAL_REQUEST_APPROVED, values, null);
@@ -94,7 +96,7 @@ class NotificationServiceTest {
     void notifyRejectsMissingPlaceholder() {
         assertThatThrownBy(() -> notificationService.notify(1L, "customer1@lemar.vn",
                 NotificationRecipient.CUSTOMER, NotificationType.RENTAL_REQUEST_APPROVED,
-                Map.of("unitCode", "A-01"), null))
+                Map.of("unitCode", "A-01", "unitType", "Small"), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("proposalLink");
 

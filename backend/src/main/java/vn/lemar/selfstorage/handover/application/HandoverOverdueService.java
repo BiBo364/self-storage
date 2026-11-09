@@ -8,16 +8,20 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.lemar.selfstorage.booking.application.HandoverOrderService;
 import vn.lemar.selfstorage.booking.application.RentalOrderCancellationService;
 import vn.lemar.selfstorage.booking.application.RentalOrderLifecycle;
 import vn.lemar.selfstorage.booking.application.RentalOrderQuery;
 import vn.lemar.selfstorage.handover.domain.HandoverRecord;
 import vn.lemar.selfstorage.handover.domain.HandoverResult;
+import vn.lemar.selfstorage.handover.domain.RentalContract;
 import vn.lemar.selfstorage.handover.repository.HandoverRecordRepository;
+import vn.lemar.selfstorage.handover.repository.RentalContractRepository;
 import vn.lemar.selfstorage.identity.application.AccountQueryService;
 import vn.lemar.selfstorage.notification.application.NotificationRecipient;
 import vn.lemar.selfstorage.notification.application.NotificationService;
 import vn.lemar.selfstorage.notification.application.NotificationType;
+import vn.lemar.selfstorage.payment.application.PaymentService;
 
 /**
  * Cron Flow 2: đóng phiên bàn giao quá {@code due_at}.
@@ -28,6 +32,9 @@ import vn.lemar.selfstorage.notification.application.NotificationType;
  *       {@code HANDOVER_OVERDUE}.</li>
  *   <li>Hết hạn giữ kho: chạy Cancellation Cascade, đơn/khoang/hóa đơn xử lý theo luồng huỷ.</li>
  * </ul>
+ *
+ * <p>Hoá đơn tháng đầu của hợp đồng còn phiên thanh toán mở (trong cửa sổ 15') → đợi lượt sau, không huỷ hoá đơn
+ * đang có link còn sống. Khoá đơn → record (cùng thứ tự với luồng bàn giao).
  *
  * <p>Chạy một instance (cùng scope cron Appointment); record row lock + điều kiện trạng thái giữ
  * idempotent. Một record lỗi không chặn cả lượt — job bắt và log.
@@ -47,12 +54,19 @@ public class HandoverOverdueService {
     private final NotificationService notificationService;
     private final AccountQueryService accountQueryService;
     private final String frontendUrl;
+    private final HandoverOrderService orders;
+    private final RentalContractRepository contracts;
+    private final PaymentService paymentService;
 
     HandoverOverdueService(HandoverRecordRepository handoverRecords, HandoverService handoverService,
                            RentalOrderQuery orderQuery, RentalOrderLifecycle orderLifecycle,
                            RentalOrderCancellationService orderCancellation,
                            NotificationService notificationService, AccountQueryService accountQueryService,
-                           @Value("${app.frontend-url}") String frontendUrl) {
+                           @Value("${app.frontend-url}") String frontendUrl, HandoverOrderService orders,
+                           RentalContractRepository contracts, PaymentService paymentService) {
+        this.orders = orders;
+        this.contracts = contracts;
+        this.paymentService = paymentService;
         this.handoverRecords = handoverRecords;
         this.handoverService = handoverService;
         this.orderQuery = orderQuery;
@@ -71,6 +85,12 @@ public class HandoverOverdueService {
     /** Huỷ một record nếu đang quá hạn; trả {@code true} khi thực sự xử lý. */
     @Transactional
     public boolean cancelIfOverdue(Long recordId) {
+        // Projection, không nạp entity: nạp trước rồi mới khoá thì Hibernate trả lại bản cũ trong persistence context.
+        Long orderId = handoverRecords.findOrderIdById(recordId).orElse(null);
+        if (orderId == null) {
+            return false;
+        }
+        orders.lock(orderId);
         HandoverRecord record = handoverRecords.findByIdForUpdate(recordId).orElse(null);
         Instant now = Instant.now();
         if (record == null || record.getResult() != HandoverResult.IN_PROGRESS
@@ -86,6 +106,10 @@ public class HandoverOverdueService {
             LOG.warn("Đơn {} đã Done nhưng record {} còn IN_PROGRESS — bỏ qua", order.id(), recordId);
             return false;
         }
+        // Kiểm phiên cổng sau khi khoá đơn: khách mở phiên trả tháng đầu (cũng khoá đơn) thì đợi phiên đóng.
+        if (hasOpenFirstMonthSession(order.id())) {
+            return false;
+        }
         handoverService.cancelByOrderId(order.id(), REASON);
         if (!order.inProgress()) {
             LOG.warn("Đơn {} không InProgress ({}) — chỉ đóng record/contract", order.id(), order.status());
@@ -98,6 +122,15 @@ public class HandoverOverdueService {
             orderCancellation.cancel(order.id(), REASON);
         }
         return true;
+    }
+
+    private boolean hasOpenFirstMonthSession(Long orderId) {
+        return contracts.findCurrentByOrderId(orderId)
+                .map(RentalContract::getId)
+                .flatMap(orders::firstMonthInvoice)
+                .filter(invoice -> "Unpaid".equals(invoice.status()))
+                .map(invoice -> !paymentService.invoicesWithOpenSession(List.of(invoice.invoiceId())).isEmpty())
+                .orElse(false);
     }
 
     private void notifyOverdue(RentalOrderQuery.Snapshot order) {

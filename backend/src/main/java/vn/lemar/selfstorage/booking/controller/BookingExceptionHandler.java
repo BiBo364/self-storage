@@ -8,6 +8,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import vn.lemar.selfstorage.ApiError;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
+import vn.lemar.selfstorage.booking.application.exception.BookingConflictException;
+import vn.lemar.selfstorage.booking.application.exception.BookingForbiddenException;
+import vn.lemar.selfstorage.booking.application.exception.BookingNotFoundException;
+import vn.lemar.selfstorage.booking.application.exception.BookingValidationException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentForbiddenException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentNotFoundException;
 import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationException;
@@ -38,6 +42,26 @@ import vn.lemar.selfstorage.booking.application.exception.StorageUnitUnavailable
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 public class BookingExceptionHandler {
+
+    @ExceptionHandler(BookingNotFoundException.class)
+    public ResponseEntity<ApiError> handleBookingNotFound(BookingNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(BookingForbiddenException.class)
+    public ResponseEntity<ApiError> handleBookingForbidden(BookingForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(BookingConflictException.class)
+    public ResponseEntity<ApiError> handleBookingConflict(BookingConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.now(ex.getMessage()));
+    }
+
+    @ExceptionHandler(BookingValidationException.class)
+    public ResponseEntity<ApiError> handleBookingValidation(BookingValidationException ex) {
+        return ResponseEntity.badRequest().body(ApiError.now(ex.getMessage()));
+    }
 
     @ExceptionHandler({ProposalNotFoundException.class, RentalOrderNotFoundException.class})
     public ResponseEntity<ApiError> handleNotFound(RuntimeException ex) {

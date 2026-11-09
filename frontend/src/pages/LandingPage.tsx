@@ -2,23 +2,36 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { Navigate } from "../app/types";
 import { PAGE_CONTAINER as CONTAINER } from "../app/layout";
-import { facilities, formatPrice, unitTypes } from "../mocks/catalog";
+import { formatMoney } from "../app/format";
+import {
+  fetchCatalog,
+  formatArea,
+  formatDimensions,
+  useResource,
+  type Catalog,
+  type UnitTypeOption,
+} from "../app/services/customer";
 import { Button } from "../components/ui/Button";
 import { SelectField } from "../components/ui/FormField";
+import { SurfaceState } from "../components/ui/SurfaceState";
 
 const HAZARD_STRIPE = "repeating-linear-gradient(135deg, #101413 0 11px, var(--brand) 11px 22px)";
 
-function areaNumber(area: string) {
-  return Number(area.replace(/[^\d]/g, ""));
+function areaRange(unitTypes: UnitTypeOption[]): string {
+  const areas = unitTypes
+    .map((unit) => Number(unit.area))
+    .filter((area) => Number.isFinite(area) && area > 0);
+  if (areas.length === 0) return "—";
+  const min = Math.min(...areas);
+  const max = Math.max(...areas);
+  return min === max ? formatArea(min) : `${formatArea(min).replace(" m²", "")}–${formatArea(max)}`;
 }
 
-function unitRange(unitIds: string[]) {
-  const areas = unitTypes
-    .filter((unit) => unitIds.includes(unit.id))
-    .map((unit) => areaNumber(unit.area))
-    .filter((area) => area > 0);
-  if (areas.length === 0) return "Đang cập nhật";
-  return `${Math.min(...areas)}–${Math.max(...areas)} m²`;
+function lowestPrice(unitTypes: UnitTypeOption[]): number | null {
+  const prices = unitTypes
+    .map((unit) => Number(unit.monthlyPrice))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  return prices.length ? Math.min(...prices) : null;
 }
 
 const SECTIONS = [
@@ -78,22 +91,53 @@ function SectionNav() {
   );
 }
 
+function SkeletonRows({ count, height }: { count: number; height: string }) {
+  return (
+    <div className="grid gap-2" role="status" aria-label="Đang tải">
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className={`${height} animate-pulse bg-surface`} />
+      ))}
+    </div>
+  );
+}
+
 export function LandingPage({ navigate }: { navigate: Navigate }) {
+  const catalog = useResource(fetchCatalog);
   const [facilityId, setFacilityId] = useState("");
   const [typeId, setTypeId] = useState("");
-  const areaRange = (() => {
-    const areas = unitTypes.map((unit) => areaNumber(unit.area)).filter((area) => area > 0);
-    return `${Math.min(...areas)}–${Math.max(...areas)} m²`;
-  })();
+  const data: Catalog | null = catalog.data;
+  const facilities = data?.facilities ?? [];
+  const unitTypes = data?.unitTypes ?? [];
+  const finderTypes =
+    data && facilityId ? (data.offerings[Number(facilityId)] ?? []) : (data?.unitTypes ?? []);
 
   function browseFromFinder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const params = new URLSearchParams();
     if (facilityId) params.set("facility", facilityId);
     if (typeId) params.set("type", typeId);
-    const query = params.toString();
-    navigate(`/units${query ? `?${query}` : ""}`);
+    const search = params.toString();
+    navigate(`/units${search ? `?${search}` : ""}`);
   }
+
+  const catalogState =
+    catalog.loading && !data ? (
+      <SkeletonRows count={3} height="h-[68px]" />
+    ) : catalog.error && !data ? (
+      <SurfaceState
+        variant="error"
+        title="Không tải được danh sách cơ sở"
+        description={catalog.error}
+        action={{ label: "Thử lại", onClick: catalog.reload }}
+      />
+    ) : facilities.length === 0 ? (
+      <SurfaceState
+        variant="empty"
+        title="Chưa có cơ sở nào đang mở"
+        description="Bạn vẫn có thể gửi nhu cầu để đội ngũ vận hành liên hệ khi có cơ sở phù hợp."
+        action={{ label: "Gửi yêu cầu", onClick: () => navigate("/rental-requests/new") }}
+      />
+    ) : null;
 
   return (
     <>
@@ -117,17 +161,21 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
             <div className="mt-8 grid max-w-[560px] grid-cols-3 gap-8 max-[760px]:gap-5">
               <div>
                 <strong className="block whitespace-nowrap text-stat text-ink">
-                  {String(facilities.length).padStart(2, "0")}
+                  {data ? String(facilities.length).padStart(2, "0") : "—"}
                 </strong>
                 <span className="text-label text-muted">cơ sở đang mở</span>
               </div>
               <div>
-                <strong className="block whitespace-nowrap text-stat text-ink">{areaRange}</strong>
+                <strong className="block whitespace-nowrap text-stat text-ink">
+                  {data ? areaRange(unitTypes) : "—"}
+                </strong>
                 <span className="text-label text-muted">diện tích khoang</span>
               </div>
               <div>
-                <strong className="block whitespace-nowrap text-stat text-ink">07:00–21:00</strong>
-                <span className="text-label text-muted">giờ tiếp nhận</span>
+                <strong className="block whitespace-nowrap text-stat text-ink">
+                  {data ? String(unitTypes.length).padStart(2, "0") : "—"}
+                </strong>
+                <span className="text-label text-muted">loại khoang</span>
               </div>
             </div>
           </div>
@@ -148,27 +196,35 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
                 label="Cơ sở"
                 name="facility"
                 value={facilityId}
-                onChange={setFacilityId}
-                placeholder="Tất cả cơ sở"
+                onChange={(value) => {
+                  setFacilityId(value);
+                  setTypeId("");
+                }}
+                placeholder={catalog.loading && !data ? "Đang tải cơ sở…" : "Tất cả cơ sở"}
                 options={facilities.map((facility) => ({
-                  value: facility.id,
-                  label: `${facility.district} · ${facility.name}`,
+                  value: String(facility.id),
+                  label: facility.name,
                 }))}
               />
               <SelectField
-                label="Diện tích"
+                label="Loại khoang"
                 name="type"
                 value={typeId}
                 onChange={setTypeId}
-                placeholder="Tất cả diện tích"
-                options={unitTypes.map((unit) => ({
-                  value: unit.id,
-                  label: `${unit.area} · ${unit.name}`,
+                placeholder="Tất cả loại khoang"
+                options={finderTypes.map((unit) => ({
+                  value: String(unit.id),
+                  label: `${unit.name} · ${formatArea(unit.area)}`,
                 }))}
               />
               <Button type="submit" className="mt-1 w-full">
-                Xem khoang trống <ArrowRight size={16} />
+                Xem khoang <ArrowRight size={16} />
               </Button>
+              {catalog.error && !data && (
+                <p className="text-label text-danger" role="alert">
+                  {catalog.error}
+                </p>
+              )}
               <p className="flex items-center justify-center gap-1.5 text-label text-muted">
                 <Check size={14} className="text-success" aria-hidden="true" />
                 Không cần đăng nhập · Giá tham khảo theo tháng
@@ -184,49 +240,51 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
         <div className={`${CONTAINER} pb-16`}>
           <div className="mb-2 flex items-center justify-between gap-4">
             <span className="label text-muted">Cơ sở đang mở · giá tham khảo</span>
-            <span className="label text-muted">{facilities.length} cơ sở</span>
+            {data && <span className="label text-muted">{facilities.length} cơ sở</span>}
           </div>
-          <div className="grid gap-2">
-            {facilities.map((facility, index) => {
-              const units = unitTypes.filter((unit) => facility.availableUnitIds.includes(unit.id));
-              const from = units.length ? Math.min(...units.map((unit) => unit.monthlyPrice)) : 0;
-              return (
-                <div
-                  key={facility.id}
-                  className="grid grid-cols-[32px_minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_24px] items-center gap-4 bg-surface px-4 py-4 max-[900px]:grid-cols-[28px_minmax(0,1fr)_auto] max-[760px]:gap-2"
-                >
-                  <span className="text-label text-muted">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <div className="min-w-0 max-[900px]:col-span-2">
-                    <strong className="block text-small font-semibold text-ink">
-                      {facility.name}
-                    </strong>
-                    <span className="mt-0.5 block truncate text-label text-muted">
-                      {facility.address} · {facility.hours.replace("Tiếp nhận hàng: ", "")}
-                    </span>
-                  </div>
-                  <span className="text-small text-muted max-[900px]:hidden">
-                    {facility.district}
-                  </span>
-                  <span className="text-small text-ink max-[900px]:hidden">
-                    <span className="block text-label text-muted">Từ</span>
-                    {formatPrice(from)} đ
-                  </span>
-                  <span className="text-label text-muted max-[900px]:hidden">
-                    {units.length} loại khoang
-                  </span>
-                  <button
-                    className="border-0 bg-transparent p-0 text-muted hover:text-accent"
-                    onClick={() => navigate(`/units?facility=${facility.id}`)}
-                    aria-label={`Xem khoang tại ${facility.name}`}
+          {catalogState ?? (
+            <div className="grid gap-2">
+              {facilities.map((facility, index) => {
+                const offered = data?.offerings[facility.id] ?? [];
+                const from = lowestPrice(offered);
+                return (
+                  <div
+                    key={facility.id}
+                    className="grid grid-cols-[32px_minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_24px] items-center gap-4 bg-surface px-4 py-4 max-[900px]:grid-cols-[28px_minmax(0,1fr)_auto] max-[760px]:gap-2"
                   >
-                    <ArrowRight size={17} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                    <span className="text-label text-muted">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <div className="min-w-0 max-[900px]:col-span-2">
+                      <strong className="block text-small font-semibold text-ink">
+                        {facility.name}
+                      </strong>
+                      <span className="mt-0.5 block truncate text-label text-muted">
+                        {[facility.address, facility.operatingHours].filter(Boolean).join(" · ")}
+                      </span>
+                    </div>
+                    <span className="text-small text-muted max-[900px]:hidden">
+                      {facility.code}
+                    </span>
+                    <span className="text-small text-ink max-[900px]:hidden">
+                      <span className="block text-label text-muted">Từ</span>
+                      {from === null ? "—" : formatMoney(from)}
+                    </span>
+                    <span className="text-label text-muted max-[900px]:hidden">
+                      {offered.length} loại khoang
+                    </span>
+                    <button
+                      className="border-0 bg-transparent p-0 text-muted hover:text-accent"
+                      onClick={() => navigate(`/units?facility=${facility.id}`)}
+                      aria-label={`Xem khoang tại ${facility.name}`}
+                    >
+                      <ArrowRight size={17} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 
@@ -240,58 +298,73 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
               </h2>
             </div>
             <p className="max-w-[42ch] text-small leading-relaxed text-muted">
-              Ba khung tham chiếu, vẽ đúng tỷ lệ. Giá là giá niêm yết theo tháng, chưa gồm phí phát
-              sinh nếu có.
+              Mỗi loại khoang vẽ theo tỷ lệ diện tích. Giá là giá niêm yết theo tháng, chưa gồm phí
+              phát sinh nếu có.
             </p>
           </div>
-          <div className="grid gap-2">
-            {unitTypes.map((unit) => {
-              const area = areaNumber(unit.area);
-              const square = 48 + (area - 4) * 5;
-              return (
-                <div
-                  key={unit.id}
-                  className="grid grid-cols-[160px_minmax(0,1fr)_auto] items-center gap-6 bg-surface p-5 max-[760px]:grid-cols-1 max-[760px]:gap-3"
-                >
+          {catalog.loading && !data ? (
+            <SkeletonRows count={3} height="h-[158px]" />
+          ) : catalog.error && !data ? (
+            <SurfaceState
+              variant="error"
+              title="Không tải được danh sách loại khoang"
+              description={catalog.error}
+              action={{ label: "Thử lại", onClick: catalog.reload }}
+            />
+          ) : unitTypes.length === 0 ? (
+            <SurfaceState variant="empty" title="Chưa có loại khoang nào được công bố" />
+          ) : (
+            <div className="grid gap-2">
+              {unitTypes.map((unit) => {
+                const area = Number(unit.area) || 0;
+                const square = Math.min(90, 36 + area * 7);
+                return (
                   <div
-                    className="relative flex h-[118px] w-[160px] items-end border-2 border-[var(--container-border)] bg-surface-subtle p-3 max-[760px]:w-full"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-                      backgroundSize: "16px 16px",
-                    }}
+                    key={unit.id}
+                    className="grid grid-cols-[160px_minmax(0,1fr)_auto] items-center gap-6 bg-surface p-5 max-[760px]:grid-cols-1 max-[760px]:gap-3"
                   >
-                    <span className="absolute right-3 top-2.5 text-label text-muted">
-                      {unit.area}
-                    </span>
-                    <span
-                      className="border-2 border-[#101413] bg-brand"
-                      style={{ width: square, height: square }}
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-section text-ink">{unit.name}</h3>
-                    <p className="mt-1 text-small text-muted">{unit.description}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 max-[760px]:items-start">
-                    <div className="flex items-baseline gap-2">
-                      <strong className="text-stat text-ink">
-                        {formatPrice(unit.monthlyPrice)}
-                      </strong>
-                      <span className="text-label text-muted">đ / tháng</span>
-                    </div>
-                    <button
-                      className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
-                      onClick={() => navigate(`/units?type=${unit.id}`)}
+                    <div
+                      className="relative flex h-[118px] w-[160px] items-end border-2 border-[var(--container-border)] bg-surface-subtle p-3 max-[760px]:w-full"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+                        backgroundSize: "16px 16px",
+                      }}
                     >
-                      Xem khoang <ArrowRight size={15} />
-                    </button>
+                      <span className="absolute right-3 top-2.5 text-label text-muted">
+                        {formatArea(unit.area)}
+                      </span>
+                      <span
+                        className="border-2 border-[#101413] bg-brand"
+                        style={{ width: square, height: square }}
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div>
+                      <h3 className="text-section text-ink">{unit.name}</h3>
+                      <p className="mt-1 text-small text-muted">
+                        Kích thước (rộng × sâu × cao): {formatDimensions(unit)}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 max-[760px]:items-start">
+                      <div className="flex items-baseline gap-2">
+                        <strong className="text-stat text-ink">
+                          {formatMoney(unit.monthlyPrice)}
+                        </strong>
+                        <span className="text-label text-muted">/ tháng</span>
+                      </div>
+                      <button
+                        className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
+                        onClick={() => navigate(`/units?type=${unit.id}`)}
+                      >
+                        Xem khoang <ArrowRight size={15} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 
@@ -314,10 +387,10 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
           </div>
           <div className="grid grid-cols-4 gap-2 max-[900px]:grid-cols-2 max-[760px]:grid-cols-1">
             {[
-              ["Gửi nhu cầu", "Điền cơ sở, diện tích và thời hạn. Không cần tài khoản."],
-              ["Nhận đề xuất", "FM kiểm tra khoang trống và gửi phương án cụ thể."],
+              ["Gửi nhu cầu", "Điền cơ sở, loại khoang và thời hạn. Không cần tài khoản."],
+              ["Nhận đề xuất", "Quản lý cơ sở kiểm tra khoang trống và gửi phương án cụ thể."],
               ["Đặt cọc", "Thanh toán cọc trong thời hạn để giữ khoang."],
-              ["Nhận kho", "Chọn lịch bàn giao và nhận chìa khoá tại cơ sở."],
+              ["Nhận kho", "Chọn lịch bàn giao, ký hợp đồng và nhận quyền truy cập tại cơ sở."],
             ].map(([title, copy]) => (
               <div key={title} className="bg-surface p-5">
                 <span className="mb-3 block h-2 w-2 bg-brand" aria-hidden="true" />
@@ -342,44 +415,48 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
               </h2>
             </div>
             <p className="max-w-[42ch] text-small leading-relaxed text-muted">
-              Địa chỉ, giờ tiếp nhận và diện tích đang có. Chọn cơ sở để xem khoang cụ thể.
+              Địa chỉ, giờ hoạt động và diện tích đang có. Chọn cơ sở để xem khoang cụ thể.
             </p>
           </div>
-          <div className="mb-2 grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] gap-5 px-4 text-label text-muted max-[900px]:hidden">
-            <span>Cơ sở</span>
-            <span>Địa chỉ</span>
-            <span>Giờ tiếp nhận</span>
-            <span>Diện tích</span>
-            <span />
-          </div>
-          <div className="grid gap-2">
-            {facilities.map((facility) => (
-              <div
-                key={facility.id}
-                className="grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] items-center gap-5 bg-surface p-4 max-[900px]:grid-cols-1 max-[900px]:gap-2"
-              >
-                <div>
-                  <strong className="block text-small font-semibold text-ink">
-                    {facility.name}
-                  </strong>
-                  <span className="text-label text-muted">{facility.district}</span>
-                </div>
-                <span className="text-small text-muted">{facility.address}</span>
-                <span className="text-small text-muted">
-                  {facility.hours.replace("Tiếp nhận hàng: ", "")}
-                </span>
-                <span className="text-small text-ink">{unitRange(facility.availableUnitIds)}</span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="whitespace-nowrap"
-                  onClick={() => navigate(`/units?facility=${facility.id}`)}
-                >
-                  Xem khoang
-                </Button>
+          {catalogState ?? (
+            <>
+              <div className="mb-2 grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] gap-5 px-4 text-label text-muted max-[900px]:hidden">
+                <span>Cơ sở</span>
+                <span>Địa chỉ</span>
+                <span>Giờ hoạt động</span>
+                <span>Diện tích</span>
+                <span />
               </div>
-            ))}
-          </div>
+              <div className="grid gap-2">
+                {facilities.map((facility) => (
+                  <div
+                    key={facility.id}
+                    className="grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] items-center gap-5 bg-surface p-4 max-[900px]:grid-cols-1 max-[900px]:gap-2"
+                  >
+                    <div>
+                      <strong className="block text-small font-semibold text-ink">
+                        {facility.name}
+                      </strong>
+                      <span className="text-label text-muted">{facility.code}</span>
+                    </div>
+                    <span className="text-small text-muted">{facility.address ?? "—"}</span>
+                    <span className="text-small text-muted">{facility.operatingHours ?? "—"}</span>
+                    <span className="text-small text-ink">
+                      {areaRange(data?.offerings[facility.id] ?? [])}
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="whitespace-nowrap"
+                      onClick={() => navigate(`/units?facility=${facility.id}`)}
+                    >
+                      Xem khoang
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </section>
 
@@ -390,7 +467,7 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
               Chưa chắc cần bao nhiêu?
             </span>
             <h2 className="mt-3 max-w-[19ch] text-[2.75rem] leading-[0.95] tracking-[-0.02em] text-[var(--on-dark-ink)] max-[760px]:text-[2.25rem]">
-              Gửi nhu cầu. FM sẽ đề xuất khoang phù hợp.
+              Gửi nhu cầu. Cơ sở sẽ đề xuất khoang phù hợp.
             </h2>
           </div>
           <div className="flex shrink-0 gap-2.5 max-[900px]:mt-7">
@@ -398,7 +475,7 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
               Gửi yêu cầu đặt kho <ArrowRight size={16} />
             </Button>
             <Button variant="onDark" onClick={() => navigate("/units")}>
-              Xem khoang trống
+              Xem khoang
             </Button>
           </div>
         </div>

@@ -50,7 +50,7 @@ const navigation: (WorkspaceNavItem & { view: View; ready: boolean })[] = [
     ready: true,
   },
   {
-    label: "Yêu cầu gia hạn",
+    label: "Hợp đồng quá hạn",
     path: "/fm/extend-requests",
     view: "fm-extend-requests",
     icon: CalendarClock,

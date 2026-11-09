@@ -32,8 +32,26 @@ import { CustomerContractOverviewPage } from "./pages/fm/CustomerContractOvervie
 import { DailySchedulePage } from "./pages/fs/DailySchedulePage";
 import { HandoverChecklistPage } from "./pages/fs/HandoverChecklistPage";
 import { PaymentReconciliationPage } from "./pages/admin/PaymentReconciliationPage";
+import { HandoverQueuePage } from "./pages/fs/HandoverQueuePage";
+import { ReturnQueuePage } from "./pages/fs/ReturnQueuePage";
+import { ReturnCheckoutPage } from "./pages/fs/ReturnCheckoutPage";
+import { StaffSupportPage } from "./pages/fs/SupportQueuePage";
+import { HandoverPage } from "./pages/HandoverPage";
+import { PaymentResultPage } from "./pages/PaymentResultPage";
+import { SupportPage } from "./pages/SupportPage";
+import { BomShell } from "./components/layout/BomShell";
+import { BomDashboardPage } from "./pages/bom/BomDashboardPage";
+import { BomFacilitiesPage } from "./pages/bom/BomFacilitiesPage";
+import { BomStaffPage } from "./pages/bom/BomStaffPage";
+import { BomPricingPage } from "./pages/bom/BomPricingPage";
+import { BomInvoicesPage } from "./pages/bom/BomInvoicesPage";
+import { AdminAccountsPage } from "./pages/admin/AdminAccountsPage";
+import { AdminPermissionsPage } from "./pages/admin/AdminPermissionsPage";
+import { AdminLoginEventsPage } from "./pages/admin/AdminLoginEventsPage";
+import { AdminAuditLogsPage } from "./pages/admin/AdminAuditLogsPage";
 import type { Theme } from "./components/ui/ThemeToggle";
 import { ROLE_HOME, viewFromLocation } from "./app/routes";
+import { ChatWidget } from "./components/domain/ChatWidget";
 import { View } from "./app/types";
 
 const THEME_STORAGE_KEY = "kho-moc-theme";
@@ -49,6 +67,8 @@ function getInitialTheme(): Theme {
 
 function App() {
   const [view, setView] = useState<View>(viewFromLocation);
+  // Giữ pathname để key lại trang đọc id từ URL — cùng view khác id thì setView không render lại.
+  const [pathname, setPathname] = useState(() => window.location.pathname);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -66,7 +86,10 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    const onPopState = () => setView(viewFromLocation());
+    const onPopState = () => {
+      setView(viewFromLocation());
+      setPathname(window.location.pathname);
+    };
     window.addEventListener("popstate", onPopState);
     if (window.location.pathname === "/admin/payments") {
       window.history.replaceState({}, "", "/admin/reconciliation");
@@ -112,7 +135,10 @@ function App() {
 
   function navigate(path: string) {
     window.history.pushState({}, "", path);
-    startTransition(() => setView(viewFromLocation()));
+    startTransition(() => {
+      setView(viewFromLocation());
+      setPathname(window.location.pathname);
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -127,6 +153,9 @@ function App() {
     view === "proposals" ||
     view === "invoices" ||
     view === "appointments" ||
+    view === "handover" ||
+    view === "payment-result" ||
+    view === "support" ||
     (view === "request" && !!session);
   const isFmView =
     view === "fm-rental-requests" ||
@@ -141,23 +170,32 @@ function App() {
     view === "fm-reports" ||
     view === "fm-invoices" ||
     view === "fm-contracts";
-  const isFsView = view === "fs-schedule" || view === "fs-handover";
-  const isAdminView = view === "admin-payments";
+  const isFsView =
+    view === "fs-schedule" ||
+    view === "fs-handover" ||
+    view === "fs-handovers" ||
+    view === "fs-returns" ||
+    view === "fs-return-detail" ||
+    view === "fs-support";
+  const isBomView = view.startsWith("bom-");
+  const isAdminView = view.startsWith("admin-");
   const isNotificationView = view === "notifications";
   // The route guard only picks the screen to render; the real gate is the API
   // (403 on /api/** for the wrong role). /notifications is shared by every
   // role per fe-pages/shared/03; today CUSTOMER, FM and FS have a shell.
-  const allowedRoles: UserRole[] | null = isAdminView
-    ? ["ADMIN"]
-    : isFsView
-      ? ["FS"]
-      : isFmView
-        ? ["FM"]
-        : isCustomerView
-          ? ["CUSTOMER"]
-          : isNotificationView
-            ? ["CUSTOMER", "FM", "FS"]
-            : null;
+  const allowedRoles: UserRole[] | null = isBomView
+    ? ["BOM"]
+    : isAdminView
+      ? ["ADMIN"]
+      : isFsView
+        ? ["FS"]
+        : isFmView
+          ? ["FM"]
+          : isCustomerView
+            ? ["CUSTOMER"]
+            : isNotificationView
+              ? ["CUSTOMER", "FM", "FS"]
+              : null;
   const needsLoginRedirect = !isAuthLoading && allowedRoles !== null && !session;
   const isWrongRole =
     !isAuthLoading &&
@@ -213,12 +251,15 @@ function App() {
           {view === "appointments" && <AppointmentBookingPage navigate={navigate} />}
           {view === "notifications" && <NotificationsPage navigate={navigate} />}
           {view === "request" && <RequestPage navigate={navigate} embedded />}
+          {view === "handover" && <HandoverPage navigate={navigate} />}
+          {view === "payment-result" && <PaymentResultPage navigate={navigate} />}
+          {view === "support" && <SupportPage navigate={navigate} />}
         </CustomerShell>
       ) : isFmShellView ? (
         <FmShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
           {view === "fm-rental-requests" && <RentalRequestQueuePage navigate={navigate} />}
           {view === "fm-orders" && <RentalOrderListPage navigate={navigate} />}
-          {view === "fm-proposal-redo" && <ProposalRedoPage navigate={navigate} />}
+          {view === "fm-proposal-redo" && <ProposalRedoPage key={pathname} navigate={navigate} />}
           {view === "fm-appointments" && <AppointmentSchedulePage />}
           {view === "fm-return-requests" && <ReturnRequestQueuePage />}
           {view === "fm-extend-requests" && <ExtendRequestQueuePage />}
@@ -232,12 +273,28 @@ function App() {
         </FmShell>
       ) : isFsShellView ? (
         <FsShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
-          {view === "fs-schedule" && <DailySchedulePage />}
+          {view === "fs-schedule" && <DailySchedulePage navigate={navigate} />}
           {view === "fs-handover" && <HandoverChecklistPage navigate={navigate} />}
+          {view === "fs-handovers" && <HandoverQueuePage navigate={navigate} />}
+          {view === "fs-returns" && <ReturnQueuePage navigate={navigate} />}
+          {view === "fs-return-detail" && <ReturnCheckoutPage navigate={navigate} />}
+          {view === "fs-support" && <StaffSupportPage navigate={navigate} />}
           {isNotificationView && <NotificationsPage navigate={navigate} />}
         </FsShell>
+      ) : isBomView ? (
+        <BomShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
+          {view === "bom-dashboard" && <BomDashboardPage navigate={navigate} />}
+          {view === "bom-facilities" && <BomFacilitiesPage navigate={navigate} />}
+          {view === "bom-staff" && <BomStaffPage navigate={navigate} />}
+          {view === "bom-pricing" && <BomPricingPage navigate={navigate} />}
+          {view === "bom-invoices" && <BomInvoicesPage navigate={navigate} />}
+        </BomShell>
       ) : isAdminView ? (
         <AdminShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
+          {view === "admin-accounts" && <AdminAccountsPage navigate={navigate} />}
+          {view === "admin-permissions" && <AdminPermissionsPage navigate={navigate} />}
+          {view === "admin-login-events" && <AdminLoginEventsPage navigate={navigate} />}
+          {view === "admin-audit-logs" && <AdminAuditLogsPage navigate={navigate} />}
           {view === "admin-payments" && <PaymentReconciliationPage />}
         </AdminShell>
       ) : (
@@ -257,6 +314,9 @@ function App() {
           <PublicFooter navigate={navigate} />
         </>
       )}
+      {!isAuthView &&
+        (isCustomerShellView ||
+          (!isFmShellView && !isFsShellView && !isBomView && !isAdminView)) && <ChatWidget />}
     </div>
   );
 }
