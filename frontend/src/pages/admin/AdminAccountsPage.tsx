@@ -381,6 +381,7 @@ export function AdminAccountsPage({ navigate }: { navigate: Navigate }) {
 
       {creating && (
         <CreatePanel
+          facilities={facilities}
           onClose={() => setCreating(false)}
           onCreated={(row) => {
             setCreating(false);
@@ -407,9 +408,11 @@ export function AdminAccountsPage({ navigate }: { navigate: Navigate }) {
 }
 
 function CreatePanel({
+  facilities,
   onClose,
   onCreated,
 }: {
+  facilities: PublicFacility[];
   onClose: () => void;
   onCreated: (row: AccountRow) => void;
 }) {
@@ -418,6 +421,8 @@ function CreatePanel({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("FS");
+  // Gán cơ sở ngay lúc tạo FS — không phải tạo xong rồi mở lại tài khoản để gán.
+  const [facilityIds, setFacilityIds] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -436,6 +441,7 @@ function CreatePanel({
           name: name.trim() || undefined,
           phone: phone.trim() || undefined,
           role,
+          facilityIds: role === "FS" && facilityIds.length > 0 ? facilityIds : undefined,
         }),
       );
     } catch (caught) {
@@ -481,6 +487,31 @@ function CreatePanel({
         <Field id="new-name" label="Họ tên" value={name} onChange={setName} />
         <Field id="new-phone" label="Số điện thoại" value={phone} onChange={setPhone} />
         <Select id="new-role" label="Role" value={role} onChange={setRole} options={roleOptions} />
+        {role === "FS" && (
+          <div className="grid gap-2">
+            <span className="text-label text-muted">Cơ sở làm việc (có thể chọn sau)</span>
+            {facilities.map((facility) => (
+              <label key={facility.id} className="flex items-center gap-2.5 text-small text-ink">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--brand)]"
+                  checked={facilityIds.includes(facility.id)}
+                  onChange={(event) =>
+                    setFacilityIds((ids) =>
+                      event.target.checked
+                        ? [...ids, facility.id]
+                        : ids.filter((id) => id !== facility.id),
+                    )
+                  }
+                />
+                {facility.name} <span className="text-label text-muted">({facility.code})</span>
+              </label>
+            ))}
+            <p className="m-0 text-label text-muted">
+              Khi bắt buộc ca đang bật, FM cần xếp ca cho FS mới trước khi phân công việc.
+            </p>
+          </div>
+        )}
       </div>
       {error && <DemoNotice tone="error">{error}</DemoNotice>}
     </DetailPanel>

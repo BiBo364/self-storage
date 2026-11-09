@@ -245,7 +245,7 @@ public class BackofficeController {
     @PostMapping("/api/admin/accounts")
     public ResponseEntity<ApiEnvelope<AccountRow>> createAccount(@Valid @RequestBody AccountBody body) {
         return ok("Đã tạo tài khoản", accounts.create(body.email(), body.password(), body.name(), body.phone(),
-                body.role(), me()));
+                body.role(), body.facilityIds(), me()));
     }
 
     @PatchMapping("/api/admin/accounts/{id}")
@@ -328,7 +328,7 @@ public class BackofficeController {
     }
 
     public record AccountBody(@NotBlank @Email String email, @NotBlank @Size(min = 8, max = 100) String password,
-                              String name, String phone, @NotBlank String role) {
+                              String name, String phone, @NotBlank String role, List<Long> facilityIds) {
     }
 
     public record AccountUpdateBody(String role, String status, String name, String phone) {

@@ -141,7 +141,7 @@ Lần 409 không ghi audit; lần 200 ghi `ACCOUNT_UPDATED | Account | 5 | {"fac
 | Method | Path | Hành vi |
 |---|---|---|
 | GET | `/api/admin/accounts?role=&status=&q=&page=&size=` | tài khoản + cơ sở được gán / phụ trách + lần đăng nhập thành công gần nhất |
-| POST | `/api/admin/accounts` `{email, password, name?, phone?, role}` | tạo tài khoản đã xác minh email; mật khẩu ≥ 8; email trùng → 409 |
+| POST | `/api/admin/accounts` `{email, password, name?, phone?, role, facilityIds?}` | tạo tài khoản đã xác minh email; mật khẩu ≥ 8; email trùng → 409. `facilityIds` gán cơ sở ngay lúc tạo — chỉ cho role `FS` (role khác kèm cơ sở → 400), cơ sở không tồn tại → 400; ghi vào audit `ACCOUNT_CREATED` (`new_value.facilityIds`). FS mới chưa có ca: khi `staff.shift_required` bật, FM xếp ca trước khi phân công |
 | PATCH | `/api/admin/accounts/{id}` `{role?, status?, name?, phone?}` | đổi role / khoá (`BANNED`) / mở; không tự đổi role hoặc khoá chính mình (409); đổi khỏi FS thì gỡ gán cơ sở |
 | GET / PUT | `/api/admin/accounts/{id}/profile` | hồ sơ nhân viên của tài khoản FS / FM gồm số giấy tờ ([hr.md › Hồ sơ nhân viên](hr.md#hồ-sơ-nhân-viên)) |
 | PUT | `/api/admin/accounts/{id}/facilities` `{facilityIds}` | gán FS vào đúng các cơ sở này (thay toàn bộ); không phải tài khoản FS → 409; cơ sở không tồn tại → 400; gỡ khỏi cơ sở mà FS còn việc mở → 409 ([Gán FS vào cơ sở](#gán-fs-vào-cơ-sở)) |

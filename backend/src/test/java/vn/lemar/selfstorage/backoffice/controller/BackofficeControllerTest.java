@@ -188,7 +188,8 @@ class BackofficeControllerTest {
     void adminRoutes() throws Exception {
         login("admin@x.vn", "ADMIN", 1L);
         when(accounts.list(isNull(), isNull(), eq("fs"), eq(0), eq(50))).thenReturn(List.of(account("FS")));
-        when(accounts.create("n@x.vn", "Test@1234", null, null, "FS", 1L)).thenReturn(account("FS"));
+        // Body không gửi facilityIds → controller truyền null (gán cơ sở lúc tạo là tuỳ chọn).
+        when(accounts.create("n@x.vn", "Test@1234", null, null, "FS", null, 1L)).thenReturn(account("FS"));
         when(accounts.update(4L, "FM", null, null, null, 1L)).thenReturn(account("FM"));
         when(accounts.setStaffFacilities(4L, List.of(1L), 1L)).thenReturn(account("FS"));
         when(accounts.loginEvents(isNull(), anyInt(), anyInt())).thenReturn(List.of());

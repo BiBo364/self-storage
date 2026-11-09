@@ -311,6 +311,27 @@ class SupportBackofficeIntegrationTest {
     // ------------------------------------------------------------------ Admin
 
     @Test
+    void adminAssignsFacilitiesWhenCreatingAnFsAccount() {
+        long adminId = id("select id from accounts where email = '" + ADMIN + "'");
+        String email = "fsnew" + SEQ.incrementAndGet() + System.nanoTime() % 100000 + "@lemar.vn";
+
+        AccountRow created = accounts.create(email, "Test@1234", "FS mới", null, "FS",
+                List.of(facilityId, facilityId), adminId);
+
+        assertThat(created.facilityIds()).containsExactly(facilityId);
+        assertThat(jdbc.queryForObject("select new_value ->> 'facilityIds' from audit_logs where action = "
+                + "'ACCOUNT_CREATED' and entity_id = ? order by id desc limit 1", String.class,
+                String.valueOf(created.id()))).isEqualTo("[" + facilityId + "]");
+        // Chỉ FS được gán cơ sở; cơ sở không tồn tại → 400, không tạo tài khoản.
+        assertThatThrownBy(() -> accounts.create("fmx" + email, "Test@1234", null, null, "FM",
+                List.of(facilityId), adminId)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> accounts.create("fsx" + email, "Test@1234", null, null, "FS",
+                List.of(-1L), adminId)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(jdbc.queryForObject("select count(*) from accounts where email in (?, ?)", Integer.class,
+                "fmx" + email, "fsx" + email)).isZero();
+    }
+
+    @Test
     void adminManagesAccountsPermissionsAndSeesLogs() {
         long adminId = id("select id from accounts where email = '" + ADMIN + "'");
         String email = "staff" + SEQ.incrementAndGet() + System.nanoTime() % 100000 + "@lemar.vn";

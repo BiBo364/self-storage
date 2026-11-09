@@ -102,6 +102,25 @@ public class AccountAdminService {
     /** Tạo tài khoản (nhân viên hoặc khách) đã xác minh email, đăng nhập được ngay. */
     @Transactional
     public AccountRow create(String email, String password, String name, String phone, String role, Long actorId) {
+        return create(email, password, name, phone, role, List.of(), actorId);
+    }
+
+    /**
+     * Như trên, kèm cơ sở gán ngay lúc tạo (chỉ tài khoản FS) — ADMIN không phải tạo xong rồi mới gán. Tài khoản mới
+     * chưa có việc nên không cần kiểm việc còn mở.
+     */
+    @Transactional
+    public AccountRow create(String email, String password, String name, String phone, String role,
+                             List<Long> facilityIds, Long actorId) {
+        List<Long> facilities = facilityIds == null ? List.of() : facilityIds.stream().distinct().toList();
+        if (!facilities.isEmpty() && !"FS".equals(role)) {
+            throw new IllegalArgumentException("Chỉ gán cơ sở cho tài khoản FS");
+        }
+        for (Long facilityId : facilities) {
+            if (facilityId == null || !facilityAccess.exists(facilityId)) {
+                throw new IllegalArgumentException("Cơ sở " + facilityId + " không tồn tại");
+            }
+        }
         String normalized = Account.normalize(email);
         if (normalized == null || !normalized.contains("@")) {
             throw new IllegalArgumentException("Email không hợp lệ");
@@ -118,8 +137,12 @@ public class AccountAdminService {
                 insert into accounts (email, password_hash, email_verified_at, role_id, name, phone)
                 values (?, ?, now(), (select id from roles where name = ?), ?, ?) returning id""", Long.class,
                 normalized, passwordEncoder.encode(password), role, blankToNull(name), blankToNull(phone));
+        for (Long facilityId : facilities) {
+            jdbc.update("insert into account_facility_assignments (account_id, facility_id) values (?, ?)",
+                    id, facilityId);
+        }
         audit(AuditAction.ACCOUNT_CREATED, AuditEntityType.ACCOUNT, id, null,
-                Map.of("email", normalized, "role", role), null, actorId);
+                Map.of("email", normalized, "role", role, "facilityIds", facilities), null, actorId);
         return get(id);
     }
 

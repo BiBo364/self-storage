@@ -90,6 +90,8 @@ export function createAccount(body: {
   name?: string;
   phone?: string;
   role: string;
+  /** Chỉ cho FS — gán cơ sở ngay lúc tạo. */
+  facilityIds?: number[];
 }): Promise<AccountRow> {
   return authed<AccountRow>("/api/admin/accounts", { method: "POST", body });
 }
