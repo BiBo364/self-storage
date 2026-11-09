@@ -150,4 +150,23 @@ class SmtpEmailSenderTest {
             TransactionSynchronizationManager.clearSynchronization();
         }
     }
+
+    @Test
+    void asyncSenderReturnsBeforeSmtpFinishesAndStillDelivers() throws Exception {
+        java.util.concurrent.CountDownLatch smtpBusy = new java.util.concurrent.CountDownLatch(1);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            smtpBusy.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            return null;
+        }).when(mailSender).send(org.mockito.ArgumentMatchers.any(org.springframework.mail.SimpleMailMessage.class));
+        SmtpEmailSender async = new SmtpEmailSender(mailSender, "noreply@lemar.vn", "", true);
+        try {
+            // SMTP đang "treo" mà send vẫn trả ngay: caller (request duyệt…) không chờ mail.
+            assertThat(async.send("to@lemar.vn", "Tiêu đề", "Nội dung")).isTrue();
+            smtpBusy.countDown();
+            org.mockito.Mockito.verify(mailSender, org.mockito.Mockito.timeout(5000))
+                    .send(org.mockito.ArgumentMatchers.any(org.springframework.mail.SimpleMailMessage.class));
+        } finally {
+            async.destroy();
+        }
+    }
 }

@@ -10,8 +10,8 @@ package vn.lemar.selfstorage.notification;
  * <ul>
  *   <li>Best-effort, không retry/outbox: process chết sau commit nhưng trước khi gửi xong thì
  *       email mất, không dấu vết. Gửi lỗi trả {@code false} và không thử lại.</li>
- *   <li>Gửi đồng bộ trên thread đang gọi, kể cả nhánh afterCommit — SMTP chậm làm chậm caller.
- *       Chưa có {@code @Async}. Nếu cần, chỉ đẩy bước deliver sang executor, interface không đổi.</li>
+ *   <li>Bước deliver chạy trên executor nền (2 luồng, hàng đợi 500; {@code app.mail.async=false} thì đồng bộ):
+ *       caller không chờ SMTP. {@code true} nghĩa là đã xếp hàng, không phải đã gửi xong; lỗi gửi chỉ log.</li>
  *   <li>Muốn bền (không mất mail, retry được) phải làm outbox + worker — cần đổi spec trước.</li>
  * </ul>
  */

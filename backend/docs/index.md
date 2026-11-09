@@ -273,8 +273,10 @@ Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev
 - **Known limitation**:
   - Gửi best-effort, không retry/outbox. Process chết sau commit nhưng trước khi gửi xong thì
     email mất, không dấu vết. Gửi lỗi trả `false` và không thử lại.
-  - Gửi đồng bộ trên thread caller, kể cả nhánh afterCommit — SMTP chậm làm chậm response.
-    Không dùng `@Async`, không có outbox / worker.
+  - Gửi trên executor nền của `SmtpEmailSender` (2 luồng, hàng đợi 500; đầy thì luồng gọi tự gửi): request
+    trả về ngay sau commit, không chờ SMTP (Gmail mở kết nối TLS mỗi email, 1–3 giây). `true` = đã xếp hàng, chưa
+    chắc đã gửi xong. Tắt app thì đợi tối đa 20 giây cho mail đang xếp hàng. `app.mail.async=false` (cấu hình test)
+    gửi đồng bộ. Không có outbox / worker bền: mail đang xếp hàng mất nếu process chết.
   - Layout HTML là mẫu cố định dùng chung; nội dung theo `(type, recipient)` do
     `NotificationTemplateCatalog` render (placeholder `{{key}}`).
 
