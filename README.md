@@ -12,6 +12,9 @@ Hệ thống cho thuê kho self-storage. Modular monolith: **Spring Boot 3.3 · 
 ## Chạy nhanh (dev)
 
 ```bash
+# 0) Env: copy rồi điền 5 giá trị bắt buộc (Cloudinary ×3 + 2 key cổng thanh toán)
+cp .env.example .env
+
 # 1) Hạ tầng: Postgres + Redis (mail gửi thật qua Gmail SMTP — điền MAIL_* trong .env)
 docker compose up -d
 
@@ -25,9 +28,13 @@ curl http://localhost:8080/api/health
 cd frontend && npm ci && npm run dev
 ```
 
-- Build cả app trong Docker (tuỳ chọn): `docker compose --profile app up -d`
+- Chạy cả app trong Docker (không cần JDK/Node): `docker compose --profile app up -d --build` — service
+  `backend` đọc `.env` của repo rồi trỏ DB/Redis vào mạng Docker, nghe cổng **8080**. FE vẫn chạy `npm run dev`
+  (proxy `/api` → `localhost:8080`).
 - Env: copy `.env.example` → `.env` ở thư mục gốc repo (không commit `.env`). Backend tự đọc `../.env` khi chạy từ
   `backend/` (`spring.config.import` trong `application.yml`), không cần export biến tay.
+- Thiếu `CLOUDINARY_*` hoặc credential của cổng đang chọn thì app **chết lúc khởi động**, có chủ đích; cổng không
+  dùng thì không bắt buộc.
 - Backend cần `JWT_SECRET` dạng Base64, giải mã tối thiểu 32 byte; `.env.example` và Docker Compose có key mẫu chỉ
   dùng cho local.
 - `JWT_ACCESS_TOKEN_TTL` là thời hạn access token dạng ISO-8601, mặc định `PT15M`.

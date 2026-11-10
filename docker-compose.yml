@@ -35,11 +35,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Nạp toàn bộ .env của repo (Cloudinary + credential cổng thanh toán là @NotBlank, thiếu là app
+    # chết lúc boot). `required: false` để `docker compose up -d` chỉ dựng Postgres/Redis vẫn chạy được
+    # khi chưa copy .env. Các biến dưới đây phải trỏ vào mạng Docker nên khai lại để đè giá trị trong .env.
+    env_file:
+      - path: .env
+        required: false
     environment:
+      SERVER_PORT: 8080
       DB_URL: jdbc:postgresql://postgres:5432/self_storage
       DB_USER: self_storage
       DB_PASSWORD: self_storage
       REDIS_HOST: redis
+      REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-PT15M}
       # Mail thật qua Gmail SMTP — giá trị lấy từ .env (xem .env.example).
