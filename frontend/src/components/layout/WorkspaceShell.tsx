@@ -74,11 +74,11 @@ export function WorkspaceShell({
   return (
     <div className="flex min-h-screen bg-background">
       <aside
-        className={`fixed inset-y-0 left-0 z-20 flex w-[236px] flex-col bg-[var(--dark)] px-3 py-4 text-[var(--on-dark-ink)] transition-transform duration-200 max-[760px]:z-30 max-[760px]:w-[min(280px,88vw)] max-[760px]:-translate-x-full ${
+        className={`fixed inset-y-0 left-0 z-20 flex w-[236px] flex-col overflow-hidden bg-[var(--dark)] px-3 py-4 text-[var(--on-dark-ink)] transition-transform duration-200 max-[760px]:z-30 max-[760px]:w-[min(280px,88vw)] max-[760px]:-translate-x-full ${
           menuOpen ? "max-[760px]:translate-x-0" : ""
         }`}
       >
-        <div className="flex items-center justify-between px-2 pb-6">
+        <div className="flex shrink-0 items-center justify-between px-2 pb-6">
           <Brand tone="onDark" onClick={onBrandClick} />
           <button
             className="hidden h-8 w-8 place-items-center border-0 bg-transparent text-[var(--on-dark-ink)] max-[760px]:grid"
@@ -88,8 +88,13 @@ export function WorkspaceShell({
             <X size={18} />
           </button>
         </div>
-        <div className="mb-2 px-2.5 text-label text-[rgba(233,234,230,.55)]">{roleLabel}</div>
-        <nav className="grid gap-0.5" aria-label={`Điều hướng ${roleLabel}`}>
+        <div className="mb-2 shrink-0 px-2.5 text-label text-[rgba(233,234,230,.55)]">
+          {roleLabel}
+        </div>
+        <nav
+          className="sidebar-scroll grid min-h-0 flex-1 content-start gap-0.5 overflow-y-auto"
+          aria-label={`Điều hướng ${roleLabel}`}
+        >
           {navItems.map(({ label, path, icon: Icon, badge }) => {
             const isActive = activePath === path;
             return (
@@ -120,7 +125,7 @@ export function WorkspaceShell({
             );
           })}
         </nav>
-        <div className="mt-auto grid gap-3 px-2.5 pt-4">
+        <div className="mt-auto grid shrink-0 gap-3 px-2.5 pt-4">
           {sidebarNote}
           <button
             className="inline-flex items-center gap-2 border-0 bg-transparent px-0 py-2 text-left text-small font-semibold text-[rgba(233,234,230,.65)] hover:text-[var(--danger)]"

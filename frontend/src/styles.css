@@ -219,6 +219,25 @@ select option:checked {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--brand-strong);
 }
+/* Sidebar tối: thanh cuộn mảnh, màu theo nền tối để không chói khi menu dài (FM có 15 mục). */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(233, 234, 230, 0.22) transparent;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(233, 234, 230, 0.22);
+  border: none;
+  border-radius: 3px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(233, 234, 230, 0.38);
+}
 @keyframes surface-state-spin {
   from {
     transform: rotate(0deg);
