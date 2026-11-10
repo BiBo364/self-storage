@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, LifeBuoy, PackageOpen, Receipt } from "lucide-react";
+import { Bell, CalendarDays, FileText, LifeBuoy, PackageOpen, Receipt } from "lucide-react";
 import { authGateway } from "../../app/auth";
 import { useUnreadNotificationCount } from "../../app/notifications";
 import type { Navigate, View } from "../../app/types";
@@ -11,6 +11,12 @@ const navigation: (WorkspaceNavItem & { view: View })[] = [
     path: "/my-storage",
     view: "my-storage",
     icon: PackageOpen,
+  },
+  {
+    label: "Hợp đồng & biên bản",
+    path: "/records",
+    view: "records",
+    icon: FileText,
   },
   {
     label: "Hoá đơn & thanh toán",

@@ -12,6 +12,7 @@ import { FmShell } from "./components/layout/FmShell";
 import { FsShell } from "./components/layout/FsShell";
 import { AdminShell } from "./components/layout/AdminShell";
 import { MyStoragePage } from "./pages/MyStoragePage";
+import { RecordsPage } from "./pages/RecordsPage";
 import { ContractDetailPage } from "./pages/ContractDetailPage";
 import { ProposalsPage } from "./pages/ProposalsPage";
 import { InvoicesPage } from "./pages/InvoicesPage";
@@ -155,6 +156,7 @@ function App() {
   const isAuthView = view === "login" || view === "register" || view === "verify";
   const isCustomerView =
     view === "my-storage" ||
+    view === "records" ||
     view === "contract-detail" ||
     view === "proposals" ||
     view === "invoices" ||
@@ -259,6 +261,7 @@ function App() {
       ) : isCustomerShellView ? (
         <CustomerShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
           {view === "my-storage" && <MyStoragePage navigate={navigate} />}
+          {view === "records" && <RecordsPage navigate={navigate} />}
           {view === "contract-detail" && <ContractDetailPage navigate={navigate} />}
           {view === "proposals" && <ProposalsPage navigate={navigate} />}
           {view === "invoices" && <InvoicesPage navigate={navigate} />}

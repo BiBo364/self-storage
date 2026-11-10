@@ -44,6 +44,7 @@ export type View =
   | "invoices"
   | "appointments"
   | "notifications"
+  | "records"
   | "fm-rental-requests"
   | "fm-proposal-redo"
   | "fm-appointments"
