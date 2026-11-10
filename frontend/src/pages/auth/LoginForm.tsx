@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { Navigate, Notice } from "../../app/types";
-import { ROLE_HOME } from "../../app/routes";
+import { ROLE_HOME, queryParam } from "../../app/routes";
 import { authGateway, type UserRole } from "../../app/auth";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
@@ -20,6 +20,17 @@ const ROLE_PAGE_NAMES: Record<UserRole, string> = {
   FS: "FS",
   CUSTOMER: "khách hàng",
 };
+
+/**
+ * `?next=` do guard để lại khi đá về login: chỉ nhận path nội bộ. Chặn `//host` / `/\host` (mở
+ * redirect ra ngoài) và chính `/login` (lặp vô hạn).
+ */
+function safeNext(): string | null {
+  const raw = queryParam("next");
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return null;
+  if (raw === "/login" || raw.startsWith("/login?")) return null;
+  return raw;
+}
 
 export function LoginForm({ navigate }: { navigate: Navigate }) {
   const [notice, setNotice] = useState<Notice>(
@@ -53,7 +64,7 @@ export function LoginForm({ navigate }: { navigate: Navigate }) {
         setNotice({ tone: "info", message: `Trang của ${roleName} đang được hoàn thiện.` });
         return;
       }
-      navigate(home);
+      navigate(safeNext() ?? home);
     } finally {
       setIsSubmitting(false);
     }

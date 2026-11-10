@@ -221,7 +221,10 @@ function App() {
 
   useEffect(() => {
     if (needsLoginRedirect) {
-      navigate("/login");
+      // Giữ đường dẫn đích để sau khi đăng nhập quay lại đúng trang (vd /payments/result sau khi
+      // cổng thanh toán redirect về). Chỉ path nội bộ, LoginForm tự kiểm lại.
+      const target = `${window.location.pathname}${window.location.search}`;
+      navigate(target === "/login" ? "/login" : `/login?next=${encodeURIComponent(target)}`);
       return;
     }
     if (isWrongRole && session) {
