@@ -83,11 +83,12 @@ public class StaffAppointmentActionService {
         requirePending(appointment);
         Instant now = Instant.now();
         boolean checkin = appointment.getType() == AppointmentType.CHECKIN;
-        // Check-in: FS chỉ xác nhận khách đến sớm tối đa 15 phút. Lịch trả kho không có luật này.
-        if (checkin && appointment.isTooEarlyToArrive(now)) {
-            throw new AppointmentConflictException(
-                    "Chưa tới giờ hẹn. Chỉ có thể xác nhận khách đến sớm tối đa 15 phút.");
-        }
+        // TẠM THỜI (dev): bỏ chặn "khách đến sớm tối đa 15 phút" để test bàn giao trước giờ hẹn.
+        // Hoàn lại: bỏ comment khối dưới rồi rebuild image.
+        // if (checkin && appointment.isTooEarlyToArrive(now)) {
+        //     throw new AppointmentConflictException(
+        //             "Chưa tới giờ hẹn. Chỉ có thể xác nhận khách đến sớm tối đa 15 phút.");
+        // }
         // Quá giờ: lịch CHECKIN đi nhánh no-show; lịch RETURN không có no-show — khách đến trễ vẫn nhận trả kho.
         if (checkin && appointment.getEndAt().isBefore(now)) {
             boolean noShow = noShowService.cancelIfDue(appointmentId);
