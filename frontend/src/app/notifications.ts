@@ -56,8 +56,13 @@ export function notificationPath(
       }
       return undefined;
     case "PROPOSAL_REJECTED":
+      // Khách từ chối đề xuất: việc cần làm là đề xuất lại khoang, nằm ở trang đơn thuê — không phải
+      // hàng đợi yêu cầu đặt kho (tab "Từ chối" ở đó là yêu cầu bị FM từ chối).
+      if (role === "FM")
+        return orderId ? `/fm/rental-orders/${orderId}/re-propose` : "/fm/rental-orders";
+      return role === "CUSTOMER" ? "/my-storage" : undefined;
     case "RENTAL_ORDER_CANCELED":
-      if (role === "FM") return "/fm/rental-requests";
+      if (role === "FM") return "/fm/rental-orders";
       return role === "CUSTOMER" ? "/my-storage" : undefined;
     case "APPOINTMENT_CREATED":
       // Customer chưa có màn xem lịch đã tạo (chỉ có form đặt mới) — chỉ mark read.
