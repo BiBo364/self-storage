@@ -106,6 +106,7 @@ Nguồn: `backend/src/main/resources/application.yml`, override qua biến môi 
 | `MEDIA_ORPHAN_MAX_AGE` | Upload `Uploading`/`Pending` không đổi quá khoảng này thì cron dọn | `P3D` |
 | `MEDIA_UPLOAD_RATE_WINDOW` | Cửa sổ đếm upload | `PT10M` |
 | `DB_URL` / `DB_USER` / `DB_PASSWORD` | Kết nối Postgres (URL JDBC) | `jdbc:postgresql://localhost:5432/self_storage` / `self_storage` / `self_storage` |
+| `DATABASE_URL_UNPOOLED` / `DATABASE_URL` | Chuỗi kết nối dạng `postgresql://user:pass@host/db?…` (Neon). Chỉ dùng khi **không** đặt `DB_URL`: `DatabaseUrlEnvironmentPostProcessor` đổi sang `DB_URL` (JDBC) / `DB_USER` / `DB_PASSWORD`, ưu tiên `DATABASE_URL_UNPOOLED` (kết nối thẳng — Hikari tự pool, Flyway khoá bằng advisory lock theo session), `channel_binding` → `channelBinding` | — |
 | `REDIS_HOST` / `REDIS_PORT` | Redis cho rate-limit auth / cache | `localhost` / `6379` |
 | `SERVER_PORT` | Cổng HTTP của backend | `8080` |
 | `MAIL_HOST` / `MAIL_PORT` | SMTP server | `smtp.gmail.com` / `587` |
