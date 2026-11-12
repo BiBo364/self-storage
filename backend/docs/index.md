@@ -111,6 +111,8 @@ Nguồn: `backend/src/main/resources/application.yml`, override qua biến môi 
 | `SERVER_PORT` | Cổng HTTP của backend | `8080` |
 | `MAIL_HOST` / `MAIL_PORT` | SMTP server | `smtp.gmail.com` / `587` |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_FROM` | Tài khoản Gmail + App Password; người gửi (trống = `MAIL_USERNAME`) | trống |
+| `MAIL_PROVIDER` | Kênh gửi email: `smtp` hoặc `brevo` (API HTTPS, cho host chặn cổng SMTP) | `smtp` |
+| `BREVO_API_KEY` / `MAIL_FROM_NAME` | API key Brevo (bắt buộc khi `brevo`); tên người gửi hiển thị | trống / `Kho Mộc` |
 | `MAIL_SMTP_AUTH` / `MAIL_SMTP_STARTTLS` | Bật SMTP auth / STARTTLS (bắt buộc) | `true` / `true` |
 | `MAIL_TIMEOUT_MS` | Timeout connect / read / write SMTP | `10000` |
 | `PAYMENT_PROVIDER` | Cổng thanh toán đang dùng: `vnpay` \| `payos` | `vnpay` |
@@ -271,13 +273,20 @@ Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev
   `10000`) giới hạn connect/read/write SMTP để SMTP treo không giữ request quá lâu.
 - Thiếu `MAIL_USERNAME`/`MAIL_PASSWORD` thì app vẫn khởi động, nhưng mỗi lần gửi Gmail từ chối xác
   thực → log ERROR và `send` trả `false` (nghiệp vụ không rollback).
+- Kênh gửi chọn bằng `app.mail.provider` (`MAIL_PROVIDER`): `smtp` (mặc định, `SmtpEmailSender`) hoặc `brevo`
+  (`BrevoEmailSender` — `POST https://api.brevo.com/v3/smtp/email` qua HTTPS, header `api-key`; timeout nối 5 giây /
+  đọc 15 giây). Dùng `brevo` khi host chặn cổng SMTP 25/465/587 — Render chặn ở web service gói free. Người gửi =
+  `MAIL_FROM` (dạng `email` hoặc `Tên <email>`), phải là sender đã xác minh trên Brevo; tên hiển thị `MAIL_FROM_NAME`
+  (mặc định "Kho Mộc"). Chọn `brevo` mà thiếu `BREVO_API_KEY` → app dừng lúc khởi động. Brevo trả lỗi (key sai, sender
+  chưa xác minh…) → log ERROR kèm thông báo của Brevo, `send` trả `false`. Hai kênh dùng chung lớp cha
+  `DeferredEmailSender` (gửi sau commit, executor nền, nuốt lỗi) nên hành vi giống nhau.
 - Giới hạn Gmail: khoảng 500 người nhận/ngày với tài khoản thường; account seed `@lemar.vn` là địa
   chỉ giả nên mail gửi tới sẽ bị trả về — test bằng email thật.
 - Caller tự dựng `subject` và `body`.
 - **Known limitation**:
   - Gửi best-effort, không retry/outbox. Process chết sau commit nhưng trước khi gửi xong thì
     email mất, không dấu vết. Gửi lỗi trả `false` và không thử lại.
-  - Gửi trên executor nền của `SmtpEmailSender` (2 luồng, hàng đợi 500; đầy thì luồng gọi tự gửi): request
+  - Gửi trên executor nền của `DeferredEmailSender` (2 luồng, hàng đợi 500; đầy thì luồng gọi tự gửi): request
     trả về ngay sau commit, không chờ SMTP (Gmail mở kết nối TLS mỗi email, 1–3 giây). `true` = đã xếp hàng, chưa
     chắc đã gửi xong. Tắt app thì đợi tối đa 20 giây cho mail đang xếp hàng. `app.mail.async=false` (cấu hình test)
     gửi đồng bộ. Không có outbox / worker bền: mail đang xếp hàng mất nếu process chết.

@@ -41,8 +41,11 @@ spring:
           writetimeout: ${MAIL_TIMEOUT_MS:10000}
 app:
   mail:
-    # Gmail chỉ cho gửi từ chính tài khoản đăng nhập (hoặc alias đã xác minh).
+    # Kênh gửi: smtp (mặc định, spring.mail.* ở trên) | brevo (API HTTPS — host chặn cổng SMTP, vd Render gói free).
+    provider: ${MAIL_PROVIDER:smtp}
+    # Gmail chỉ cho gửi từ chính tài khoản đăng nhập (hoặc alias đã xác minh). Với Brevo: sender đã xác minh trên Brevo.
     from: ${MAIL_FROM:${MAIL_USERNAME:noreply@lemar.vn}}
+    from-name: ${MAIL_FROM_NAME:Kho Mộc}
   # Gốc URL frontend để dựng link trong notification/email (vd link xác nhận đề xuất khoang).
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
 
@@ -73,6 +76,11 @@ media:
 # Cổng thanh toán đang dùng: vnpay (mặc định) | payos. Chỉ cổng đang dùng mới bắt buộc đủ credential.
 payment:
   provider: ${PAYMENT_PROVIDER:vnpay}
+
+# Brevo — gửi email qua API HTTPS khi app.mail.provider=brevo (bắt buộc api-key khi đó).
+brevo:
+  api-key: ${BREVO_API_KEY:}
+  api-url: ${BREVO_API_URL:https://api.brevo.com/v3/smtp/email}
 
 # payOS (VietQR) — không có sandbox: giao dịch là chuyển khoản thật; không có API hoàn tiền.
 payos:
