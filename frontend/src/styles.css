@@ -122,9 +122,11 @@ body {
     -apple-system,
     "Segoe UI",
     sans-serif;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.55;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition:
     background-color 0.28s ease,
     color 0.28s ease;
@@ -137,6 +139,25 @@ select {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+/* Chuyển màu/viền mượt cho mọi control; utility transition-* của Tailwind vẫn ghi đè được. */
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    opacity 0.18s ease,
+    transform 0.12s ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px var(--brand-soft);
 }
 button {
   cursor: pointer;
@@ -268,6 +289,79 @@ select option:checked {
     opacity: 1;
     clip-path: circle(150% at calc(100% - var(--notif-origin-x, 24px)) 0px);
   }
+}
+/* Chuyển động khi vào trang / đổi bước / mở hộp thoại — ngắn, chỉ opacity + transform để không giật. */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.page-enter {
+  animation: fade-up 0.36s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+/* Các khối con trực tiếp của trang hiện lần lượt (tối đa 6 khối đầu). */
+.page-enter > * {
+  animation: fade-up 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.page-enter > *:nth-child(2) {
+  animation-delay: 0.04s;
+}
+.page-enter > *:nth-child(3) {
+  animation-delay: 0.08s;
+}
+.page-enter > *:nth-child(4) {
+  animation-delay: 0.12s;
+}
+.page-enter > *:nth-child(5) {
+  animation-delay: 0.16s;
+}
+.page-enter > *:nth-child(n + 6) {
+  animation-delay: 0.2s;
+}
+.step-enter {
+  animation: fade-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.fade-enter {
+  animation: fade-in 0.2s ease backwards;
+}
+@keyframes slide-in-right {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.slide-enter {
+  animation: slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.pop-enter {
+  animation: pop-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 @media (prefers-reduced-motion: reduce) {
   *,

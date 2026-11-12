@@ -30,14 +30,14 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[90] grid place-items-center bg-[rgba(16,20,19,0.6)] p-5"
+      className="fade-enter fixed inset-0 z-[90] grid place-items-center bg-[rgba(16,20,19,0.6)] p-5"
       role="presentation"
       onClick={onCancel}
     >
       <div
         ref={containerRef}
         tabIndex={-1}
-        className="w-[min(420px,100%)] border border-[var(--container-border)] bg-surface p-6 shadow-[var(--shadow-soft)] focus:outline-none"
+        className="pop-enter w-[min(420px,100%)] border border-[var(--container-border)] bg-surface p-6 shadow-[var(--shadow-soft)] focus:outline-none"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}

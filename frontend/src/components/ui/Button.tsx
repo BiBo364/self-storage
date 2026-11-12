@@ -5,15 +5,16 @@ export type ButtonVariant = "primary" | "secondary" | "onDark" | "danger";
 export type ButtonSize = "default" | "sm";
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 rounded-none border-2 font-semibold transition-colors duration-150 ease disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 rounded-none border-2 font-semibold transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 ease-out enabled:active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60";
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
-  default: "min-h-[42px] px-4 text-button",
-  sm: "min-h-[32px] px-3 text-label",
+  default: "min-h-[44px] px-4 text-button",
+  sm: "min-h-[34px] px-3 text-label",
 };
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
-  primary: "border-brand bg-brand text-signal-ink hover:border-brand-strong hover:bg-brand-strong",
+  primary:
+    "border-brand bg-brand text-signal-ink hover:border-brand-strong hover:bg-brand-strong hover:shadow-[0_6px_18px_var(--brand-soft)]",
   secondary:
     "border-control-border bg-transparent text-ink hover:border-control-border-hover hover:bg-control-bg-hover hover:text-control-hover-ink",
   onDark:

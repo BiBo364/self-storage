@@ -62,14 +62,14 @@ export function NotificationDetailDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[90] grid place-items-center bg-[rgba(7,16,19,0.68)] p-5"
+      className="fade-enter fixed inset-0 z-[90] grid place-items-center bg-[rgba(7,16,19,0.68)] p-5"
       role="presentation"
       onClick={onClose}
     >
       <div
         ref={containerRef}
         tabIndex={-1}
-        className="w-[min(560px,100%)] border border-[var(--container-border)] bg-surface p-6 shadow-[var(--shadow-soft)] focus:outline-none"
+        className="pop-enter w-[min(560px,100%)] border border-[var(--container-border)] bg-surface p-6 shadow-[var(--shadow-soft)] focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

@@ -100,10 +100,10 @@ export function WorkspaceShell({
             return (
               <button
                 key={path}
-                className={`flex w-full items-center gap-2.5 border-0 px-2.5 py-2.5 text-left font-display text-small font-medium transition-colors duration-150 ${
+                className={`flex w-full items-center gap-2.5 border-0 px-2.5 py-2.5 text-left font-display text-small font-medium transition-[color,background-color,padding] duration-200 ${
                   isActive
                     ? "bg-brand text-signal-ink"
-                    : "bg-transparent text-[rgba(233,234,230,.72)] hover:bg-[rgba(233,234,230,.08)] hover:text-[var(--on-dark-ink)]"
+                    : "bg-transparent text-[rgba(233,234,230,.72)] hover:bg-[rgba(233,234,230,.08)] hover:pl-3.5 hover:text-[var(--on-dark-ink)]"
                 }`}
                 onClick={() => {
                   setMenuOpen(false);
@@ -137,7 +137,7 @@ export function WorkspaceShell({
       </aside>
       {menuOpen && (
         <button
-          className="fixed inset-0 z-20 block border-0 bg-[rgba(0,0,0,0.52)]"
+          className="fade-enter fixed inset-0 z-20 block border-0 bg-[rgba(0,0,0,0.52)]"
           onClick={() => setMenuOpen(false)}
           aria-label="Đóng menu"
         />
@@ -177,7 +177,7 @@ export function WorkspaceShell({
                 </button>
                 {profileOpen && (
                   <div
-                    className="absolute right-0 top-[calc(100%+10px)] z-40 w-[230px] border border-border bg-surface p-2 shadow-[var(--shadow-soft)]"
+                    className="absolute right-0 top-[calc(100%+10px)] z-40 w-[230px] border border-border bg-surface p-2 shadow-[var(--shadow-soft)] pop-enter"
                     role="menu"
                   >
                     <div className="grid gap-0.5 p-2.5">
@@ -208,7 +208,10 @@ export function WorkspaceShell({
           }
           id="main-content"
         >
-          {children}
+          {/* key theo mục menu đang chọn: sang mục khác thì khối nội dung chạy lại hiệu ứng vào trang. */}
+          <div key={activePath} className="page-enter">
+            {children}
+          </div>
         </div>
       </section>
     </div>

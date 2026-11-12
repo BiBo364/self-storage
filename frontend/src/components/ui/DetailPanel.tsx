@@ -25,14 +25,14 @@ export function DetailPanel({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex justify-end bg-[rgba(16,20,19,0.55)]"
+      className="fade-enter fixed inset-0 z-[70] flex justify-end bg-[rgba(16,20,19,0.55)]"
       role="presentation"
       onClick={onClose}
     >
       <aside
         ref={containerRef}
         tabIndex={-1}
-        className="flex h-full w-[min(480px,100%)] flex-col border-l border-[var(--container-border)] bg-surface shadow-[var(--shadow-soft)] max-[760px]:w-full focus:outline-none"
+        className="slide-enter flex h-full w-[min(480px,100%)] flex-col border-l border-[var(--container-border)] bg-surface shadow-[var(--shadow-soft)] max-[760px]:w-full focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
