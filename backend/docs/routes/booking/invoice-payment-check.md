@@ -31,7 +31,9 @@ khách về, để biết hoá đơn đã `Paid` chưa.
 
 ## Ghi chú nghiệp vụ
 
-- Return URL VNPay (`/api/payments/vnpay/return`) chỉ hiển thị, không ghi dữ liệu; payOS redirect thẳng về trang FE.
+- payOS redirect thẳng về trang FE (`payos.return-url` mặc định `<FRONTEND_URL>/payments/result`); VNPay về trang FE khi
+  `VNPAY_RETURN_URL` trỏ `<FRONTEND_URL>/payments/result` (giá trị trong `.env.example`). Route
+  `/api/payments/vnpay/return` chỉ trả JSON kiểm chữ ký, không ghi dữ liệu — để test backend khi không chạy FE.
 
 ## Liên quan
 

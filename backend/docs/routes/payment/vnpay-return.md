@@ -1,6 +1,10 @@
 # GET /api/payments/vnpay/return
 
-Nơi VNPay đẩy trình duyệt khách về sau khi thanh toán xong. **Chỉ để hiển thị kết quả.**
+Kiểm chữ ký của tham số VNPay gửi kèm khi đẩy trình duyệt khách về. **Chỉ để xem kết quả, không ghi gì.**
+
+Dùng làm `VNPAY_RETURN_URL` khi test backend không chạy FE (gọi `/pay` qua Swagger). Chạy cả app thì
+`VNPAY_RETURN_URL` trỏ trang kết quả FE `<FRONTEND_URL>/payments/result` (giá trị trong `.env.example`) — trang đó gọi
+[`payment-check`](../booking/invoice-payment-check.md) để chốt hoá đơn, không gọi route này.
 
 - **Actor / quyền:** public. Đây là redirect từ VNPay nên request không mang header
   `Authorization` — không thể yêu cầu token.

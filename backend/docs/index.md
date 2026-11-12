@@ -119,7 +119,7 @@ Nguồn: `backend/src/main/resources/application.yml`, override qua biến môi 
 | `VNPAY_TMN_CODE` | Mã website đăng ký trên VNPay | — (bắt buộc khi `vnpay`) |
 | `VNPAY_HASH_SECRET` | Chuỗi bí mật ký/kiểm checksum VNPay | — (bắt buộc khi `vnpay`) |
 | `VNPAY_PAY_URL` | Endpoint cổng thanh toán VNPay | — (bắt buộc khi `vnpay`) |
-| `VNPAY_RETURN_URL` | Nơi VNPay đẩy trình duyệt khách về | — (bắt buộc khi `vnpay`) |
+| `VNPAY_RETURN_URL` | Nơi VNPay đẩy trình duyệt khách về — trang kết quả FE `<FRONTEND_URL>/payments/result` (FE gọi `payment-check`); `/api/payments/vnpay/return` chỉ trả JSON kiểm chữ ký khi test backend không có FE | — (bắt buộc khi `vnpay`; `.env.example`: `http://localhost:5173/payments/result`) |
 | `VNPAY_API_URL` | API merchant VNPay cho `querydr` (`payment-check`) | sandbox `merchant_webapi/api/transaction` |
 | `FRONTEND_URL` | Gốc URL frontend, dựng link trong notification/email (vd `{{confirmLink}}` / `{{proposalLink}}` = `<FRONTEND_URL>/proposals`) | `http://localhost:5173` |
 | `CLOUDINARY_NAME` | Cloud name tài khoản Cloudinary | — (bắt buộc) |

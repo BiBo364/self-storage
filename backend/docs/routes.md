@@ -120,7 +120,7 @@ hữu route (xem quy ước ở cuối trang).
 | POST | `/api/chat` | Public | Chatbot tư vấn (Google Gemini) — trả lời về cơ sở, loại khoang, giá, quy trình | [chat/assistant.md](chat/assistant.md) |
 | POST | `/api/payments/payos/webhook` | Public (chữ ký payOS) | payOS báo kết quả chuyển khoản — nguồn xác nhận chính khi `payment.provider=payos` | [routes/payment/payos-webhook.md](routes/payment/payos-webhook.md) |
 | GET | `/api/payments/vnpay/ipn` | Public (chữ ký VNPay) | VNPay xác nhận thanh toán — nguồn xác nhận chính khi dùng VNPay (mặc định) | [routes/payment/vnpay-ipn.md](routes/payment/vnpay-ipn.md) |
-| GET | `/api/payments/vnpay/return` | Public (redirect VNPay) | Trang kết quả cho khách khi dùng VNPay — không ghi dữ liệu | [routes/payment/vnpay-return.md](routes/payment/vnpay-return.md) |
+| GET | `/api/payments/vnpay/return` | Public (redirect VNPay) | Kiểm chữ ký tham số VNPay trả về (Return URL khi test backend không có FE) — không ghi dữ liệu | [routes/payment/vnpay-return.md](routes/payment/vnpay-return.md) |
 | POST | `/api/media/uploads` | Bearer + `ACCOUNT_ACTIVE` | Upload file (ảnh/PDF ≤ 10MB), trả URL + batchId dùng lại trong flow | [routes/media/upload.md](routes/media/upload.md) |
 | DELETE | `/api/media/uploads/batch/{batchId}` | Bearer + `ACCOUNT_ACTIVE`; chủ batch | Xoá batch upload khi user bấm X trên file trong phase hiện tại | [routes/media/delete-batch.md](routes/media/delete-batch.md) |
 | POST | `/api/media/uploads/batch/{batchId}/attach` | Bearer + `ACCOUNT_ACTIVE`; chủ batch | Gắn batch upload, chặn Hủy xoá asset đã dùng | [routes/media/attach-batch.md](routes/media/attach-batch.md) |

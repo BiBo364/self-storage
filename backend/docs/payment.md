@@ -46,7 +46,9 @@ Khách trả tiền trên cổng
    ├─► POST /api/invoices/{id}/payment-check  (khách quay về trang kết quả)
    │     hỏi cổng server-to-server về giao dịch mới nhất; kết quả chốt như IPN
    │
-   └─► GET /api/payments/vnpay/return   (redirect trình duyệt; CHỈ hiển thị)
+   └─► Return URL (redirect trình duyệt; tự nó không ghi gì): VNPAY_RETURN_URL = <FRONTEND_URL>/payments/result
+         → trang kết quả gọi payment-check ở trên. GET /api/payments/vnpay/return chỉ trả JSON kiểm chữ ký
+         (đặt VNPAY_RETURN_URL về route này khi test backend không có FE)
    ▼
 booking nghe PaymentSucceeded → chuyển Invoice sang Paid, chốt đơn và khoang theo loại hoá đơn
 (routes/booking/invoice-pay.md › Nhánh thành công)

@@ -15,7 +15,8 @@ VNPay → VNPay báo kết quả về **hai đường khác nhau**:
 | Đường | Ai gọi | Dùng để làm gì |
 |---|---|---|
 | Return URL | Trình duyệt khách bị đẩy về | Chỉ đưa khách về trang mình. **Không ghi DB** — khách sửa URL được nên không tin được |
-| IPN | Server VNPay gọi thẳng vào server mình | **Nguồn sự thật.** Chỗ duy nhất ghi `Paid` vào DB |
+| IPN | Server VNPay gọi thẳng vào server mình | **Nguồn sự thật.** Ghi `Paid` vào DB |
+| `payment-check` | Trang kết quả FE gọi khi khách quay về | Hỏi lại VNPay (`querydr`, có chữ ký) rồi chốt như IPN — dự phòng khi IPN chưa về |
 
 Server mình chạy ở `localhost`, VNPay ngoài internet không với tới được. Nên phải dựng **tunnel**:
 mượn một địa chỉ https công khai, ai gõ vào đó thì chuyển về `localhost:8080`.
@@ -53,6 +54,10 @@ CLOUDINARY_SECRET=local-dev
 Ba dòng `CLOUDINARY_*` **không phải lấy từ đâu cả** — gõ đúng chuỗi `local-dev` là được. App chỉ
 kiểm "không rỗng" (`@NotBlank`), và luồng thanh toán không đụng tới upload. Chỉ khi làm tính năng
 upload ảnh mới cần tài khoản thật ở cloudinary.com (free, không cần thẻ).
+
+`VNPAY_RETURN_URL` ở đây trỏ về route backend (JSON kiểm chữ ký) vì checklist này gọi `/pay` qua Swagger, không chạy
+FE. `.env.example` mặc định trỏ trang kết quả FE `http://localhost:5173/payments/result` — dùng giá trị đó khi chạy
+cả FE: khách bấm thanh toán trên web, trả xong quay về trang kết quả, trang gọi `payment-check` để chốt hoá đơn.
 
 `VNPAY_IPN_URL` trong `.env.example` **để trống cũng được** — app không đọc biến này. IPN khai ở
 portal, không khai ở `.env`.
@@ -263,7 +268,8 @@ Phải trả `status: "Paid"`.
 |---|---|---|
 | App chết lúc boot, log `must not be blank` | Thiếu biến trong `.env`, hoặc quên `set -a; source ../.env` | Xem A2 và B4 |
 | Mở `paymentUrl` ra `Error.html?code=70` | Chữ ký sai: `HASH_SECRET` lệch hoặc terminal còn MD5 | Xem A3 |
-| Trả tiền xong, Return URL đúng, nhưng DB vẫn `Unpaid` | IPN không về: tunnel chết, hoặc portal khai domain cũ | Xem B2, B3. VNPay retry 10 lần × 5 phút nên khai lại kịp thì vẫn ăn |
+| Trả tiền xong, Return URL đúng, nhưng DB vẫn `Unpaid` | IPN không về: tunnel chết, hoặc portal khai domain cũ | Xem B2, B3. VNPay retry 10 lần × 5 phút nên khai lại kịp thì vẫn ăn. Hoặc gọi `POST /api/invoices/{invoiceId}/payment-check` (như trang kết quả FE) để hỏi `querydr` và chốt ngay |
+| Trả tiền xong, trình duyệt dừng ở trang JSON `{"validSignature":true,…}` thay vì về web | `VNPAY_RETURN_URL` đang trỏ route backend | Chạy cả FE thì đặt `http://localhost:5173/payments/result` rồi khởi động lại backend |
 | Gọi `/pay` trả 401 | Chưa bấm Authorize trên Swagger | Xem C3 bước 2 |
 | Gọi `/pay` trả "Hóa đơn này không ở trạng thái chờ thanh toán cọc" | Hoá đơn đã `Paid`/`Canceled`, hoặc không phải loại `Deposit` | Tạo hoá đơn mới, xem C1 |
 | Gọi `/pay` trả "Khoang chứa đã được đặt cọc bởi khách hàng khác" | Khoang trong đơn không còn `Available` | Đổi `unit_id`, xem C1 |

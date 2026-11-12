@@ -15,8 +15,12 @@ cấu hình terminal, dựng IPN URL, test end-to-end và các lỗi thường g
    VNPAY_TMN_CODE=<mã VNPay gửi>
    VNPAY_HASH_SECRET=<chuỗi bí mật VNPay gửi>
    VNPAY_PAY_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-   VNPAY_RETURN_URL=http://localhost:8080/api/payments/vnpay/return
+   VNPAY_RETURN_URL=http://localhost:5173/payments/result
    ```
+
+   Return URL là trang kết quả của FE: khách quay về, FE gọi `POST /api/invoices/{id}/payment-check` (`querydr`) để
+   chốt hoá đơn. Chỉ test backend (không chạy FE) thì đặt `http://localhost:8080/api/payments/vnpay/return` — route
+   này trả JSON kiểm chữ ký, không ghi dữ liệu.
 
    App không đọc biến IPN URL — IPN URL khai trên portal merchant (mục 1.3).
 
@@ -49,8 +53,11 @@ cấu hình terminal, dựng IPN URL, test end-to-end và các lỗi thường g
 
   Lấy URL https in ra, ghép `/api/payments/vnpay/ipn` và khai vào **cấu hình tài khoản merchant**
   trên portal (không truyền kèm trong link thanh toán).
-- **Return URL không cần public** — là redirect trình duyệt khách, dev dùng
-  `http://localhost:8080/...` bình thường.
+- **Return URL không cần public** — là redirect trình duyệt khách, dev dùng `http://localhost:...` bình thường
+  (mục 1.1).
+- Không dựng tunnel thì IPN không về; khi đó hoá đơn được chốt lúc khách về trang kết quả FE (`payment-check` hỏi
+  `querydr`). Khách đóng tab trước khi về trang kết quả thì giao dịch nằm `Pending` cho tới khi khách mở lại trang
+  hoặc ADMIN đối soát.
 - Quick tunnel đổi domain mỗi lần chạy lại → tunnel mới là phải khai lại portal; test nhiều ngày
   nên dùng named tunnel (cloudflared) hoặc ngrok reserved domain.
 
@@ -60,9 +67,11 @@ cấu hình terminal, dựng IPN URL, test end-to-end và các lỗi thường g
 2. Sinh payment URL bằng `VnPayGateway` (phiên bản 2.1.0, HMACSHA512).
 3. Mở URL bằng **browser thật** và thanh toán bằng **thẻ test** (mục 2.1).
 4. VNPay redirect về Return URL và gọi IPN. Kiểm tra:
-   - Return: `{"validSignature": true, "responseCode": "00"}` — chữ ký VNPay verify đúng.
+   - Return: trang kết quả FE báo thanh toán thành công; Return URL đặt về route backend thì thấy
+     `{"validSignature": true, "responseCode": "00"}` — chữ ký VNPay verify đúng.
    - DB: `payment_transactions.status = Success`, có `gateway_transaction_no` và `paid_at`.
-     Trạng thái thật **chỉ được ghi qua IPN** — Return URL không ghi dữ liệu.
+     Trạng thái được ghi qua IPN hoặc `payment-check` (`querydr`, khi khách về trang kết quả FE) — Return URL tự nó
+     không ghi dữ liệu.
 
 ### 2.1 Thẻ test
 
