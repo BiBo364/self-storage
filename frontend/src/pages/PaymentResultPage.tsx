@@ -9,6 +9,7 @@ import {
   INVOICE_STATUS,
   readPendingInvoiceId,
   type PaymentCheck,
+  vnpayReturnParams,
 } from "../app/services/customer";
 import { Button } from "../components/ui/Button";
 import { SurfaceState } from "../components/ui/SurfaceState";
@@ -36,9 +37,11 @@ function initialInvoiceId(): number | null {
   return readPendingInvoiceId();
 }
 
-/** Kết quả thanh toán sau khi quay về từ cổng payOS. */
+/** Kết quả thanh toán sau khi quay về từ cổng (VNPay / payOS). */
 export function PaymentResultPage({ navigate }: { navigate: Navigate }) {
   const [invoiceId] = useState(initialInvoiceId);
+  // VNPay gắn kết quả có chữ ký lên URL — gửi kèm để backend chốt khi IPN chưa tới.
+  const [gatewayParams] = useState(() => vnpayReturnParams());
   const [gatewayCanceled] = useState(
     () => queryParam("cancel") === "true" || queryParam("status") === "CANCELLED",
   );
@@ -52,7 +55,7 @@ export function PaymentResultPage({ navigate }: { navigate: Navigate }) {
   useEffect(() => {
     if (invoiceId === null) return;
     let active = true;
-    checkInvoicePayment(invoiceId).then(
+    checkInvoicePayment(invoiceId, gatewayParams).then(
       (check) => {
         if (active) setResult({ attempt, check, error: null });
       },
@@ -69,7 +72,7 @@ export function PaymentResultPage({ navigate }: { navigate: Navigate }) {
     return () => {
       active = false;
     };
-  }, [invoiceId, attempt]);
+  }, [invoiceId, gatewayParams, attempt]);
 
   const checking = result === null || result.attempt !== attempt;
   const check = result?.check ?? null;

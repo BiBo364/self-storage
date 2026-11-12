@@ -19,9 +19,11 @@ Dùng làm `VNPAY_RETURN_URL` khi test backend không chạy FE (gọi `/pay` qu
 
 ## Ghi chú nghiệp vụ
 
-- **Tuyệt đối không dùng route này để ghi nhận đã thanh toán.** Tham số nằm trên thanh địa chỉ và
-  do khách kiểm soát; khách có thể sửa tay hoặc đóng trình duyệt giữa chừng khiến route không bao
-  giờ được gọi. Nguồn xác nhận duy nhất là [IPN](vnpay-ipn.md).
+- **Route này không ghi nhận thanh toán.** Tham số nằm trên thanh địa chỉ và do khách kiểm soát; khách có thể sửa
+  tay hoặc đóng trình duyệt giữa chừng khiến route không bao giờ được gọi. Nguồn xác nhận chính là
+  [IPN](vnpay-ipn.md). Khi trang kết quả FE gửi bộ tham số này cho
+  [`payment-check`](../booking/invoice-payment-check.md), backend chỉ chốt nếu chữ ký đúng, đúng merchant, đúng số
+  tiền và giao dịch thuộc hoá đơn của khách — sửa bất kỳ tham số nào là chữ ký sai và bị bỏ qua.
 - Khách đóng trình duyệt trước khi về đến đây không ảnh hưởng gì: IPN vẫn chạy độc lập.
 - Route này trả JSON trần (`validSignature`/`responseCode`/`txnRef`) chứ chưa dùng `ApiEnvelope`.
   Khi FE làm trang kết quả thanh toán thì cân nhắc đổi sang envelope cho đồng bộ — đổi được vì

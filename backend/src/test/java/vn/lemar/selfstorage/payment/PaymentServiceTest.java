@@ -105,6 +105,63 @@ class PaymentServiceTest {
     }
 
     @Test
+    void returnParamsOfTheViewedInvoiceSettleLikeIpn() {
+        var response = service.confirmFromReturn(7L, ipn());
+
+        assertThat(response.rspCode()).isEqualTo("00");
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(transaction.getGatewayTransactionNo()).isEqualTo("15690354");
+        verify(events).publishEvent(any(PaymentSucceeded.class));
+        verify(reconciliationCases).resolve(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("Success"), org.mockito.ArgumentMatchers.eq("15690354"),
+                any(Instant.class), org.mockito.ArgumentMatchers.eq("Return URL"),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("Return URL"));
+    }
+
+    @Test
+    void returnParamsOfAnotherInvoiceAreIgnored() {
+        var response = service.confirmFromReturn(8L, ipn());
+
+        assertThat(response.rspCode()).isEqualTo("01");
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void returnParamsWithBadSignatureAreIgnored() {
+        when(gateway.verifySignature(any())).thenReturn(false);
+
+        var response = service.confirmFromReturn(7L, ipn());
+
+        assertThat(response.rspCode()).isEqualTo("97");
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void returnWithoutVnPayParamsSkipsTheGateway() {
+        Map<String, String> unsigned = ipn();
+        unsigned.remove("vnp_SecureHash");
+
+        assertThat(service.confirmFromReturn(7L, unsigned).rspCode()).isEqualTo("01");
+        assertThat(service.confirmFromReturn(7L, null).rspCode()).isEqualTo("01");
+        assertThat(service.confirmFromReturn(7L, Map.of("code", "00")).rspCode()).isEqualTo("01");
+        verify(gateway, never()).verifySignature(any());
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    void returnReportingAFailedPaymentClosesTheTransaction() {
+        Map<String, String> canceled = ipn();
+        canceled.put("vnp_ResponseCode", "24");
+        canceled.put("vnp_TransactionStatus", "02");
+
+        assertThat(service.confirmFromReturn(7L, canceled).rspCode()).isEqualTo("00");
+        assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        verify(events).publishEvent(any(PaymentFailed.class));
+    }
+
+    @Test
     void startPaymentCachesTheUrlForBackButton() {
         when(gateway.buildPaymentUrl(any())).thenReturn("https://pay/session");
 

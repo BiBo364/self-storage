@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -192,5 +193,38 @@ class InvoicePaymentServiceTest {
         assertThat(check.paymentStatus()).isEqualTo("Success");
         assertThat(check.bookCheckinOrderId()).isEqualTo(ORDER);
         assertThatThrownBy(() -> service.check(INVOICE, 99L, "ip")).isInstanceOf(BookingNotFoundException.class);
+    }
+
+    @Test
+    void checkSettlesSignedReturnParamsBeforeAskingTheGateway() {
+        depositInvoice();
+        Map<String, String> params = Map.of("vnp_TxnRef", "TXN", "vnp_SecureHash", "sig");
+        when(payments.reconcileLatest(INVOICE, "ip")).thenReturn(Optional.empty());
+
+        service.check(INVOICE, CUSTOMER, "ip", params);
+
+        var order = org.mockito.Mockito.inOrder(payments);
+        order.verify(payments).confirmFromReturn(INVOICE, params);
+        order.verify(payments).reconcileLatest(INVOICE, "ip");
+    }
+
+    @Test
+    void checkWithoutReturnParamsOnlyAsksTheGateway() {
+        depositInvoice();
+        when(payments.reconcileLatest(INVOICE, "ip")).thenReturn(Optional.empty());
+
+        service.check(INVOICE, CUSTOMER, "ip", Map.of());
+        service.check(INVOICE, CUSTOMER, "ip", null);
+
+        verify(payments, never()).confirmFromReturn(any(), any());
+    }
+
+    @Test
+    void checkOfAnotherCustomersInvoiceNeverTouchesReturnParams() {
+        depositInvoice();
+
+        assertThatThrownBy(() -> service.check(INVOICE, 99L, "ip", Map.of("vnp_TxnRef", "TXN")))
+                .isInstanceOf(BookingNotFoundException.class);
+        verify(payments, never()).confirmFromReturn(any(), any());
     }
 }

@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,13 +134,44 @@ class Flow1CompletionControllerTest {
     @Test
     void paymentCheckReturnsStatuses() throws Exception {
         customer();
-        when(invoicePaymentService.check(eq(5L), eq(6L), anyString()))
+        when(invoicePaymentService.check(eq(5L), eq(6L), anyString(), eq(Map.of())))
                 .thenReturn(new PaymentCheck(5L, "Paid", "Success", null, null));
 
         mockMvc.perform(as(post("/api/invoices/5/payment-check"), CUSTOMER))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.invoiceStatus").value("Paid"))
                 .andExpect(jsonPath("$.data.paymentStatus").value("Success"));
+    }
+
+    @Test
+    void paymentCheckForwardsReturnParams() throws Exception {
+        customer();
+        Map<String, String> params = Map.of("vnp_TxnRef", "INV5T1", "vnp_ResponseCode", "00",
+                "vnp_SecureHash", "abc");
+        when(invoicePaymentService.check(eq(5L), eq(6L), anyString(), eq(params)))
+                .thenReturn(new PaymentCheck(5L, "Paid", "Success", null, null));
+
+        mockMvc.perform(as(post("/api/invoices/5/payment-check"), CUSTOMER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"gatewayParams\":{\"vnp_TxnRef\":\"INV5T1\",\"vnp_ResponseCode\":\"00\","
+                                + "\"vnp_SecureHash\":\"abc\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.invoiceStatus").value("Paid"));
+    }
+
+    @Test
+    void paymentCheckRejectsTooManyReturnParams() throws Exception {
+        customer();
+        StringBuilder json = new StringBuilder("{\"gatewayParams\":{");
+        for (int i = 0; i < 51; i++) {
+            json.append(i == 0 ? "" : ",").append("\"vnp_K").append(i).append("\":\"v\"");
+        }
+        json.append("}}");
+
+        mockMvc.perform(as(post("/api/invoices/5/payment-check"), CUSTOMER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.toString()))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

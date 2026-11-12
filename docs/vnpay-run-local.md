@@ -14,9 +14,9 @@ VNPay → VNPay báo kết quả về **hai đường khác nhau**:
 
 | Đường | Ai gọi | Dùng để làm gì |
 |---|---|---|
-| Return URL | Trình duyệt khách bị đẩy về | Chỉ đưa khách về trang mình. **Không ghi DB** — khách sửa URL được nên không tin được |
+| Return URL | Trình duyệt khách bị đẩy về | Đưa khách về trang mình. Bản thân nó **không ghi DB** |
 | IPN | Server VNPay gọi thẳng vào server mình | **Nguồn sự thật.** Ghi `Paid` vào DB |
-| `payment-check` | Trang kết quả FE gọi khi khách quay về | Hỏi lại VNPay (`querydr`, có chữ ký) rồi chốt như IPN — dự phòng khi IPN chưa về |
+| `payment-check` | Trang kết quả FE gọi khi khách quay về | Gửi tham số `vnp_*` có chữ ký trên Return URL (backend kiểm như IPN — khách sửa URL là chữ ký sai) rồi hỏi lại VNPay (`querydr`); chốt như IPN — dự phòng khi IPN chưa về |
 
 Server mình chạy ở `localhost`, VNPay ngoài internet không với tới được. Nên phải dựng **tunnel**:
 mượn một địa chỉ https công khai, ai gõ vào đó thì chuyển về `localhost:8080`.

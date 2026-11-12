@@ -55,9 +55,10 @@ cấu hình terminal, dựng IPN URL, test end-to-end và các lỗi thường g
   trên portal (không truyền kèm trong link thanh toán).
 - **Return URL không cần public** — là redirect trình duyệt khách, dev dùng `http://localhost:...` bình thường
   (mục 1.1).
-- Không dựng tunnel thì IPN không về; khi đó hoá đơn được chốt lúc khách về trang kết quả FE (`payment-check` hỏi
-  `querydr`). Khách đóng tab trước khi về trang kết quả thì giao dịch nằm `Pending` cho tới khi khách mở lại trang
-  hoặc ADMIN đối soát.
+- Không dựng tunnel thì IPN không về; khi đó hoá đơn được chốt lúc khách về trang kết quả FE: trang gửi tham số
+  `vnp_*` có chữ ký trên URL cho `payment-check`, backend kiểm như IPN rồi chốt (sau đó mới hỏi `querydr` — sandbox có
+  lúc trả `99 Unexpected error` cho mọi yêu cầu, kể cả sai khoá). Khách đóng tab trước khi về trang kết quả thì giao
+  dịch nằm `Pending` cho tới khi ADMIN đối soát.
 - Quick tunnel đổi domain mỗi lần chạy lại → tunnel mới là phải khai lại portal; test nhiều ngày
   nên dùng named tunnel (cloudflared) hoặc ngrok reserved domain.
 
@@ -70,8 +71,8 @@ cấu hình terminal, dựng IPN URL, test end-to-end và các lỗi thường g
    - Return: trang kết quả FE báo thanh toán thành công; Return URL đặt về route backend thì thấy
      `{"validSignature": true, "responseCode": "00"}` — chữ ký VNPay verify đúng.
    - DB: `payment_transactions.status = Success`, có `gateway_transaction_no` và `paid_at`.
-     Trạng thái được ghi qua IPN hoặc `payment-check` (`querydr`, khi khách về trang kết quả FE) — Return URL tự nó
-     không ghi dữ liệu.
+     Trạng thái được ghi qua IPN hoặc `payment-check` (tham số có chữ ký trên Return URL / `querydr`, khi khách về
+     trang kết quả FE) — route Return URL của backend tự nó không ghi dữ liệu.
 
 ### 2.1 Thẻ test
 

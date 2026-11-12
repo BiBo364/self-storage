@@ -44,7 +44,9 @@ Khách trả tiền trên cổng
    │     → khoá invoice → Success (hoặc Duplicate) / Failed → event
    │
    ├─► POST /api/invoices/{id}/payment-check  (khách quay về trang kết quả)
-   │     hỏi cổng server-to-server về giao dịch mới nhất; kết quả chốt như IPN
+   │     (a) VNPay: FE gửi kèm tham số vnp_* có chữ ký trên Return URL → cùng các bước kiểm của IPN
+   │         + giao dịch phải thuộc đúng hoá đơn đang xem → chốt như IPN
+   │     (b) hỏi cổng server-to-server về giao dịch mới nhất (querydr / tra cứu payOS); kết quả chốt như IPN
    │
    └─► Return URL (redirect trình duyệt; tự nó không ghi gì): VNPAY_RETURN_URL = <FRONTEND_URL>/payments/result
          → trang kết quả gọi payment-check ở trên. GET /api/payments/vnpay/return chỉ trả JSON kiểm chữ ký
@@ -61,7 +63,7 @@ Không có job tự gọi cổng. Các lớp không thay thế nhau; mỗi lớp
 | Lớp | Khi nào chạy | Chặn được | Không chặn được |
 |---|---|---|---|
 | **1. IPN / webhook** | VNPay gọi `GET /api/payments/vnpay/ipn`; payOS gọi `POST /api/payments/payos/webhook` | sai chữ ký (`97` / 400), sai merchant/amount (`01`/`04` / 400), gọi lặp (`02` / 200); ghi `Success`/`Failed` | xác nhận không về; listener booking lỗi sau khi đã commit |
-| **2. Tra cứu khi khách quay về** | FE gọi `POST /api/invoices/{id}/payment-check` | giao dịch `Pending` mà cổng đã có kết quả (chạy local không có URL public vẫn chốt được) | khách không quay về trang kết quả |
+| **2. Khách quay về trang kết quả** | FE gọi `POST /api/invoices/{id}/payment-check` | giao dịch `Pending` mà cổng đã có kết quả: VNPay chốt bằng tham số có chữ ký trên Return URL (kiểm như IPN), rồi tra cứu cổng — chạy local không có URL public vẫn chốt được, kể cả khi `querydr` lỗi | khách không quay về trang kết quả; tham số sai chữ ký / không thuộc hoá đơn (bị bỏ qua) |
 | **3. Local repair** | `DepositStateRepairJob` mỗi 5 phút | `PaymentTransaction(PAY/Success)` + invoice cọc `Unpaid` do listener lỗi; replay listener idempotent | giao dịch còn `Pending`; không tự gọi cổng/tạo giao dịch |
 | **4. Đối soát thủ công** | `PendingPaymentWatchdogJob` tạo case; ADMIN tra portal rồi reconcile | `Pending` không ai chốt; chốt `Success`/`Failed`; Success thứ hai thành `Duplicate`, notify FM | không tự retry; không tự hoàn tiền; job chỉ alert, không tự chốt |
 
@@ -113,9 +115,12 @@ Lớp 1/2 chốt giao dịch thì case tương ứng cũng được đóng (`res
 
 ## Quy tắc bất biến
 
-- **IPN / webhook là nguồn xác nhận thanh toán chính.** Return URL nằm trên thanh địa chỉ, khách sửa được —
-  không bao giờ dùng để ghi nhận đã trả tiền. Nguồn dự phòng: tra cứu server-to-server có chữ ký khi khách quay về
-  (`payment-check`) và **đối soát thủ công qua portal**; không có job tự động gọi cổng.
+- **IPN / webhook là nguồn xác nhận thanh toán chính.** Return URL nằm trên thanh địa chỉ, khách sửa được — route
+  Return URL không ghi gì, và tham số trên đó chỉ được chốt khi chữ ký HMAC đúng (VNPay ký bằng HashSecret của
+  merchant, cùng sơ đồ với IPN), đúng `vnp_TmnCode`, đúng số tiền và giao dịch thuộc hoá đơn của chính khách đang
+  gọi `payment-check` (`PaymentService.confirmFromReturn`). Khách sửa bất kỳ tham số nào thì chữ ký sai và bị bỏ
+  qua. payOS không ký tham số Return URL nên không có nhánh này. Nguồn dự phòng khác: tra cứu server-to-server có chữ
+  ký khi khách quay về (`payment-check`) và **đối soát thủ công qua portal**; không có job tự động gọi cổng.
 - **Không tự đóng `Pending` theo đồng hồ.** Giao dịch Pending chỉ đổi trạng thái khi cổng báo kết quả (IPN,
   webhook, tra cứu, cổng xác nhận đã huỷ link) hoặc ops chốt qua endpoint ADMIN, có audit + event như IPN.
 - **Idempotent theo mã giao dịch.** VNPay retry tối đa 10 lần (cách 5 phút) và có thể gọi song song;

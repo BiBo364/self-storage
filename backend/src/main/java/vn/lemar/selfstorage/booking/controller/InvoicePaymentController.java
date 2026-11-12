@@ -7,12 +7,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.lemar.selfstorage.ApiEnvelope;
@@ -121,21 +125,33 @@ public class InvoicePaymentController {
     }
 
     @Operation(summary = "Kiểm tra kết quả thanh toán",
-            description = "Gọi khi khách quay về từ cổng: hỏi cổng về giao dịch mới nhất của hoá đơn (VNPay "
-                    + "`querydr` / tra cứu payOS — server-to-server, có chữ ký; nguồn dự phòng khi IPN / webhook chưa "
-                    + "tới) rồi trả trạng thái hoá đơn + giao dịch. Giao dịch đã chốt thì không gọi cổng; cổng chưa có "
-                    + "kết quả thì giao dịch giữ `Pending`.")
+            description = "Gọi khi khách quay về từ cổng. Body (tuỳ chọn) `gatewayParams` là các tham số `vnp_*` "
+                    + "VNPay gắn trên Return URL: chữ ký HMAC đúng, đúng merchant, đúng số tiền và giao dịch thuộc hoá "
+                    + "đơn này thì chốt như IPN. Sau đó hỏi cổng về giao dịch mới nhất của hoá đơn (VNPay `querydr` / "
+                    + "tra cứu payOS — server-to-server, có chữ ký; nguồn dự phòng khi IPN / webhook chưa tới) rồi trả "
+                    + "trạng thái hoá đơn + giao dịch. Giao dịch đã chốt thì không gọi cổng; cổng chưa có kết quả thì "
+                    + "giao dịch giữ `Pending`. Tham số sai chữ ký / không thuộc hoá đơn bị bỏ qua, không lỗi.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Trạng thái hoá đơn/giao dịch sau khi hỏi cổng"),
+            @ApiResponse(responseCode = "400", description = "`gatewayParams` quá 50 tham số"),
             @ApiResponse(responseCode = "401", description = "Thiếu / sai / hết hạn token"),
             @ApiResponse(responseCode = "404", description = "Hoá đơn không tồn tại hoặc không thuộc khách")
     })
     @PostMapping("/{invoiceId}/payment-check")
     public ResponseEntity<ApiEnvelope<PaymentCheck>> check(Authentication authentication,
                                                            @PathVariable Long invoiceId,
+                                                           @Valid @RequestBody(required = false)
+                                                           PaymentCheckRequest body,
                                                            HttpServletRequest request) {
-        PaymentCheck check = paymentService.check(invoiceId, currentAccountId(authentication), clientIp(request));
+        Map<String, String> gatewayParams = body == null || body.gatewayParams() == null
+                ? Map.of() : body.gatewayParams();
+        PaymentCheck check = paymentService.check(invoiceId, currentAccountId(authentication), clientIp(request),
+                gatewayParams);
         return ResponseEntity.ok(ApiEnvelope.ok(CHECK_MESSAGE, check));
+    }
+
+    @Schema(description = "Tham số cổng khách mang về từ Return URL (VNPay: các khoá `vnp_*` kèm `vnp_SecureHash`)")
+    public record PaymentCheckRequest(@Size(max = 50) Map<String, String> gatewayParams) {
     }
 
     private Long currentAccountId(Authentication authentication) {

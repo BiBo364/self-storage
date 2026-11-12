@@ -206,8 +206,25 @@ export function fetchInvoices(): Promise<CustomerInvoice[]> {
   return authed<CustomerInvoice[]>("/api/invoices");
 }
 
-export function checkInvoicePayment(invoiceId: number): Promise<PaymentCheck> {
-  return authed<PaymentCheck>(`/api/invoices/${invoiceId}/payment-check`, { method: "POST" });
+/** Tham số `vnp_*` VNPay gắn trên Return URL (có chữ ký) — backend kiểm chữ ký rồi chốt như IPN. */
+export function vnpayReturnParams(search: string = window.location.search): Record<string, string> {
+  const params: Record<string, string> = {};
+  new URLSearchParams(search).forEach((value, key) => {
+    if (key.startsWith("vnp_")) params[key] = value;
+  });
+  return params;
+}
+
+/**
+ * POST /api/invoices/{id}/payment-check. `gatewayParams` (tham số VNPay trên Return URL) cho backend chốt ngay khi IPN
+ * không tới được (chạy local); rỗng thì backend chỉ hỏi lại cổng.
+ */
+export function checkInvoicePayment(
+  invoiceId: number,
+  gatewayParams: Record<string, string> = {},
+): Promise<PaymentCheck> {
+  const body = Object.keys(gatewayParams).length > 0 ? { gatewayParams } : undefined;
+  return authed<PaymentCheck>(`/api/invoices/${invoiceId}/payment-check`, { method: "POST", body });
 }
 
 /**

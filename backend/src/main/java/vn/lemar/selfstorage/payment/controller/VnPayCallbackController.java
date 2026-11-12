@@ -46,13 +46,14 @@ public class VnPayCallbackController {
     }
 
     /**
-     * Nơi trình duyệt khách được đẩy về. Chỉ hiển thị kết quả, **không** cập nhật dữ liệu —
-     * tham số trên thanh địa chỉ do khách kiểm soát nên không đủ tin cậy để ghi nhận đã trả tiền.
+     * Kiểm chữ ký tham số VNPay gắn trên Return URL. Chỉ hiển thị kết quả, **không** cập nhật dữ liệu —
+     * chốt thanh toán đi qua IPN, hoặc {@code payment-check} khi trang kết quả FE gửi kèm bộ tham số có chữ ký.
      */
     @SecurityRequirements
-    @Operation(summary = "Return URL của VNPay",
-            description = "Nơi VNPay đẩy trình duyệt khách về sau khi thanh toán. Chỉ để hiển thị "
-                    + "kết quả — không ghi dữ liệu. Nguồn xác nhận thanh toán duy nhất là IPN.")
+    @Operation(summary = "Return URL của VNPay (kiểm chữ ký)",
+            description = "Trả kết quả kiểm chữ ký của tham số VNPay — dùng làm Return URL khi test backend không có "
+                    + "FE. Không ghi dữ liệu; chốt thanh toán qua IPN hoặc payment-check (trang kết quả FE gửi kèm "
+                    + "tham số có chữ ký).")
     @ApiResponses({
             @ApiResponse(responseCode = "200",
                     description = "Luôn 200, kể cả khi chữ ký sai — kết quả nằm trong `validSignature`",

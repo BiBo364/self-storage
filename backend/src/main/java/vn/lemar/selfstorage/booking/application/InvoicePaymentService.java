@@ -1,6 +1,7 @@
 package vn.lemar.selfstorage.booking.application;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -152,16 +153,26 @@ public class InvoicePaymentService {
         return PayResult.redirect(url);
     }
 
-    /**
-     * Khách quay về từ cổng: hỏi cổng về giao dịch mới nhất (nguồn dự phòng khi IPN / webhook chưa tới), rồi đọc lại
-     * trạng thái hoá đơn. Không chạy trong transaction riêng — listener chốt thanh toán chạy sau commit của bước hỏi
-     * cổng, nên đọc lại phải sau đó.
-     */
+    /** {@link #check(Long, Long, String, Map)} không kèm tham số cổng. */
     public PaymentCheck check(Long invoiceId, Long customerId, String ipAddr) {
+        return check(invoiceId, customerId, ipAddr, Map.of());
+    }
+
+    /**
+     * Khách quay về từ cổng: chốt bằng tham số VNPay có chữ ký trên Return URL (nếu FE gửi kèm), rồi hỏi cổng về giao
+     * dịch mới nhất (nguồn dự phòng khi IPN / webhook chưa tới), rồi đọc lại trạng thái hoá đơn. Không chạy trong
+     * transaction riêng — listener chốt thanh toán chạy sau commit của từng bước, nên đọc lại phải sau đó.
+     *
+     * @param gatewayParams tham số {@code vnp_*} trên Return URL; rỗng thì chỉ hỏi cổng
+     */
+    public PaymentCheck check(Long invoiceId, Long customerId, String ipAddr, Map<String, String> gatewayParams) {
         Invoice before = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new BookingNotFoundException(MSG_NOT_FOUND));
         if (!before.getCustomerId().equals(customerId)) {
             throw new BookingNotFoundException(MSG_NOT_FOUND);
+        }
+        if (gatewayParams != null && !gatewayParams.isEmpty()) {
+            paymentService.confirmFromReturn(invoiceId, gatewayParams);
         }
         var snapshot = paymentService.reconcileLatest(invoiceId, ipAddr).orElse(null);
         Invoice after = invoiceRepository.findById(invoiceId).orElse(before);
