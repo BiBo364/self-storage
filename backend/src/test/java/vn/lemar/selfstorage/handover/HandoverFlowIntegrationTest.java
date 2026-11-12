@@ -199,7 +199,7 @@ class HandoverFlowIntegrationTest {
     void agreeingInspectionCreatesDraftContractFromPolicyAndDocumentRenders() {
         Seed seed = seedInProgress(fsId);
         loginAs(FS);
-        workflow.verifyIdentity(seed.handoverId, true, null);
+        workflow.verifyIdentity(seed.handoverId, true, null, idPhotos());
         // URL ảnh phải là upload của FS (media_uploads) — trước đây test dùng URL tuỳ ý "https://img.test/1.jpg".
         String photo = uploaded(fsId, "1.jpg");
         workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of(photo));
@@ -232,11 +232,11 @@ class HandoverFlowIntegrationTest {
         loginAs(FS);
         assertThatThrownBy(() -> workflow.recordInspection(seed.handoverId, "x", List.of()))
                 .isInstanceOf(HandoverConflictException.class);
-        workflow.verifyIdentity(seed.handoverId, false, "CCCD không khớp");
+        workflow.verifyIdentity(seed.handoverId, false, "CCCD không khớp", List.of());
         assertThat(view(seed.handoverId).identityStatus()).isEqualTo("Failed");
         assertThat(handoverResult(seed.handoverId)).isEqualTo("IN_PROGRESS");
-        workflow.verifyIdentity(seed.handoverId, true, null);
-        assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null))
+        workflow.verifyIdentity(seed.handoverId, true, null, idPhotos());
+        assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null, idPhotos()))
                 .isInstanceOf(HandoverConflictException.class);
 
         // Khách chưa đồng ý được khi FS chưa ghi hiện trạng (mốc so sánh khi trả kho).
@@ -268,7 +268,7 @@ class HandoverFlowIntegrationTest {
         long otherStaff = id("select id from accounts where email = '" + FM + "'");
         Seed seed = seedInProgress(otherStaff);
         loginAs(FS);
-        assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null))
+        assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null, idPhotos()))
                 .isInstanceOf(HandoverForbiddenException.class);
     }
 
@@ -487,7 +487,7 @@ class HandoverFlowIntegrationTest {
     void staffInputValidation() {
         Seed seed = seedInProgress(fsId);
         loginAs(FS);
-        workflow.verifyIdentity(seed.handoverId, true, "CCCD khớp");
+        workflow.verifyIdentity(seed.handoverId, true, "CCCD khớp", idPhotos());
         List<String> tooMany = java.util.Collections.nCopies(21, "https://img.test/x.jpg");
         assertThatThrownBy(() -> workflow.recordInspection(seed.handoverId, "x", tooMany))
                 .isInstanceOf(HandoverValidationException.class);
@@ -573,6 +573,43 @@ class HandoverFlowIntegrationTest {
     }
 
     @Test
+    void passingIdentityNeedsOneToFourUploadedDocumentPhotos() {
+        Seed seed = seedInProgress(fsId);
+        loginAs(FS);
+        assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null, List.of()))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("ít nhất một ảnh CCCD");
+        assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null, null))
+                .isInstanceOf(HandoverValidationException.class);
+        List<String> five = List.of(uploaded(fsId, "1.jpg"), uploaded(fsId, "2.jpg"), uploaded(fsId, "3.jpg"),
+                uploaded(fsId, "4.jpg"), uploaded(fsId, "5.jpg"));
+        assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null, five))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("Tối đa 4");
+        String foreign = uploaded(customerId, "cccd.jpg");
+        assertThatThrownBy(() -> workflow.verifyIdentity(seed.handoverId, true, null, List.of(foreign)))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("Ảnh giấy tờ");
+        assertThat(view(seed.handoverId).identityStatus()).isEqualTo("Pending");
+
+        // Không đạt: ảnh tuỳ chọn. Đạt: ảnh lưu vào biên bản và upload Pending chuyển Attached ngay.
+        workflow.verifyIdentity(seed.handoverId, false, "CCCD mờ", List.of());
+        assertThat(view(seed.handoverId).identityStatus()).isEqualTo("Failed");
+        String front = uploaded(fsId, "front.jpg", "Pending");
+        String back = uploaded(fsId, "back.jpg", "Pending");
+        workflow.verifyIdentity(seed.handoverId, true, null, List.of(front, back));
+
+        HandoverView view = view(seed.handoverId);
+        assertThat(view.identityStatus()).isEqualTo("Verified");
+        assertThat(view.identityPhotos()).containsExactly(front, back);
+        assertThat(jdbc.queryForObject("select count(*) from media_uploads where url in (?, ?) "
+                + "and status = 'Attached'", Long.class, front, back)).isEqualTo(2L);
+        assertThat(jdbc.queryForObject("select new_value ->> 'photoCount' from audit_logs where action = "
+                + "'IDENTITY_VERIFIED' and entity_id = ? order by id desc limit 1", String.class,
+                String.valueOf(seed.handoverId))).isEqualTo("2");
+    }
+
+    @Test
     void queriesForStaffAndCustomer() {
         Seed seed = seedInProgress(fsId);
         loginAs(FS);
@@ -585,7 +622,7 @@ class HandoverFlowIntegrationTest {
 
         Seed waiting = seedScheduledNoShow();
         assertThat(queryService.view(waiting.handoverId).step()).isEqualTo("WAITING_ARRIVAL");
-        assertThatThrownBy(() -> workflow.verifyIdentity(waiting.handoverId, true, null))
+        assertThatThrownBy(() -> workflow.verifyIdentity(waiting.handoverId, true, null, idPhotos()))
                 .isInstanceOf(HandoverConflictException.class);
         assertThatThrownBy(() -> queryService.view(-1L))
                 .isInstanceOf(vn.lemar.selfstorage.handover.application.exception.HandoverNotFoundException.class);
@@ -641,7 +678,7 @@ class HandoverFlowIntegrationTest {
     void staffCorrectsInspectionAfterAgreementWithReasonAndAudit() {
         Seed seed = seedInProgress(fsId);
         loginAs(FS);
-        workflow.verifyIdentity(seed.handoverId, true, null);
+        workflow.verifyIdentity(seed.handoverId, true, null, idPhotos());
         String first = uploaded(fsId, "c1.jpg");
         workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of(first));
         loginAs(CUSTOMER);
@@ -687,7 +724,7 @@ class HandoverFlowIntegrationTest {
     void inspectionCorrectionGuards() {
         Seed seed = seedInProgress(fsId);
         loginAs(FS);
-        workflow.verifyIdentity(seed.handoverId, true, null);
+        workflow.verifyIdentity(seed.handoverId, true, null, idPhotos());
         workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of());
 
         // Khách chưa đồng ý → dùng bước ghi hiện trạng thường.
@@ -747,7 +784,7 @@ class HandoverFlowIntegrationTest {
     void inspectionPhotosMustBeUploadsOfCurrentStaff() {
         Seed seed = seedInProgress(fsId);
         loginAs(FS);
-        workflow.verifyIdentity(seed.handoverId, true, null);
+        workflow.verifyIdentity(seed.handoverId, true, null, idPhotos());
 
         assertThatThrownBy(() -> workflow.recordInspection(seed.handoverId, "x",
                 List.of("https://img.test/1.jpg")))
@@ -851,7 +888,7 @@ class HandoverFlowIntegrationTest {
 
     private void untilAgreed(Seed seed) {
         loginAs(FS);
-        workflow.verifyIdentity(seed.handoverId, true, null);
+        workflow.verifyIdentity(seed.handoverId, true, null, idPhotos());
         workflow.recordInspection(seed.handoverId, "Khoang sạch, khoá tốt", List.of());
         loginAs(CUSTOMER);
         workflow.agreeInspection(seed.handoverId, customerId, null);
@@ -867,6 +904,11 @@ class HandoverFlowIntegrationTest {
     }
 
     /** Giả lập một upload {@code Attached} qua {@code /api/media} của account (row {@code media_uploads}). */
+    /** Ảnh CCCD FS đã upload — xác minh đạt bắt buộc ít nhất một ảnh. */
+    private List<String> idPhotos() {
+        return List.of(uploaded(fsId, "cccd.jpg"));
+    }
+
     private String uploaded(long accountId, String name) {
         return uploaded(accountId, name, "Attached");
     }

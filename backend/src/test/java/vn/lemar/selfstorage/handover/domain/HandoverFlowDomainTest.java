@@ -21,12 +21,12 @@ class HandoverFlowDomainTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> record.agreeInspection(null, NOW)).isInstanceOf(IllegalStateException.class);
 
-        record.verifyIdentity(false, NOW);
+        record.verifyIdentity(false, List.of(), NOW);
         assertThat(record.getIdentityStatus()).isEqualTo(HandoverRecord.FAILED);
         assertThat(record.getIdentityVerifiedAt()).isNull();
-        record.verifyIdentity(true, NOW);
+        record.verifyIdentity(true, List.of(), NOW);
         assertThat(record.identityVerified()).isTrue();
-        assertThatThrownBy(() -> record.verifyIdentity(true, NOW)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> record.verifyIdentity(true, List.of(), NOW)).isInstanceOf(IllegalStateException.class);
 
         record.recordInspection("Sạch", null, NOW);
         assertThat(record.getInspectionPhotos()).isEmpty();
@@ -40,7 +40,7 @@ class HandoverFlowDomainTest {
     @Test
     void customerNoteWithoutStaffNotesBecomesTheNote() {
         HandoverRecord record = HandoverRecord.open(1L, 2L, 3L);
-        record.verifyIdentity(true, NOW);
+        record.verifyIdentity(true, List.of(), NOW);
         record.agreeInspection("Cửa kẹt", NOW);
         assertThat(record.getInspectionNotes()).isEqualTo("Khách lưu ý: Cửa kẹt");
     }
@@ -51,7 +51,7 @@ class HandoverFlowDomainTest {
         assertThatThrownBy(() -> record.confirmByCustomer(AccessChoice.ACCESS_CODE, NOW))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(record.accessChoice()).isNull();
-        record.verifyIdentity(true, NOW);
+        record.verifyIdentity(true, List.of(), NOW);
         assertThatThrownBy(() -> record.confirmByCustomer(AccessChoice.BOTH, NOW))
                 .isInstanceOf(IllegalStateException.class);
         record.agreeInspection(null, NOW);
@@ -117,7 +117,7 @@ class HandoverFlowDomainTest {
     @Test
     void inspectionCorrectionOnlyAfterAgreementWhileOpen() {
         HandoverRecord record = HandoverRecord.open(1L, 2L, 3L);
-        record.verifyIdentity(true, NOW);
+        record.verifyIdentity(true, List.of(), NOW);
         record.recordInspection("Sạch", List.of("a"), NOW);
         assertThatThrownBy(() -> record.correctInspection("x", List.of(), NOW))
                 .isInstanceOf(IllegalStateException.class);

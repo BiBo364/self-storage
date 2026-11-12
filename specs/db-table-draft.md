@@ -381,6 +381,7 @@ Các bước:
 
 - identity_status (Pending/Verified/Failed) - xác minh danh tính người đến check-in
 - identity_verified_at (nullable)
+- identity_photos - List<String> (nullable, V33), ảnh CCCD/hộ chiếu FS chụp ở lần xác minh gần nhất
 - inspection_status (Pending/Agreed/Rejected) - hiện trạng kho được khách xác nhận
 - unit_inspected_at (nullable)
 - inspection_notes (nullable) - chỉ cho ghi chú hiện trạng

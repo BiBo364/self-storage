@@ -3,15 +3,16 @@ import { useState, type ChangeEvent, type Dispatch, type SetStateAction } from "
 import { errorMessage } from "../../app/http";
 import { attachMediaBatch, deleteMediaBatch, uploadMedia } from "../../app/media";
 import { buttonClassName } from "../ui/Button";
+import { ImageLightbox } from "../ui/ImageLightbox";
 // ---------------------------------------------------------------- upload ảnh / file dùng chung
 
 /** Một file đã upload qua /api/media. `batchId` null = file đã có sẵn trên server (đã attach). */
 export type PickedFile = { url: string; name: string; isPdf: boolean; batchId: string | null };
 
 export const TEXTAREA_CLASS =
-  "min-h-[90px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink outline-0 transition-colors focus:border-brand";
+  "min-h-[96px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-body text-ink outline-0 transition-colors hover:border-ink focus:border-brand";
 export const INPUT_CLASS =
-  "min-h-[42px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 text-small text-ink outline-0 focus:border-brand";
+  "min-h-[44px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 text-body text-ink outline-0 transition-colors hover:border-ink focus:border-brand";
 
 export function filesFromUrls(urls: string[] | null | undefined): PickedFile[] {
   return (urls ?? []).map((url) => ({
@@ -30,30 +31,52 @@ export async function attachUploaded(files: PickedFile[]): Promise<void> {
   await Promise.allSettled(batchIds.map((batchId) => attachMediaBatch(batchId)));
 }
 
-/** Ô tải ảnh/PDF lên /api/media; JPEG/PNG/WebP/PDF ≤ 10MB do backend kiểm. */
+const DEFAULT_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
+
+/**
+ * Ô tải ảnh/PDF lên /api/media; JPEG/PNG/WebP/PDF ≤ 10MB do backend kiểm. Bấm ảnh để xem cỡ lớn.
+ * `thumbSize="lg"` cho ảnh cần đọc chữ (giấy tờ tuỳ thân); `maxFiles` chặn chọn quá số file.
+ */
 export function FileUploadField({
   label,
   files,
   onChange,
   multiple = true,
   disabled = false,
+  accept = DEFAULT_ACCEPT,
+  thumbSize = "md",
+  maxFiles,
+  hint,
 }: {
   label: string;
   files: PickedFile[];
   onChange: Dispatch<SetStateAction<PickedFile[]>>;
   multiple?: boolean;
   disabled?: boolean;
+  accept?: string;
+  thumbSize?: "md" | "lg";
+  maxFiles?: number;
+  hint?: string;
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<number | null>(null);
+  const images = files.filter((file) => !file.isPdf);
+  const isFull = maxFiles !== undefined && files.length >= maxFiles;
 
   async function pick(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
-    const chosen = Array.from(input.files ?? []);
+    let chosen = Array.from(input.files ?? []);
     input.value = "";
     if (chosen.length === 0) return;
-    setUploading(true);
     setError(null);
+    if (maxFiles !== undefined && files.length + chosen.length > maxFiles) {
+      const room = Math.max(0, maxFiles - files.length);
+      setError(`Tối đa ${maxFiles} file — chỉ tải thêm ${room} file đầu.`);
+      chosen = chosen.slice(0, room);
+      if (chosen.length === 0) return;
+    }
+    setUploading(true);
     const results = await Promise.allSettled(
       chosen.map(async (file): Promise<PickedFile> => {
         const result = await uploadMedia(file);
@@ -90,19 +113,23 @@ export function FileUploadField({
   }
 
   return (
-    <div className="border border-dashed border-border bg-surface-subtle p-4">
+    <div className="border border-dashed border-rule-strong bg-surface-subtle p-4 transition-colors hover:border-ink">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-label text-muted">{label}</span>
+        <div className="grid gap-0.5">
+          <span className="text-small font-semibold text-ink">{label}</span>
+          {hint && <span className="text-label font-normal text-muted">{hint}</span>}
+        </div>
         <label
-          className={`${buttonClassName("secondary", "sm")} ${disabled || uploading ? "pointer-events-none opacity-60" : "cursor-pointer"}`}
+          className={`${buttonClassName("secondary", "sm")} ${disabled || uploading || isFull ? "pointer-events-none opacity-60" : "cursor-pointer"}`}
         >
-          <Upload size={15} /> {uploading ? "Đang tải…" : multiple ? "Tải ảnh" : "Tải file"}
+          <Upload size={15} className={uploading ? "animate-bounce" : undefined} />{" "}
+          {uploading ? "Đang tải…" : multiple ? "Tải ảnh" : "Tải file"}
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
+            accept={accept}
             multiple={multiple}
             className="hidden"
-            disabled={disabled || uploading}
+            disabled={disabled || uploading || isFull}
             onChange={pick}
           />
         </label>
@@ -113,37 +140,56 @@ export function FileUploadField({
         </p>
       )}
       {files.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-3">
           {files.map((file) => (
-            <div key={file.url} className="relative h-20 w-20">
-              <a
-                href={file.url}
-                target="_blank"
-                rel="noreferrer"
-                className="block h-full w-full border border-border"
-                title={file.name}
-              >
-                {file.isPdf ? (
-                  <span className="grid h-full w-full place-items-center bg-surface text-label text-muted">
-                    PDF
-                  </span>
-                ) : (
-                  <img src={file.url} alt={file.name} className="h-full w-full object-cover" />
-                )}
-              </a>
+            <div
+              key={file.url}
+              className={`pop-enter relative ${thumbSize === "lg" ? "h-40 w-60 max-[520px]:h-36 max-[520px]:w-full" : "h-24 w-24"}`}
+            >
+              {file.isPdf ? (
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="grid h-full w-full place-items-center border border-border bg-surface text-label text-muted hover:border-ink"
+                  title={file.name}
+                >
+                  PDF
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="group block h-full w-full overflow-hidden border border-border bg-surface p-0 hover:border-ink"
+                  title={`Xem lớn: ${file.name}`}
+                  onClick={() => setPreview(images.findIndex((image) => image.url === file.url))}
+                >
+                  <img
+                    src={file.url}
+                    alt={file.name}
+                    className={`h-full w-full ${thumbSize === "lg" ? "object-contain" : "object-cover"} transition-transform duration-300 ease-out group-hover:scale-105`}
+                  />
+                </button>
+              )}
               {!disabled && (
                 <button
                   type="button"
-                  className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center border border-border bg-surface text-danger hover:border-danger"
+                  className="absolute -right-2 -top-2 grid h-7 w-7 place-items-center border border-border bg-surface text-danger hover:border-danger hover:bg-danger-soft"
                   onClick={() => remove(file)}
                   aria-label={`Bỏ ${file.name}`}
                 >
-                  <X size={12} />
+                  <X size={14} />
                 </button>
               )}
             </div>
           ))}
         </div>
+      )}
+      {preview !== null && images.length > 0 && (
+        <ImageLightbox
+          images={images}
+          startIndex={Math.max(0, preview)}
+          onClose={() => setPreview(null)}
+        />
       )}
     </div>
   );

@@ -35,6 +35,7 @@ public record HandoverView(
         Instant arrivedAt,
         String identityStatus,
         Instant identityVerifiedAt,
+        @Schema(description = "Ảnh CCCD/hộ chiếu FS chụp ở lần xác minh gần nhất") List<String> identityPhotos,
         String inspectionStatus,
         Instant unitInspectedAt,
         String inspectionNotes,

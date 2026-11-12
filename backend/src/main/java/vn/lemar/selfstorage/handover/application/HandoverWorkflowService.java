@@ -91,6 +91,11 @@ public class HandoverWorkflowService {
     static final String MSG_SCAN_NOT_UPLOADED = "Bản scan hợp đồng phải là tệp bạn đã tải lên hệ thống — vui lòng "
             + "tải bản scan lên lại";
     static final int MAX_PHOTOS = 20;
+    static final int MAX_IDENTITY_PHOTOS = 4;
+    static final String MSG_IDENTITY_PHOTO_REQUIRED = "Cần ít nhất một ảnh CCCD/hộ chiếu khi xác minh đạt";
+    static final String MSG_MAX_IDENTITY_PHOTOS = "Tối đa 4 ảnh giấy tờ tuỳ thân";
+    static final String MSG_IDENTITY_PHOTO_NOT_UPLOADED = "Ảnh giấy tờ phải là ảnh bạn đã tải lên hệ thống — vui "
+            + "lòng tải ảnh lên lại";
 
     private static final Logger LOG = LoggerFactory.getLogger(HandoverWorkflowService.class);
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -148,18 +153,30 @@ public class HandoverWorkflowService {
 
     // ---------------------------------------------------------------- FS
 
-    /** Spec 2.2: FS đối chiếu giấy tờ với tài khoản của đơn. */
+    /**
+     * Spec 2.2: FS đối chiếu giấy tờ với tài khoản của đơn. Đạt bắt buộc 1–4 ảnh CCCD/hộ chiếu; không đạt ảnh tuỳ
+     * chọn. Ảnh phải là upload của chính FS này và được attach trong cùng transaction.
+     */
     @Transactional
-    public void verifyIdentity(Long handoverId, boolean passed, String note) {
+    public void verifyIdentity(Long handoverId, boolean passed, String note, List<String> photos) {
+        List<String> list = photos == null ? List.of() : photos;
+        if (passed && list.isEmpty()) {
+            throw new HandoverValidationException(MSG_IDENTITY_PHOTO_REQUIRED);
+        }
+        if (list.size() > MAX_IDENTITY_PHOTOS) {
+            throw new HandoverValidationException(MSG_MAX_IDENTITY_PHOTOS);
+        }
         Locked locked = lockForStaff(handoverId, PERM_VERIFY);
         HandoverRecord record = locked.record();
         if (record.identityVerified()) {
             throw new HandoverConflictException("Danh tính đã được xác minh");
         }
+        requireUploaded(locked.actorId(), list, record.getIdentityPhotos(), MSG_IDENTITY_PHOTO_NOT_UPLOADED);
         String before = record.getIdentityStatus();
-        record.verifyIdentity(passed, Instant.now());
+        record.verifyIdentity(passed, list, Instant.now());
         Map<String, Object> newValue = new HashMap<>();
         newValue.put("identityStatus", record.getIdentityStatus());
+        newValue.put("photoCount", list.size());
         if (note != null && !note.isBlank()) {
             newValue.put("note", note.trim());
         }
@@ -549,16 +566,21 @@ public class HandoverWorkflowService {
      * được attach (cùng transaction) để cron dọn upload bỏ ngang không xoá.
      */
     private void requireUploadedPhotos(Long actorId, List<String> photos, HandoverRecord record) {
+        requireUploaded(actorId, photos, record.getInspectionPhotos(), MSG_PHOTO_NOT_UPLOADED);
+    }
+
+    /** URL mới (chưa có trên record) phải là upload của FS này; attach chúng trong cùng transaction. */
+    private void requireUploaded(Long actorId, List<String> photos, List<String> current, String message) {
         if (photos == null || photos.isEmpty()) {
             return;
         }
         if (photos.stream().anyMatch(url -> url == null || url.isBlank())) {
-            throw new HandoverValidationException(MSG_PHOTO_NOT_UPLOADED);
+            throw new HandoverValidationException(message);
         }
-        List<String> existing = record.getInspectionPhotos() == null ? List.of() : record.getInspectionPhotos();
+        List<String> existing = current == null ? List.of() : current;
         List<String> fresh = photos.stream().filter(url -> !existing.contains(url)).toList();
         if (!fresh.isEmpty() && !mediaUrls.notUploadedBy(actorId, fresh).isEmpty()) {
-            throw new HandoverValidationException(MSG_PHOTO_NOT_UPLOADED);
+            throw new HandoverValidationException(message);
         }
         mediaAttachments.attach(actorId, fresh);
     }

@@ -48,6 +48,8 @@ Bảng `handover_records` (V1, V24). Entity `handover/domain/HandoverRecord.java
 - `result`: `IN_PROGRESS | COMPLETED | REJECTED | CANCELED`.
 - `identity_status`: `Pending → Verified` (chốt) hoặc `Pending/Failed → Failed`; `Failed` vẫn xác minh lại được trong
   hạn `due_at` (khách quay lại với giấy tờ đúng).
+- `identity_photos` (V33): ảnh CCCD/hộ chiếu của lần xác minh gần nhất — mỗi lần gọi xác minh ghi đè danh sách; bản ghi
+  trước V33 để `NULL`.
 - `inspection_status`: `Pending → Agreed` (khách đồng ý) hoặc `Rejected` (khách từ chối khoang).
 - `requested_access` (V24): `AccessCode | PhysicalKey | Both` — lựa chọn của khách khi xác nhận biên bản;
   `customer_confirmed_at` (V24).
@@ -107,7 +109,7 @@ kiện chung: record `IN_PROGRESS`, đơn `InProgress`, khách đã đến (`arr
 
 | Bước | Ai | Điều kiện thêm | Kết quả | Audit |
 |---|---|---|---|---|
-| Xác minh danh tính | FS phụ trách (`appointments.staff_id`), `handover_record.verify_identity` | chưa `Verified` | `Verified` + `identity_verified_at`, hoặc `Failed` (phiên vẫn mở) | `IDENTITY_VERIFIED` (old/new `identityStatus`, `note`) |
+| Xác minh danh tính | FS phụ trách (`appointments.staff_id`), `handover_record.verify_identity` | chưa `Verified`; đạt cần 1–4 ảnh giấy tờ, không đạt ảnh tuỳ chọn (thiếu ảnh / > 4 ảnh → 400, kiểm trước khoá); ảnh mới là upload của chính FS này, attach trong cùng transaction | `Verified` + `identity_verified_at`, hoặc `Failed` (phiên vẫn mở); `identity_photos` = ảnh gửi lên | `IDENTITY_VERIFIED` (old/new `identityStatus`, `note`, `photoCount`) |
 | Ghi hiện trạng | FS, `handover_record.inspect` | `Verified`, hiện trạng còn `Pending`; ảnh là upload của chính FS này (xem dưới) | `inspection_notes`, `inspection_photos` (≤ 20 URL) | — |
 | Đồng ý hiện trạng | Khách của đơn | `Verified`, hiện trạng `Pending`, ghi chú khách ≤ 1000 ký tự (400, kiểm trước), FS đã ghi hiện trạng — có ghi chú hoặc ≥ 1 ảnh (`HandoverRecord.inspectionRecorded()`), chưa ghi → 409 | `Agreed` + `unit_inspected_at`; ghi chú khách nối vào notes ("Khách lưu ý: …"); sinh hợp đồng `Draft` nếu đơn chưa có | `UNIT_INSPECTED` |
 | Sửa hiện trạng | FS, `handover_record.inspect` | hiện trạng đã `Agreed`; lý do bắt buộc ≤ 500 ký tự; ≤ 20 ảnh; sau khi sửa phải còn ghi chú hoặc ≥ 1 ảnh (400) | thay toàn bộ `inspection_notes` + `inspection_photos`; hợp đồng đã ký không đổi theo | `INSPECTION_CORRECTED` (old/new `inspectionNotes` + `photoCount`, `reason`) |

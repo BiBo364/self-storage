@@ -60,6 +60,11 @@ public class HandoverRecord {
     @Column(name = "identity_verified_at")
     private Instant identityVerifiedAt;
 
+    /** Ảnh CCCD/hộ chiếu của lần xác minh gần nhất (V33) — mỗi lần xác minh ghi đè. */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "identity_photos", columnDefinition = "text[]")
+    private List<String> identityPhotos;
+
     /** Pending / Agreed / Rejected — CHECK V1; enum riêng thêm khi Flow 2.2 có behavior. */
     @Column(name = "inspection_status", nullable = false, length = 20)
     private String inspectionStatus;
@@ -163,13 +168,14 @@ public class HandoverRecord {
      * Spec 2.2: FS đối chiếu giấy tờ. Đạt → {@code Verified} (chốt, không đổi lại); không đạt → {@code Failed}, phiên
      * vẫn mở để khách quay lại với giấy tờ đúng trong hạn {@code due_at}.
      */
-    public void verifyIdentity(boolean passed, Instant now) {
+    public void verifyIdentity(boolean passed, List<String> photos, Instant now) {
         requireOpen();
         if (identityVerified()) {
             throw new IllegalStateException("Biên bản " + id + " đã xác minh danh tính");
         }
         this.identityStatus = passed ? VERIFIED : FAILED;
         this.identityVerifiedAt = passed ? now : null;
+        this.identityPhotos = photos == null ? List.of() : List.copyOf(photos);
         this.updatedAt = now;
     }
 

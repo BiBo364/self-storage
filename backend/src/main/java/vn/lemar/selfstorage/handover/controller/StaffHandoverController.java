@@ -49,11 +49,13 @@ public class StaffHandoverController {
     }
 
     @Operation(summary = "Xác minh danh tính (2.2)",
-            description = "`verified=false` → `identity_status = Failed`, phiên vẫn mở (không huỷ lịch/đơn).")
+            description = "`verified=true` cần 1–4 ảnh CCCD/hộ chiếu trong `photos` (upload trước qua `/api/media`, "
+                    + "URL không phải file FS này đã upload → 400). `verified=false` → `identity_status = Failed`, "
+                    + "ảnh tuỳ chọn, phiên vẫn mở (không huỷ lịch/đơn).")
     @PostMapping("/handovers/{id}/identity")
     public ResponseEntity<ApiEnvelope<HandoverView>> identity(@PathVariable Long id,
                                                               @Valid @RequestBody IdentityRequest body) {
-        workflow.verifyIdentity(id, body.verified(), body.note());
+        workflow.verifyIdentity(id, body.verified(), body.note(), body.photos());
         return ok("Đã ghi nhận xác minh danh tính", id);
     }
 
@@ -118,7 +120,8 @@ public class StaffHandoverController {
     }
 
     @Schema(description = "Kết quả xác minh danh tính")
-    public record IdentityRequest(@NotNull Boolean verified, @Size(max = 500) String note) {
+    public record IdentityRequest(@NotNull Boolean verified, @Size(max = 500) String note,
+                                  @Size(max = 4) List<@NotBlank String> photos) {
     }
 
     @Schema(description = "Hiện trạng khoang")

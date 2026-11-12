@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, FileText, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, FileText, IdCard, RefreshCw } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { formatDate, formatDateTime, formatMoney, formatTime, isoDate } from "../../app/format";
 import { errorMessage, errorStatus } from "../../app/http";
@@ -22,6 +22,7 @@ import { Button } from "../../components/ui/Button";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { FIELD_LABEL } from "../../components/ui/FormField";
+import { ImageLightbox } from "../../components/ui/ImageLightbox";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 import {
@@ -99,6 +100,38 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
   );
 }
 
+const MAX_IDENTITY_PHOTOS = 4;
+const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp";
+
+function IdentityPhotoStrip({ urls }: { urls: string[] }) {
+  const [open, setOpen] = useState<number | null>(null);
+  const images = urls.map((url, index) => ({ url, name: `Giấy tờ ${index + 1}` }));
+  return (
+    <>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {images.map((image, index) => (
+          <button
+            key={image.url}
+            type="button"
+            className="group block aspect-[3/2] overflow-hidden border border-border bg-surface-subtle p-0 hover:border-ink"
+            onClick={() => setOpen(index)}
+            title="Xem lớn"
+          >
+            <img
+              src={image.url}
+              alt={image.name}
+              className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
+            />
+          </button>
+        ))}
+      </div>
+      {open !== null && (
+        <ImageLightbox images={images} startIndex={open} onClose={() => setOpen(null)} />
+      )}
+    </>
+  );
+}
+
 function WaitingCustomer({
   title,
   description,
@@ -111,7 +144,7 @@ function WaitingCustomer({
   refreshing: boolean;
 }) {
   return (
-    <div className="mt-4 bg-info-soft p-4 text-info">
+    <div className="step-enter mt-4 border-l-4 border-info bg-info-soft p-4 text-info">
       <strong className="block text-small">{title}</strong>
       <p className="mb-0 mt-1 text-small">{description}</p>
       <Button
@@ -141,6 +174,7 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   const [confirmNotSigned, setConfirmNotSigned] = useState(false);
 
   const [identityNote, setIdentityNote] = useState("");
+  const [identityPhotos, setIdentityPhotos] = useState<PickedFile[]>([]);
   const [inspectionNotes, setInspectionNotes] = useState("");
   const [inspectionPhotos, setInspectionPhotos] = useState<PickedFile[]>([]);
   const [contractScan, setContractScan] = useState<PickedFile[]>([]);
@@ -357,6 +391,21 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
             </dl>
           </div>
 
+          {(current.identityPhotos?.length ?? 0) > 0 && (
+            <div className="step-enter bg-surface p-5">
+              <span className="inline-flex items-center gap-1.5 text-label text-muted">
+                <IdCard size={15} /> Giấy tờ đã đối chiếu
+              </span>
+              <p className="mb-0 mt-1 text-small text-ink">
+                {current.identityStatus === "Verified" ? "Xác minh đạt" : "Lần gần nhất không đạt"}
+                {current.identityVerifiedAt
+                  ? ` · ${formatDateTime(current.identityVerifiedAt)}`
+                  : ""}
+              </p>
+              <IdentityPhotoStrip urls={current.identityPhotos ?? []} />
+            </div>
+          )}
+
           {!isClosed && (
             <ol className="m-0 grid list-none gap-3 bg-surface p-5">
               {STEP_ORDER.map((item, index) => {
@@ -365,11 +414,11 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                 return (
                   <li key={item.key} className="flex items-start gap-3">
                     <span
-                      className={`grid h-7 w-7 shrink-0 place-items-center text-label font-bold ${
+                      className={`grid h-8 w-8 shrink-0 place-items-center text-small font-bold transition-all duration-300 ${
                         isDone
                           ? "bg-brand text-signal-ink"
                           : isCurrent
-                            ? "border-2 border-brand text-ink"
+                            ? "border-2 border-brand text-ink shadow-[0_0_0_4px_var(--brand-soft)]"
                             : "border border-border text-muted"
                       }`}
                     >
@@ -392,7 +441,7 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
           )}
         </aside>
 
-        <section className="bg-surface p-5">
+        <section key={step} className="step-enter bg-surface p-6 max-[520px]:p-4">
           {isClosed && (
             <ClosedState handover={current} onBack={() => navigate("/staff/handovers")} />
           )}
@@ -413,21 +462,35 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
             <div>
               <span className="text-label text-muted">Bước 01</span>
               <h2 className="mb-0 mt-1 text-section text-ink">Xác minh danh tính</h2>
-              <p className="mt-2 text-small leading-relaxed text-muted">
-                Đối chiếu CCCD/Passport bản gốc với thông tin khách trên đơn.
+              <p className="mt-2 text-body leading-relaxed text-muted">
+                Đối chiếu CCCD/hộ chiếu bản gốc với thông tin khách trên đơn, chụp mặt trước và mặt
+                sau giấy tờ rồi tải lên làm bằng chứng.
               </p>
               {current.identityStatus === "Failed" && (
                 <DemoNotice tone="error">
                   Lần xác minh trước không đạt. Có thể xác minh lại khi khách mang đúng giấy tờ.
                 </DemoNotice>
               )}
-              <div className="mt-4 bg-surface-subtle p-4 text-small">
-                <strong className="block text-ink">
+              <div className="mt-4 border-l-4 border-brand bg-surface-subtle p-4">
+                <span className="text-label text-muted">Khách trên đơn</span>
+                <strong className="mt-1 block text-section text-ink">
                   {current.customerName ?? current.customerEmail ?? "—"}
                 </strong>
-                <span className="mt-1 block text-muted">
+                <span className="mt-1 block text-body text-muted">
                   {current.customerPhone ?? "—"} · {current.customerEmail ?? "—"}
                 </span>
+              </div>
+              <div className="mt-4">
+                <FileUploadField
+                  label="Ảnh CCCD / hộ chiếu"
+                  hint={`Bắt buộc khi xác minh đạt · JPEG/PNG/WebP ≤ 10MB · tối đa ${MAX_IDENTITY_PHOTOS} ảnh · bấm ảnh để xem lớn`}
+                  files={identityPhotos}
+                  onChange={setIdentityPhotos}
+                  accept={IMAGE_ACCEPT}
+                  thumbSize="lg"
+                  maxFiles={MAX_IDENTITY_PHOTOS}
+                  disabled={busy}
+                />
               </div>
               <label className={`${FIELD_LABEL} mt-4`} htmlFor="identity-note">
                 Ghi chú (không bắt buộc)
@@ -443,28 +506,55 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
                   pending={busy}
-                  onClick={() =>
-                    run(
-                      () => verifyHandoverIdentity(current.id, true, identityNote.trim()),
+                  disabled={identityPhotos.length === 0}
+                  onClick={async () => {
+                    const ok = await run(
+                      () =>
+                        verifyHandoverIdentity(
+                          current.id,
+                          true,
+                          identityNote.trim(),
+                          identityPhotos.map((photo) => photo.url),
+                        ),
                       "Đã xác minh danh tính.",
-                    ).then((ok) => ok && setIdentityNote(""))
-                  }
+                    );
+                    if (ok) {
+                      await attachUploaded(identityPhotos);
+                      setIdentityNote("");
+                      setIdentityPhotos([]);
+                    }
+                  }}
                 >
                   <Check size={16} /> Xác minh đạt
                 </Button>
                 <Button
                   variant="secondary"
                   disabled={busy}
-                  onClick={() =>
-                    run(
-                      () => verifyHandoverIdentity(current.id, false, identityNote.trim()),
+                  onClick={async () => {
+                    const ok = await run(
+                      () =>
+                        verifyHandoverIdentity(
+                          current.id,
+                          false,
+                          identityNote.trim(),
+                          identityPhotos.map((photo) => photo.url),
+                        ),
                       "Đã ghi nhận xác minh không đạt. Phiên bàn giao vẫn mở.",
-                    )
-                  }
+                    );
+                    if (ok) {
+                      await attachUploaded(identityPhotos);
+                      setIdentityPhotos((list) => list.map((item) => ({ ...item, batchId: null })));
+                    }
+                  }}
                 >
                   Không đạt
                 </Button>
               </div>
+              {identityPhotos.length === 0 && (
+                <p className="mb-0 mt-2 text-small text-muted">
+                  Tải ít nhất một ảnh giấy tờ để bấm “Xác minh đạt”.
+                </p>
+              )}
             </div>
           )}
 

@@ -63,6 +63,8 @@ export type HandoverView = {
   arrivedAt: string | null;
   identityStatus: string;
   identityVerifiedAt: string | null;
+  /** Ảnh CCCD/hộ chiếu của lần xác minh gần nhất. */
+  identityPhotos: string[] | null;
   inspectionStatus: string;
   unitInspectedAt: string | null;
   inspectionNotes: string | null;
@@ -120,14 +122,16 @@ export function fetchStaffHandover(id: number): Promise<HandoverView> {
   return authed<HandoverView>(`/api/staff/handovers/${id}`);
 }
 
+/** Đạt cần 1–4 ảnh giấy tờ đã upload qua /api/media; không đạt thì ảnh tuỳ chọn. */
 export function verifyHandoverIdentity(
   id: number,
   verified: boolean,
-  note?: string,
+  note: string | undefined,
+  photos: string[],
 ): Promise<HandoverView> {
   return authed<HandoverView>(`/api/staff/handovers/${id}/identity`, {
     method: "POST",
-    body: { verified, note: note || undefined },
+    body: { verified, note: note || undefined, photos },
   });
 }
 

@@ -115,10 +115,11 @@ class HandoverControllerTest {
         login(FS, "FS", 3L);
         when(queryService.view(1L)).thenReturn(view(1L, "INSPECTION"));
 
-        mockMvc.perform(json(post("/api/staff/handovers/1/identity"), FS, "{\"verified\":true}"))
+        mockMvc.perform(json(post("/api/staff/handovers/1/identity"), FS,
+                        "{\"verified\":true,\"photos\":[\"https://img/cccd.jpg\"]}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.step").value("INSPECTION"));
-        verify(workflow).verifyIdentity(1L, true, null);
+        verify(workflow).verifyIdentity(1L, true, null, List.of("https://img/cccd.jpg"));
 
         mockMvc.perform(json(put("/api/staff/handovers/1/inspection"), FS,
                         "{\"notes\":\"Sạch\",\"photos\":[\"https://img/1.jpg\"]}"))
@@ -295,8 +296,8 @@ class HandoverControllerTest {
     private static HandoverView view(Long id, String step) {
         return new HandoverView(id, 4L, 5L, "IN_PROGRESS", step, "A-01", "Small", 1L, "Q7", "Addr", 6L, "Khách",
                 CUSTOMER, "0900", LocalDate.now(), Instant.now(), Instant.now(), Instant.now(), "Verified", null,
-                "Pending", null, null, List.of(), null, null, null, null, null, null, null, List.of(), true, true, 0,
-                2);
+                List.of(), "Pending", null, null, List.of(), null, null, null, null, null, null, null, List.of(), true,
+                true, 0, 2);
     }
 
     private void login(String email, String roleName, Long accountId) {

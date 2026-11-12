@@ -45,7 +45,7 @@ Phụ thuộc giữa các module khai ở `allowedDependencies` trong `package-i
 kiểm). Hai phụ thuộc cần biết khi đọc flow sau bàn giao:
 - `support` → `pricing::application` — đọc `fee.lost_key` để tính phí mặc định khi thay chìa do mất chìa
   ([support/requests.md](support/requests.md));
-- `handover` → `media` — `MediaUrlLookup.notUploadedBy` kiểm ảnh hiện trạng / bản scan hợp đồng là file FS đã upload
+- `handover` → `media` — `MediaUrlLookup.notUploadedBy` kiểm ảnh giấy tờ / ảnh hiện trạng / bản scan hợp đồng là file FS đã upload
   ([handover/records.md](handover/records.md)); `handover`, `checkout`, `support` → `media` —
   `MediaAttachments.attach` khi lưu URL ảnh / scan (bên dưới, [Upload file](#upload-file-module-media));
 - `booking`, `tenancy`, `support` → `staffing::application` — `StaffAvailability` kiểm ca / nghỉ phép khi phân công FS;
@@ -308,11 +308,11 @@ Phiên bàn giao dựng sẵn tới bước khách đã đến: `backend/sql/dev
 - File lưu theo folder `uploads/acc-{accountId}` — upload mồ côi vẫn truy vết được chủ sở hữu.
 - Module khác kiểm URL client gửi lên có đúng là file của account đó qua `vn.lemar.selfstorage.media.MediaUrlLookup`
   (chỉ đọc): `notUploadedBy(accountId, urls)` trả các URL **không** khớp upload `Pending`/`Attached` của account
-  (upload đã huỷ/xoá không tính). Handover dùng cho ảnh hiện trạng và bản scan hợp đồng.
+  (upload đã huỷ/xoá không tính). Handover dùng cho ảnh giấy tờ tuỳ thân, ảnh hiện trạng và bản scan hợp đồng.
 - Mỗi upload ghi row `media_uploads` (`Uploading` → `Pending`). `DELETE /batch/{batchId}` dọn asset
   chưa attach; `POST /batch/{batchId}/attach` đánh dấu `Attached` để không xoá nữa.
 - **Attach phía server:** flow lưu URL vào entity thì upload `Pending` của account đó chuyển `Attached` trong cùng transaction qua `media.MediaAttachments.attach` — không phụ thuộc FE gọi `/attach`:
-  ảnh hiện trạng + bản scan hợp đồng (handover, sau khi kiểm URL), ảnh biên bản trả kho (`CheckoutService.inspect`),
+  ảnh giấy tờ tuỳ thân + ảnh hiện trạng + bản scan hợp đồng (handover, sau khi kiểm URL), ảnh biên bản trả kho (`CheckoutService.inspect`),
   ảnh yêu cầu hỗ trợ (`SupportService.create`). URL không khớp upload `Pending` của account bị bỏ qua (không lỗi).
 - **Cron dọn upload bỏ ngang** (`MediaCleanupJob`, mỗi giờ — `media.orphan-cleanup.fixed-delay-ms`): row
   `Uploading`/`Pending` không đổi trạng thái quá `media.orphan-cleanup.max-age` (mặc định 3 ngày) → xoá asset trên
