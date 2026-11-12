@@ -49,6 +49,9 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
             }
         }
         if (source == null) {
+            if (!hasText(environment.getProperty("DB_URL"))) {
+                log.warn("Không có DB_URL, DATABASE_URL_UNPOOLED hay DATABASE_URL — dùng DB mặc định localhost:5432");
+            }
             return;
         }
         if (hasText(environment.getProperty("DB_URL"))) {

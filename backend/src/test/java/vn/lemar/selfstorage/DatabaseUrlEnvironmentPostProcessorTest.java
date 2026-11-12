@@ -60,6 +60,21 @@ class DatabaseUrlEnvironmentPostProcessorTest {
     }
 
     @Test
+    void missingDatabaseSettingsAreReported() {
+        run(new MockEnvironment());
+
+        verify(log).warn(argThat(message -> String.valueOf(message).startsWith("Không có DB_URL")));
+    }
+
+    @Test
+    void localDbUrlAloneStaysQuiet() {
+        run(new MockEnvironment().withProperty("DB_URL", "jdbc:postgresql://localhost:5432/self_storage"));
+
+        verify(log, never()).warn(any());
+        verify(log, never()).info(any());
+    }
+
+    @Test
     void explicitDbUrlWinsAndSaysSo() {
         run(new MockEnvironment()
                 .withProperty("DB_URL", "jdbc:postgresql://localhost:5432/self_storage")
