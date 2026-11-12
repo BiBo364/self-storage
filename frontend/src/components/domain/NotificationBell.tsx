@@ -114,7 +114,7 @@ export function NotificationBell({ onNavigate }: { onNavigate: (path: string) =>
       >
         <Bell size={18} />
         {unreadCount > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-none bg-brand px-1 text-label font-semibold text-signal-ink">
+          <span className="absolute -right-1.5 -top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand px-1 text-label font-semibold text-signal-ink">
             {unreadCount}
           </span>
         )}

@@ -14,7 +14,7 @@ type FieldProps = {
 export const FIELD_GROUP = "mb-4";
 export const FIELD_LABEL = "mb-1.5 block text-label text-muted";
 export const INPUT_WRAP =
-  "relative flex min-h-[42px] items-center gap-2.5 rounded-[2px] border border-rule-strong bg-surface px-3 text-muted focus-within:border-brand focus-within:shadow-[0_0_0_3px_var(--brand-soft)] [&>svg:last-child]:pointer-events-none [&>svg:last-child]:ml-auto";
+  "relative flex min-h-[42px] items-center gap-2.5 rounded-lg border border-rule-strong bg-surface px-3 text-muted focus-within:border-brand focus-within:shadow-[0_0_0_3px_var(--brand-soft)] [&>svg:last-child]:pointer-events-none [&>svg:last-child]:ml-auto";
 export const INPUT_ELEMENT =
   "min-h-[40px] w-full min-w-0 appearance-none border-0 bg-transparent text-small text-ink outline-0 placeholder:text-muted";
 

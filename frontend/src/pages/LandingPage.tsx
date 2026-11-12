@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Check } from "lucide-react";
+import {
+  ArrowRight,
+  Camera,
+  Check,
+  FileText,
+  KeyRound,
+  Map as MapIcon,
+  Send,
+  Wallet,
+  Warehouse,
+} from "lucide-react";
 import { Navigate } from "../app/types";
 import { PAGE_CONTAINER as CONTAINER } from "../app/layout";
 import { formatMoney } from "../app/format";
@@ -12,8 +22,10 @@ import {
   type UnitTypeOption,
 } from "../app/services/customer";
 import { FacilityMapSection } from "../components/domain/FacilityMapSection";
+import { FacilityShowcase } from "../components/domain/FacilityShowcase";
 import { Button } from "../components/ui/Button";
 import { SelectField } from "../components/ui/FormField";
+import { CountUp, Reveal } from "../components/ui/Reveal";
 import { SurfaceState } from "../components/ui/SurfaceState";
 
 const HAZARD_STRIPE = "repeating-linear-gradient(135deg, #101413 0 11px, var(--brand) 11px 22px)";
@@ -28,69 +40,60 @@ function areaRange(unitTypes: UnitTypeOption[]): string {
   return min === max ? formatArea(min) : `${formatArea(min).replace(" m²", "")}–${formatArea(max)}`;
 }
 
-function lowestPrice(unitTypes: UnitTypeOption[]): number | null {
-  const prices = unitTypes
-    .map((unit) => Number(unit.monthlyPrice))
-    .filter((price) => Number.isFinite(price) && price > 0);
-  return prices.length ? Math.min(...prices) : null;
-}
-
-const SECTIONS = [
-  { id: "how-it-works", index: "01", label: "Quy trình" },
-  { id: "locations", index: "02", label: "Cơ sở" },
+const FEATURES = [
+  {
+    icon: MapIcon,
+    title: "Tìm và so sánh kho",
+    copy: "Xem cơ sở trên bản đồ, sơ đồ từng tầng, số khoang còn trống và giá niêm yết — không cần đăng nhập.",
+  },
+  {
+    icon: Send,
+    title: "Gửi nhu cầu",
+    copy: "Chọn cơ sở, loại khoang, ngày bắt đầu và số tháng. Quản lý cơ sở chọn khoang cụ thể và gửi đề xuất cho bạn.",
+  },
+  {
+    icon: Wallet,
+    title: "Đặt cọc & nhận kho",
+    copy: "Đồng ý đề xuất, đặt cọc trực tuyến, hẹn lịch nhận kho; nhân viên đối chiếu giấy tờ và bàn giao tại chỗ.",
+  },
+  {
+    icon: Warehouse,
+    title: "Quản lý kho đang thuê",
+    copy: "Xem hợp đồng và hoá đơn, gia hạn, báo sự cố hoặc yêu cầu trả kho ngay trên tài khoản của bạn.",
+  },
 ];
 
-function SectionNav() {
-  const [active, setActive] = useState<string | null>(null);
+const TRUST = [
+  {
+    icon: KeyRound,
+    title: "Truy cập riêng",
+    copy: "Mã số chỉ bạn biết, hoặc chìa khoá cơ giao tận tay khi nhận kho.",
+  },
+  {
+    icon: Camera,
+    title: "Biên bản có ảnh",
+    copy: "Hiện trạng khoang được ghi lại bằng ảnh lúc nhận và lúc trả kho.",
+  },
+  {
+    icon: FileText,
+    title: "Hợp đồng rõ ràng",
+    copy: "Xem và tải PDF hợp đồng bất cứ lúc nào; giá thuê chốt lúc ký.",
+  },
+];
 
-  useEffect(() => {
-    const elements = SECTIONS.map((section) => document.getElementById(section.id)).filter(
-      (element): element is HTMLElement => element !== null,
-    );
-    if (elements.length === 0) return;
+const USE_CASES = [
+  "Chuyển nhà, sửa nhà",
+  "Đồ theo mùa, xe đạp, đồ thể thao",
+  "Hàng tồn của shop online",
+  "Hồ sơ, thiết bị văn phòng",
+];
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
-        if (visible) setActive(visible.target.id);
-      },
-      { rootMargin: "-120px 0px -55% 0px", threshold: [0, 0.25, 0.5] },
-    );
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, []);
-
-  function jump(id: string) {
-    setActive(id);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  return (
-    <div className="sticky top-[74px] z-10 border-y border-border bg-background/95 backdrop-blur max-[760px]:top-[64px]">
-      <div className={`${CONTAINER} flex items-center gap-6 overflow-x-auto py-2.5`}>
-        <span className="label shrink-0 text-muted">Trang này</span>
-        {SECTIONS.map((section) => (
-          <button
-            key={section.id}
-            type="button"
-            aria-current={active === section.id ? "true" : undefined}
-            className={`inline-flex shrink-0 items-center gap-2 border-b-2 pb-0.5 text-small font-semibold transition-colors ${
-              active === section.id
-                ? "border-brand text-ink"
-                : "border-transparent text-muted hover:text-ink"
-            }`}
-            onClick={() => jump(section.id)}
-          >
-            <span className="font-mono text-label text-muted">{section.index}</span>
-            {section.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+const STEPS = [
+  ["Gửi nhu cầu", "Điền cơ sở, loại khoang và thời hạn. Không cần tài khoản."],
+  ["Nhận đề xuất", "Quản lý cơ sở kiểm tra khoang trống và gửi phương án cụ thể."],
+  ["Đặt cọc", "Thanh toán cọc trực tuyến trong thời hạn để giữ khoang."],
+  ["Nhận kho", "Chọn lịch bàn giao, ký hợp đồng và nhận quyền truy cập tại cơ sở."],
+];
 
 function SkeletonRows({ count, height }: { count: number; height: string }) {
   return (
@@ -99,6 +102,23 @@ function SkeletonRows({ count, height }: { count: number; height: string }) {
         <div key={index} className={`${height} animate-pulse bg-surface`} />
       ))}
     </div>
+  );
+}
+
+function SectionHeading({ label, title, copy }: { label: string; title: string; copy: string }) {
+  return (
+    <Reveal className="mb-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-end gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-4">
+      <div>
+        <span className="label inline-flex items-center gap-2 text-muted">
+          <span className="h-2 w-2 rounded-full bg-brand" aria-hidden="true" />
+          {label}
+        </span>
+        <h2 className="mt-2 max-w-[18ch] text-balance text-[clamp(1.75rem,3.6vw,2.625rem)] leading-[1.0] tracking-[-0.02em] text-ink">
+          {title}
+        </h2>
+      </div>
+      <p className="max-w-[46ch] text-body leading-relaxed text-muted">{copy}</p>
+    </Reveal>
   );
 }
 
@@ -112,6 +132,17 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
   const finderTypes =
     data && facilityId ? (data.offerings[Number(facilityId)] ?? []) : (data?.unitTypes ?? []);
 
+  // Vào từ link header "/#about"…: navigate cuộn lên đầu trước, nên chờ một nhịp rồi cuộn tới đúng phần.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    const timer = window.setTimeout(
+      () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      350,
+    );
+    return () => window.clearTimeout(timer);
+  }, []);
+
   function browseFromFinder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const params = new URLSearchParams();
@@ -123,7 +154,7 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
 
   const catalogState =
     catalog.loading && !data ? (
-      <SkeletonRows count={3} height="h-[68px]" />
+      <SkeletonRows count={2} height="h-[220px]" />
     ) : catalog.error && !data ? (
       <SurfaceState
         variant="error"
@@ -142,27 +173,46 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
 
   return (
     <>
-      <section className="bg-background">
+      <section className="relative overflow-hidden bg-background">
+        <span
+          className="hero-glow -left-32 -top-40 h-[460px] w-[460px] bg-[rgba(242,195,0,0.20)]"
+          aria-hidden="true"
+        />
+        <span
+          className="hero-glow right-[6%] top-[38%] h-[400px] w-[400px] bg-[rgba(31,90,102,0.26)]"
+          style={{ animationDelay: "-7s" }}
+          aria-hidden="true"
+        />
         <div
-          className={`${CONTAINER} grid grid-cols-[minmax(0,1.1fr)_minmax(350px,420px)] items-start gap-[clamp(40px,7vw,92px)] pb-14 pt-[clamp(48px,7vw,92px)] max-[900px]:grid-cols-1 max-[900px]:gap-10 max-[760px]:pt-12`}
+          className={`${CONTAINER} relative grid grid-cols-[minmax(0,1.1fr)_minmax(350px,420px)] items-start gap-[clamp(40px,7vw,92px)] pb-16 pt-[clamp(48px,7vw,92px)] max-[900px]:grid-cols-1 max-[900px]:gap-10 max-[760px]:pt-12`}
         >
           <div>
-            <p className="label flex items-center gap-2.5 text-muted">
-              <span className="h-2 w-2 bg-brand" aria-hidden="true" />
+            <p className="hero-line label flex items-center gap-2.5 text-muted">
+              <span className="pulse-dot h-2 w-2 rounded-full bg-brand" aria-hidden="true" />
               Tự lưu trữ · TP. Hồ Chí Minh
             </p>
             <h1 className="mt-5 max-w-[14ch] text-display text-ink">
-              Kho đúng cỡ.
-              <span className="block text-accent">Hợp đồng rõ ràng.</span>
+              <span className="hero-line" style={{ animationDelay: "0.08s" }}>
+                Kho đúng cỡ.
+              </span>
+              <span className="hero-line text-accent" style={{ animationDelay: "0.2s" }}>
+                Hợp đồng rõ ràng.
+              </span>
             </h1>
-            <p className="mt-6 max-w-[46ch] text-lead text-muted">
-              Chọn cơ sở, diện tích và thời hạn. Xem giá tham khảo trước khi gửi yêu cầu — không cần
-              đăng nhập để bắt đầu.
+            <p
+              className="hero-line mt-6 max-w-[48ch] text-lead text-muted"
+              style={{ animationDelay: "0.32s" }}
+            >
+              Thuê khoang chứa đồ theo tháng: xem cơ sở trên bản đồ, so sánh loại khoang và số chỗ
+              còn trống, rồi gửi nhu cầu — không cần đăng nhập để bắt đầu.
             </p>
-            <div className="mt-8 grid max-w-[560px] grid-cols-3 gap-8 max-[760px]:gap-5">
+            <div
+              className="hero-line mt-8 grid max-w-[560px] grid-cols-3 gap-8 max-[760px]:gap-5"
+              style={{ animationDelay: "0.44s" }}
+            >
               <div>
                 <strong className="block whitespace-nowrap text-stat text-ink">
-                  {data ? String(facilities.length).padStart(2, "0") : "—"}
+                  {data ? <CountUp value={facilities.length} pad={2} /> : "—"}
                 </strong>
                 <span className="text-label text-muted">cơ sở đang mở</span>
               </div>
@@ -174,18 +224,39 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
               </div>
               <div>
                 <strong className="block whitespace-nowrap text-stat text-ink">
-                  {data ? String(unitTypes.length).padStart(2, "0") : "—"}
+                  {data ? <CountUp value={unitTypes.length} pad={2} /> : "—"}
                 </strong>
                 <span className="text-label text-muted">loại khoang</span>
               </div>
             </div>
+            <div
+              className="hero-line mt-8 flex flex-wrap gap-2.5"
+              style={{ animationDelay: "0.56s" }}
+            >
+              <Button onClick={() => navigate("/units")}>
+                Xem kho trên bản đồ <ArrowRight size={16} />
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })
+                }
+              >
+                Kho Mộc là gì?
+              </Button>
+            </div>
           </div>
 
           <form
-            className="border-2 border-[var(--container-border)] bg-surface"
+            className="pop-enter overflow-hidden border-2 border-[var(--container-border)] bg-surface shadow-[var(--shadow-soft)]"
+            style={{ animationDelay: "0.25s" }}
             onSubmit={browseFromFinder}
           >
-            <div className="h-2 w-full" style={{ background: HAZARD_STRIPE }} aria-hidden="true" />
+            <div
+              className="hazard-move h-2 w-full"
+              style={{ background: HAZARD_STRIPE }}
+              aria-hidden="true"
+            />
             <div className="grid gap-4 p-6">
               <div>
                 <span className="label text-muted">Bắt đầu từ điều bạn biết</span>
@@ -235,74 +306,98 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
         </div>
       </section>
 
-      <SectionNav />
+      <section id="about" className="scroll-mt-[90px] bg-background py-[clamp(56px,7vw,92px)]">
+        <div className={CONTAINER}>
+          <SectionHeading
+            label="Giới thiệu"
+            title="Kho riêng, gần nhà, thuê theo tháng."
+            copy="Kho Mộc cho thuê khoang tự lưu trữ tại TP. Hồ Chí Minh: bạn tự cất và lấy đồ bằng mã số hoặc chìa riêng, trả tiền theo tháng. Trang web này giúp bạn chọn kho, gửi nhu cầu, đặt cọc và quản lý mọi thứ sau khi thuê."
+          />
 
-      <section aria-label="Cơ sở đang mở" className="bg-background">
-        <div className={`${CONTAINER} pb-16`}>
-          <div className="mb-2 flex items-center justify-between gap-4">
-            <span className="label text-muted">Cơ sở đang mở · giá tham khảo</span>
-            {data && <span className="label text-muted">{facilities.length} cơ sở</span>}
+          <div className="grid grid-cols-4 gap-3 max-[980px]:grid-cols-2 max-[560px]:grid-cols-1">
+            {FEATURES.map(({ icon: Icon, title, copy }, index) => (
+              <Reveal key={title} delay={index * 0.08}>
+                <div className="lift h-full bg-surface p-5">
+                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand text-signal-ink">
+                    <Icon size={20} />
+                  </span>
+                  <h3 className="mt-4 text-[1.0625rem] font-semibold text-ink">{title}</h3>
+                  <p className="mt-1.5 text-small leading-relaxed text-muted">{copy}</p>
+                </div>
+              </Reveal>
+            ))}
           </div>
-          {catalogState ?? (
-            <div className="grid gap-2">
-              {facilities.map((facility, index) => {
-                const offered = data?.offerings[facility.id] ?? [];
-                const from = lowestPrice(offered);
-                return (
-                  <div
-                    key={facility.id}
-                    className="grid grid-cols-[32px_minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_24px] items-center gap-4 bg-surface px-4 py-4 max-[900px]:grid-cols-[28px_minmax(0,1fr)_auto] max-[760px]:gap-2"
+
+          <div className="mt-10 grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-8 max-[900px]:grid-cols-1">
+            <Reveal>
+              <h3 className="text-section text-ink">Khách thường thuê kho để</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {USE_CASES.map((item) => (
+                  <span
+                    key={item}
+                    className="lift rounded-full border border-border bg-surface px-3.5 py-1.5 text-small text-ink"
                   >
-                    <span className="text-label text-muted">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div className="min-w-0 max-[900px]:col-span-2">
-                      <strong className="block text-small font-semibold text-ink">
-                        {facility.name}
-                      </strong>
-                      <span className="mt-0.5 block truncate text-label text-muted">
-                        {[facility.address, facility.operatingHours].filter(Boolean).join(" · ")}
-                      </span>
-                    </div>
-                    <span className="text-small text-muted max-[900px]:hidden">
-                      {facility.code}
-                    </span>
-                    <span className="text-small text-ink max-[900px]:hidden">
-                      <span className="block text-label text-muted">Từ</span>
-                      {from === null ? "—" : formatMoney(from)}
-                    </span>
-                    <span className="text-label text-muted max-[900px]:hidden">
-                      {offered.length} loại khoang
-                    </span>
-                    <button
-                      className="border-0 bg-transparent p-0 text-muted hover:text-accent"
-                      onClick={() => navigate(`/units?facility=${facility.id}`)}
-                      aria-label={`Xem khoang tại ${facility.name}`}
-                    >
-                      <ArrowRight size={17} />
-                    </button>
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </Reveal>
+            <div className="grid grid-cols-3 gap-3 max-[640px]:grid-cols-1">
+              {TRUST.map(({ icon: Icon, title, copy }, index) => (
+                <Reveal key={title} delay={index * 0.08}>
+                  <div className="h-full border-l-4 border-brand bg-surface-subtle p-4">
+                    <Icon size={18} className="text-accent" />
+                    <strong className="mt-2 block text-small text-ink">{title}</strong>
+                    <p className="mb-0 mt-1 text-label font-normal leading-relaxed text-muted">
+                      {copy}
+                    </p>
                   </div>
-                );
-              })}
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="locations"
+        className="scroll-mt-[90px] rounded-none bg-surface-subtle py-[clamp(56px,7vw,92px)]"
+      >
+        <div className={CONTAINER}>
+          <SectionHeading
+            label="Cơ sở"
+            title="Xem kho trước khi chọn."
+            copy="Mỗi cơ sở có địa chỉ, giờ mở cửa, số tầng, loại khoang và số chỗ còn trống. Bấm một cơ sở để xem sơ đồ từng tầng."
+          />
+          {catalogState ?? (
+            <div className="grid gap-4">
+              <Reveal>
+                <FacilityMapSection
+                  facilities={facilities}
+                  onSelect={(id) => navigate(`/units?facility=${id}`)}
+                />
+              </Reveal>
+              {facilities.map((facility, index) => (
+                <Reveal key={facility.id} delay={index * 0.06}>
+                  <FacilityShowcase
+                    facility={facility}
+                    offerings={data?.offerings[facility.id] ?? []}
+                    navigate={navigate}
+                  />
+                </Reveal>
+              ))}
             </div>
           )}
         </div>
       </section>
 
-      <section className="bg-surface-subtle py-[clamp(56px,7vw,92px)]">
+      <section id="sizes" className="scroll-mt-[90px] bg-background py-[clamp(56px,7vw,92px)]">
         <div className={CONTAINER}>
-          <div className="mb-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-end gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-4">
-            <div>
-              <span className="label text-muted">Quy mô</span>
-              <h2 className="mt-2 max-w-[17ch] text-balance text-[clamp(1.75rem,3.6vw,2.625rem)] leading-[1.0] tracking-[-0.02em] text-ink">
-                Chọn theo diện tích thật.
-              </h2>
-            </div>
-            <p className="max-w-[42ch] text-small leading-relaxed text-muted">
-              Mỗi loại khoang vẽ theo tỷ lệ diện tích. Giá là giá niêm yết theo tháng, chưa gồm phí
-              phát sinh nếu có.
-            </p>
-          </div>
+          <SectionHeading
+            label="Loại khoang"
+            title="Chọn theo diện tích thật."
+            copy="Mỗi loại khoang vẽ theo tỷ lệ diện tích. Giá là giá niêm yết theo tháng, chưa gồm phí phát sinh nếu có."
+          />
           {catalog.loading && !data ? (
             <SkeletonRows count={3} height="h-[158px]" />
           ) : catalog.error && !data ? (
@@ -315,53 +410,52 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
           ) : unitTypes.length === 0 ? (
             <SurfaceState variant="empty" title="Chưa có loại khoang nào được công bố" />
           ) : (
-            <div className="grid gap-2">
-              {unitTypes.map((unit) => {
+            <div className="grid gap-3">
+              {unitTypes.map((unit, index) => {
                 const area = Number(unit.area) || 0;
                 const square = Math.min(90, 36 + area * 7);
                 return (
-                  <div
-                    key={unit.id}
-                    className="grid grid-cols-[160px_minmax(0,1fr)_auto] items-center gap-6 bg-surface p-5 max-[760px]:grid-cols-1 max-[760px]:gap-3"
-                  >
-                    <div
-                      className="relative flex h-[118px] w-[160px] items-end border-2 border-[var(--container-border)] bg-surface-subtle p-3 max-[760px]:w-full"
-                      style={{
-                        backgroundImage:
-                          "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-                        backgroundSize: "16px 16px",
-                      }}
-                    >
-                      <span className="absolute right-3 top-2.5 text-label text-muted">
-                        {formatArea(unit.area)}
-                      </span>
-                      <span
-                        className="border-2 border-[#101413] bg-brand"
-                        style={{ width: square, height: square }}
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <div>
-                      <h3 className="text-section text-ink">{unit.name}</h3>
-                      <p className="mt-1 text-small text-muted">
-                        Kích thước (rộng × sâu × cao): {formatDimensions(unit)}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 max-[760px]:items-start">
-                      <div className="flex items-baseline gap-2">
-                        <strong className="text-stat text-ink">
-                          {formatMoney(unit.monthlyPrice)}
-                        </strong>
-                        <span className="text-label text-muted">/ tháng</span>
-                      </div>
-                      <button
-                        className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
-                        onClick={() => navigate(`/units?type=${unit.id}`)}
+                  <Reveal key={unit.id} delay={index * 0.07}>
+                    <div className="lift group grid grid-cols-[160px_minmax(0,1fr)_auto] items-center gap-6 bg-surface p-5 max-[760px]:grid-cols-1 max-[760px]:gap-3">
+                      <div
+                        className="relative flex h-[118px] w-[160px] items-end overflow-hidden rounded-lg border-2 border-[var(--container-border)] bg-surface-subtle p-3 max-[760px]:w-full"
+                        style={{
+                          backgroundImage:
+                            "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+                          backgroundSize: "16px 16px",
+                        }}
                       >
-                        Xem khoang <ArrowRight size={15} />
-                      </button>
+                        <span className="absolute right-3 top-2.5 text-label text-muted">
+                          {formatArea(unit.area)}
+                        </span>
+                        <span
+                          className="rounded-md border-2 border-[#101413] bg-brand transition-transform duration-500 ease-out group-hover:scale-110"
+                          style={{ width: square, height: square, transformOrigin: "bottom left" }}
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <div>
+                        <h3 className="text-section text-ink">{unit.name}</h3>
+                        <p className="mt-1 text-small text-muted">
+                          Kích thước (rộng × sâu × cao): {formatDimensions(unit)}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 max-[760px]:items-start">
+                        <div className="flex items-baseline gap-2">
+                          <strong className="text-stat text-ink">
+                            {formatMoney(unit.monthlyPrice)}
+                          </strong>
+                          <span className="text-label text-muted">/ tháng</span>
+                        </div>
+                        <button
+                          className="inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-small font-semibold text-accent hover:text-ink"
+                          onClick={() => navigate(`/units?type=${unit.id}`)}
+                        >
+                          Xem khoang <ArrowRight size={15} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  </Reveal>
                 );
               })}
             </div>
@@ -371,104 +465,41 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
 
       <section
         id="how-it-works"
-        className="scroll-mt-[120px] bg-background py-[clamp(56px,7vw,92px)]"
+        className="scroll-mt-[90px] rounded-none bg-surface-subtle py-[clamp(56px,7vw,92px)]"
       >
         <div className={CONTAINER}>
-          <div className="mb-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-end gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-4">
-            <div>
-              <span className="label text-muted">Quy trình</span>
-              <h2 className="mt-2 max-w-[14ch] text-balance text-[clamp(1.75rem,3.6vw,2.625rem)] leading-[1.0] tracking-[-0.02em] text-ink">
-                Từ nhu cầu đến nhận kho.
-              </h2>
-            </div>
-            <p className="max-w-[42ch] text-small leading-relaxed text-muted">
-              Bốn bước, không có bước ẩn. Mỗi bước cho bạn biết ai đang xử lý và bạn cần làm gì tiếp
-              theo.
-            </p>
-          </div>
-          <div className="grid grid-cols-4 gap-2 max-[900px]:grid-cols-2 max-[760px]:grid-cols-1">
-            {[
-              ["Gửi nhu cầu", "Điền cơ sở, loại khoang và thời hạn. Không cần tài khoản."],
-              ["Nhận đề xuất", "Quản lý cơ sở kiểm tra khoang trống và gửi phương án cụ thể."],
-              ["Đặt cọc", "Thanh toán cọc trong thời hạn để giữ khoang."],
-              ["Nhận kho", "Chọn lịch bàn giao, ký hợp đồng và nhận quyền truy cập tại cơ sở."],
-            ].map(([title, copy]) => (
-              <div key={title} className="bg-surface p-5">
-                <span className="mb-3 block h-2 w-2 bg-brand" aria-hidden="true" />
-                <h3 className="text-[16px] font-semibold text-ink">{title}</h3>
-                <p className="mt-1.5 text-small leading-relaxed text-muted">{copy}</p>
-              </div>
+          <SectionHeading
+            label="Quy trình"
+            title="Từ nhu cầu đến nhận kho."
+            copy="Bốn bước, không có bước ẩn. Mỗi bước cho bạn biết ai đang xử lý và bạn cần làm gì tiếp theo."
+          />
+          <div className="relative grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-[560px]:grid-cols-1">
+            <span
+              className="pointer-events-none absolute left-[6%] right-[6%] top-[38px] h-[2px] bg-[repeating-linear-gradient(90deg,var(--brand)_0_10px,transparent_10px_18px)] max-[900px]:hidden"
+              aria-hidden="true"
+            />
+            {STEPS.map(([title, copy], index) => (
+              <Reveal key={title} delay={index * 0.12}>
+                <div className="lift relative h-full bg-surface p-5">
+                  <span className="grid h-10 w-10 place-items-center rounded-full border-2 border-brand bg-background font-mono text-small font-bold text-ink">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <h3 className="mt-4 text-[1.0625rem] font-semibold text-ink">{title}</h3>
+                  <p className="mt-1.5 text-small leading-relaxed text-muted">{copy}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      <section
-        id="locations"
-        className="scroll-mt-[120px] bg-surface-subtle py-[clamp(56px,7vw,92px)]"
-      >
-        <div className={CONTAINER}>
-          <div className="mb-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-end gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-4">
-            <div>
-              <span className="label text-muted">Cơ sở</span>
-              <h2 className="mt-2 max-w-[14ch] text-balance text-[clamp(1.75rem,3.6vw,2.625rem)] leading-[1.0] tracking-[-0.02em] text-ink">
-                Xem nơi hàng đến.
-              </h2>
-            </div>
-            <p className="max-w-[42ch] text-small leading-relaxed text-muted">
-              Địa chỉ, giờ hoạt động và diện tích đang có. Chọn cơ sở để xem khoang cụ thể.
-            </p>
-          </div>
-          {catalogState ?? (
-            <>
-              <div className="mb-6">
-                <FacilityMapSection
-                  facilities={facilities}
-                  onSelect={(id) => navigate(`/units?facility=${id}`)}
-                />
-              </div>
-              <div className="mb-2 grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] gap-5 px-4 text-label text-muted max-[900px]:hidden">
-                <span>Cơ sở</span>
-                <span>Địa chỉ</span>
-                <span>Giờ hoạt động</span>
-                <span>Diện tích</span>
-                <span />
-              </div>
-              <div className="grid gap-2">
-                {facilities.map((facility) => (
-                  <div
-                    key={facility.id}
-                    className="grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] items-center gap-5 bg-surface p-4 max-[900px]:grid-cols-1 max-[900px]:gap-2"
-                  >
-                    <div>
-                      <strong className="block text-small font-semibold text-ink">
-                        {facility.name}
-                      </strong>
-                      <span className="text-label text-muted">{facility.code}</span>
-                    </div>
-                    <span className="text-small text-muted">{facility.address ?? "—"}</span>
-                    <span className="text-small text-muted">{facility.operatingHours ?? "—"}</span>
-                    <span className="text-small text-ink">
-                      {areaRange(data?.offerings[facility.id] ?? [])}
-                    </span>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="whitespace-nowrap"
-                      onClick={() => navigate(`/units?facility=${facility.id}`)}
-                    >
-                      Xem khoang
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </section>
-
-      <section className="bg-[var(--dark)] px-6 py-[clamp(48px,7vw,78px)] text-[var(--on-dark-ink)]">
-        <div className={`${CONTAINER} flex items-end justify-between gap-12 max-[900px]:block`}>
+      <section className="relative overflow-hidden bg-[var(--dark)] px-6 py-[clamp(48px,7vw,78px)] text-[var(--on-dark-ink)]">
+        <div
+          className="hazard-move absolute inset-x-0 top-0 h-2"
+          style={{ background: HAZARD_STRIPE }}
+          aria-hidden="true"
+        />
+        <Reveal className={`${CONTAINER} flex items-end justify-between gap-12 max-[900px]:block`}>
           <div>
             <span className="label text-[var(--on-dark-border-hover)]">
               Chưa chắc cần bao nhiêu?
@@ -485,7 +516,7 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
               Xem khoang
             </Button>
           </div>
-        </div>
+        </Reveal>
       </section>
     </>
   );

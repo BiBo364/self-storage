@@ -14,7 +14,7 @@ export type BuilderUnit = {
 };
 
 const SELECT =
-  "min-h-[40px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 text-small text-ink outline-0 focus:border-brand";
+  "min-h-[40px] w-full rounded-lg border border-rule-strong bg-surface px-3 text-small text-ink outline-0 focus:border-brand";
 
 const MAX_FLOORS = 20;
 

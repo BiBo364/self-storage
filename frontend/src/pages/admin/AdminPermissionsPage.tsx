@@ -186,7 +186,7 @@ export function AdminPermissionsPage({ navigate }: { navigate: Navigate }) {
                         <td key={role} className="bg-surface-subtle px-3.5 py-2.5">
                           <select
                             aria-label={`${row.code} — ${role}`}
-                            className="min-h-[32px] w-full rounded-[2px] border border-rule-strong bg-surface px-2 text-small text-ink outline-0 focus:border-brand"
+                            className="min-h-[32px] w-full rounded-lg border border-rule-strong bg-surface px-2 text-small text-ink outline-0 focus:border-brand"
                             value={draft[row.code] ?? ""}
                             onChange={(event) =>
                               setDraft((current) => {

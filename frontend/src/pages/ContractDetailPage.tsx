@@ -662,7 +662,7 @@ function ReturnPanel({ contractId, onDone }: { contractId: number; onDone: () =>
         maxLength={1000}
         value={note}
         onChange={(event) => setNote(event.target.value)}
-        className="min-h-[64px] w-full rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small text-ink"
+        className="min-h-[64px] w-full rounded-lg border border-rule-strong bg-surface p-2.5 text-small text-ink"
       />
       {error && <DemoNotice tone="error">{error}</DemoNotice>}
       <Button

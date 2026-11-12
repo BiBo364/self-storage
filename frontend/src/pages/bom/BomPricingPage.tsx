@@ -17,7 +17,7 @@ import { SectionTitle } from "../../components/ui/SectionTitle";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 
 const INPUT =
-  "min-h-[32px] w-full min-w-0 rounded-[2px] border border-rule-strong bg-surface px-2.5 text-small text-ink outline-0 focus:border-brand";
+  "min-h-[32px] w-full min-w-0 rounded-lg border border-rule-strong bg-surface px-2.5 text-small text-ink outline-0 focus:border-brand";
 
 function size(row: UnitTypeRow) {
   const parts = [row.width, row.depth, row.height].filter((value) => value !== null);

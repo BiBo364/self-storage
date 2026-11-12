@@ -186,7 +186,7 @@ export function AppointmentSchedulePage() {
         <label className="grid max-w-[200px] gap-1.5 text-label text-muted">
           Ngày
           <input
-            className="h-11 rounded-[2px] border border-rule-strong bg-surface px-3 text-small text-ink outline-0 transition-colors focus:border-brand"
+            className="h-11 rounded-lg border border-rule-strong bg-surface px-3 text-small text-ink outline-0 transition-colors focus:border-brand"
             type="date"
             value={date}
             onChange={(event) => event.target.value && changeDate(event.target.value)}
@@ -308,7 +308,7 @@ export function AppointmentSchedulePage() {
                       ? "Chọn nhân viên FS"
                       : "Đổi sang nhân viên FS"}
                     <select
-                      className="rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
+                      className="rounded-lg border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink"
                       value={selectedStaffId}
                       onChange={(event) => setSelectedStaffId(event.target.value)}
                     >

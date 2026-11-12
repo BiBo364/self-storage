@@ -10,9 +10,9 @@ import { ImageLightbox } from "../ui/ImageLightbox";
 export type PickedFile = { url: string; name: string; isPdf: boolean; batchId: string | null };
 
 export const TEXTAREA_CLASS =
-  "min-h-[96px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-body text-ink outline-0 transition-colors hover:border-ink focus:border-brand";
+  "min-h-[96px] w-full rounded-lg border border-rule-strong bg-surface px-3 py-2.5 text-body text-ink outline-0 transition-colors hover:border-ink focus:border-brand";
 export const INPUT_CLASS =
-  "min-h-[44px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 text-body text-ink outline-0 transition-colors hover:border-ink focus:border-brand";
+  "min-h-[44px] w-full rounded-lg border border-rule-strong bg-surface px-3 text-body text-ink outline-0 transition-colors hover:border-ink focus:border-brand";
 
 export function filesFromUrls(urls: string[] | null | undefined): PickedFile[] {
   return (urls ?? []).map((url) => ({

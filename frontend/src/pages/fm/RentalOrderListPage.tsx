@@ -197,7 +197,7 @@ export function RentalOrderListPage({ navigate }: { navigate: Navigate }) {
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
             />
             <input
-              className="w-full rounded-[2px] border border-rule-strong bg-surface py-2.5 pl-9 pr-3 text-small text-ink outline-0 focus:border-brand"
+              className="w-full rounded-lg border border-rule-strong bg-surface py-2.5 pl-9 pr-3 text-small text-ink outline-0 focus:border-brand"
               placeholder="Mã đơn, tên, email, khoang…"
               value={query}
               onChange={(event) => setQuery(event.target.value)}

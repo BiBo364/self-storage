@@ -338,7 +338,7 @@ export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
             <label className="mt-4 grid gap-1.5 text-label text-muted">
               Lý do huỷ
               <textarea
-                className="min-h-[90px] rounded-[2px] border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink outline-0 transition-colors focus:border-brand"
+                className="min-h-[90px] rounded-lg border border-rule-strong bg-surface px-3 py-2.5 text-small text-ink outline-0 transition-colors focus:border-brand"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 placeholder="Ví dụ: Khách yêu cầu huỷ"

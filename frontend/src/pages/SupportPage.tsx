@@ -426,7 +426,7 @@ function CreateForm({
             maxLength={4000}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            className="min-h-[96px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small text-ink"
+            className="min-h-[96px] rounded-lg border border-rule-strong bg-surface p-2.5 text-small text-ink"
             placeholder="Mô tả vấn đề, thời điểm phát hiện và điều bạn cần cơ sở hỗ trợ."
           />
         </label>

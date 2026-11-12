@@ -233,7 +233,7 @@ export function ProposalsPage({ navigate }: { navigate: Navigate }) {
                     <label className="grid gap-1.5 text-label text-muted">
                       Lý do từ chối *
                       <textarea
-                        className="min-h-[70px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
+                        className="min-h-[70px] rounded-lg border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
                         value={rejectNote}
                         onChange={(event) => setRejectNote(event.target.value)}
                         placeholder="Cho cơ sở biết vì sao khoang này chưa phù hợp…"

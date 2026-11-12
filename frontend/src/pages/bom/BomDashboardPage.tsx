@@ -22,7 +22,7 @@ const UNIT_STATUS_LABEL: Record<string, string> = {
 const UNIT_STATUS_ORDER = ["Available", "Reserved", "Rented", "Maintenance"];
 
 const DATE_INPUT =
-  "min-h-[42px] rounded-[2px] border border-rule-strong bg-surface px-3 text-small text-ink outline-0 focus:border-brand";
+  "min-h-[42px] rounded-lg border border-rule-strong bg-surface px-3 text-small text-ink outline-0 focus:border-brand";
 
 function monthLabel(month: string) {
   const [year, value] = month.split("-");

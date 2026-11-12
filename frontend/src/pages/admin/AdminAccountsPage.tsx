@@ -29,7 +29,7 @@ import { SurfaceState } from "../../components/ui/SurfaceState";
 
 const PAGE_SIZE = 50;
 const INPUT =
-  "min-h-[42px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 text-small text-ink outline-0 focus:border-brand";
+  "min-h-[42px] w-full rounded-lg border border-rule-strong bg-surface px-3 text-small text-ink outline-0 focus:border-brand";
 
 function Field({
   id,

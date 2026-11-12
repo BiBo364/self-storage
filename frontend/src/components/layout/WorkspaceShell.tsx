@@ -146,7 +146,7 @@ export function WorkspaceShell({
         {header ? (
           header(() => setMenuOpen(true))
         ) : (
-          <header className="sticky top-0 z-[15] flex min-h-16 items-center justify-between bg-surface px-5 max-[760px]:px-4">
+          <header className="sticky top-0 z-[15] flex min-h-16 items-center justify-between rounded-none bg-surface px-5 max-[760px]:px-4">
             <button
               className={SIDEBAR_ICON_BUTTON}
               onClick={() => setMenuOpen(true)}

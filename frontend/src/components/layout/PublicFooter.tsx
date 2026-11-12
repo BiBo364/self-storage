@@ -13,7 +13,8 @@ export function PublicFooter({ navigate }: { navigate: Navigate }) {
           <div className="max-[760px]:col-span-2">
             <Brand onClick={() => navigate("/")} />
             <p className="mt-3 max-w-[32ch] text-small text-muted">
-              Tự lưu trữ tại TP. Hồ Chí Minh. Prototype — dữ liệu minh hoạ.
+              Kho tự lưu trữ tại TP. Hồ Chí Minh — chọn kho trên bản đồ, đặt cọc và quản lý hợp đồng
+              trực tuyến.
             </p>
           </div>
           <div className="grid content-start gap-2.5">
@@ -21,6 +22,9 @@ export function PublicFooter({ navigate }: { navigate: Navigate }) {
             <button className={footerLink} onClick={() => navigate("/units")}>
               Tìm kho
             </button>
+            <a className={footerLink} href="/#about">
+              Giới thiệu
+            </a>
             <a className={footerLink} href="/#how-it-works">
               Quy trình
             </a>
@@ -47,8 +51,8 @@ export function PublicFooter({ navigate }: { navigate: Navigate }) {
           </div>
         </div>
         <div className="mt-10 flex items-center justify-between gap-4 text-label text-muted max-[760px]:block">
-          <span>© 2026 Kho Mộc. Bản xem trước giao diện.</span>
-          <span className="max-[760px]:mt-2 max-[760px]:block">Dữ liệu minh hoạ</span>
+          <span>© 2026 Kho Mộc.</span>
+          <span className="max-[760px]:mt-2 max-[760px]:block">Tự lưu trữ · TP. Hồ Chí Minh</span>
         </div>
       </div>
     </footer>

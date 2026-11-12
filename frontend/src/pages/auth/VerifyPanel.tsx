@@ -88,7 +88,7 @@ export function VerifyPanel({ navigate }: { navigate: Navigate }) {
         <label className="grid gap-1.5">
           <span className="text-label text-muted">Mã xác minh</span>
           <input
-            className="h-12 w-full rounded-[2px] border-2 border-rule-strong bg-surface px-3 text-center text-[1.5rem] tracking-[0.35em] text-ink outline-0 transition-colors focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)]"
+            className="h-12 w-full rounded-lg border-2 border-rule-strong bg-surface px-3 text-center text-[1.5rem] tracking-[0.35em] text-ink outline-0 transition-colors focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)]"
             value={code}
             onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
             inputMode="numeric"

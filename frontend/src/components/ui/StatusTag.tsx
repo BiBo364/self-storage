@@ -11,7 +11,7 @@ const TONE_CLASS: Record<StatusTone, string> = {
 export function StatusTag({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-1 text-label font-semibold ${TONE_CLASS[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-label font-semibold ${TONE_CLASS[tone]}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
       {children}

@@ -241,7 +241,7 @@ function Handover({ handoverId, navigate }: { handoverId: number; navigate: Navi
               maxLength={1000}
               value={agreeNote}
               onChange={(event) => setAgreeNote(event.target.value)}
-              className="min-h-[64px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
+              className="min-h-[64px] rounded-lg border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
             />
           </label>
           <div>
@@ -480,7 +480,7 @@ function Handover({ handoverId, navigate }: { handoverId: number; navigate: Navi
                     maxLength={500}
                     value={rejectReason}
                     onChange={(event) => setRejectReason(event.target.value)}
-                    className="min-h-[70px] rounded-[2px] border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
+                    className="min-h-[70px] rounded-lg border border-rule-strong bg-surface p-2.5 text-small font-normal text-ink"
                     placeholder="Ví dụ: khoang ẩm, cửa khó đóng…"
                   />
                 </label>

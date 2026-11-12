@@ -11,7 +11,7 @@ const TONE_CLASSES: Record<NoticeTone, string> = {
 export function DemoNotice({ tone, children }: { tone: NoticeTone; children: React.ReactNode }) {
   return (
     <div
-      className={`step-enter mt-4 flex items-start gap-2 rounded-none border px-3.5 py-3 text-small leading-normal ${TONE_CLASSES[tone]}`}
+      className={`step-enter mt-4 flex items-start gap-2 rounded-xl border px-3.5 py-3 text-small leading-normal ${TONE_CLASSES[tone]}`}
       role={tone === "error" ? "alert" : "status"}
     >
       {tone === "pending" ? (

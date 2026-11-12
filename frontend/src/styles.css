@@ -37,7 +37,7 @@
   --unit-accent-sand: #dfe1dc;
   --unit-accent-teal: #d9e3e4;
   --unit-accent-ink: #e5e7e4;
-  --radius-card: 0px;
+  --radius-card: 12px;
   --shadow-soft: 0 24px 60px rgba(16, 20, 19, 0.18);
   --container-border: #101413;
   --control-border: #101413;
@@ -86,7 +86,7 @@
   --unit-accent-sand: #1d231d;
   --unit-accent-teal: #1b2a2b;
   --unit-accent-ink: #202622;
-  --radius-card: 0px;
+  --radius-card: 12px;
   --shadow-soft: 0 24px 60px rgba(0, 0, 0, 0.35);
   --container-border: rgba(238, 240, 236, 0.26);
   --control-border: rgba(238, 240, 236, 0.28);
@@ -425,6 +425,98 @@ select option:checked {
 .slot-highlight {
   animation: slot-pulse 1.6s ease-in-out infinite;
 }
+/* Bo góc cho thẻ / khối nền (không áp cho header, footer; dải full-width ghi rounded-none). Utility rounded-* vẫn thắng. */
+.app-shell
+  :is(
+    .bg-surface,
+    .bg-surface-subtle,
+    .bg-info-soft,
+    .bg-success-soft,
+    .bg-warning-soft,
+    .bg-danger-soft,
+    .bg-brand-soft,
+    .bg-brand
+  ):not(header, footer) {
+  border-radius: var(--radius-card);
+}
+/* Thẻ bấm được (hàng danh sách, thẻ cơ sở): nhô lên khi rê chuột. */
+.app-shell :is(button, a).bg-surface:not(:disabled):hover,
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(16, 20, 19, 0.12);
+}
+[data-theme="dark"] :is(button, a).bg-surface:not(:disabled):hover,
+[data-theme="dark"] .lift:hover {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+}
+.lift {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    border-color 0.2s ease;
+}
+/* Mũi tên trong nút / link trượt nhẹ khi rê chuột. */
+.app-shell .lucide-arrow-right {
+  transition: transform 0.2s ease;
+}
+.app-shell :is(button, a):hover .lucide-arrow-right {
+  transform: translateX(3px);
+}
+/* Hiện dần khi cuộn tới (component Reveal gắn .is-visible). */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0s);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+/* Hero: quầng sáng trôi chậm phía sau tiêu đề, từng dòng tiêu đề hiện lần lượt. */
+.hero-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  animation: glow-drift 16s ease-in-out infinite alternate;
+}
+@keyframes glow-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(60px, -40px, 0) scale(1.18);
+  }
+}
+.hero-line {
+  display: block;
+  animation: fade-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+/* Vạch cảnh báo vàng-đen chạy chậm (chu kỳ 22px / sin 45° = 31.1px). */
+.hazard-move {
+  animation: hazard-slide 3.5s linear infinite;
+}
+@keyframes hazard-slide {
+  to {
+    background-position: 62.23px 0;
+  }
+}
+/* Chấm thương hiệu nhấp nháy nhẹ. */
+.pulse-dot {
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(242, 195, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(242, 195, 0, 0);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -433,5 +525,9 @@ select option:checked {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
   }
 }
