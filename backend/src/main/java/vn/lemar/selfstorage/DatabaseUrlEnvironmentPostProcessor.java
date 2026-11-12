@@ -8,8 +8,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.StringJoiner;
+import org.apache.commons.logging.Log;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;
+import org.springframework.boot.logging.DeferredLogFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
@@ -22,27 +24,44 @@ import org.springframework.core.env.MapPropertySource;
  * Đọc {@code DATABASE_URL_UNPOOLED} trước, rồi {@code DATABASE_URL}: backend tự có pool Hikari và Flyway khoá migration
  * bằng advisory lock theo session — không hợp với pooler chế độ transaction, nên ưu tiên kết nối thẳng. Tham số
  * {@code channel_binding} (tên libpq) đổi sang {@code channelBinding} (tên pgjdbc); tham số khác giữ nguyên.
- * Chạy sau khi {@code spring.config.import} đã nạp {@code .env}.
+ * Chạy sau khi {@code spring.config.import} đã nạp {@code .env}. Giá trị bọc ngoặc kép (cách {@code neon env pull}
+ * ghi file) được bỏ ngoặc. Có biến nhưng không đọc được, hoặc {@code DB_URL} đang lấn biến này → ghi log khi khởi động
+ * để không âm thầm rơi về DB mặc định.
  */
 public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
     static final String PROPERTY_SOURCE = "databaseUrl";
     private static final String[] SOURCES = {"DATABASE_URL_UNPOOLED", "DATABASE_URL"};
 
+    private final Log log;
+
+    public DatabaseUrlEnvironmentPostProcessor(DeferredLogFactory logFactory) {
+        this.log = logFactory.getLog(DatabaseUrlEnvironmentPostProcessor.class);
+    }
+
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        if (hasText(environment.getProperty("DB_URL"))) {
-            return;
-        }
-        for (String source : SOURCES) {
-            String raw = environment.getProperty(source);
-            if (hasText(raw)) {
-                toJdbc(raw).ifPresent(connection ->
-                        environment.getPropertySources().addFirst(new MapPropertySource(PROPERTY_SOURCE,
-                                connection.asProperties())));
-                return;
+        String source = null;
+        for (String candidate : SOURCES) {
+            if (hasText(environment.getProperty(candidate))) {
+                source = candidate;
+                break;
             }
         }
+        if (source == null) {
+            return;
+        }
+        if (hasText(environment.getProperty("DB_URL"))) {
+            log.info("DB_URL đã đặt nên bỏ qua " + source + " — muốn dùng " + source + " thì xoá DB_URL");
+            return;
+        }
+        String name = source;
+        Optional<JdbcConnection> connection = toJdbc(environment.getProperty(source));
+        connection.ifPresentOrElse(found -> {
+            environment.getPropertySources().addFirst(new MapPropertySource(PROPERTY_SOURCE, found.asProperties()));
+            log.info("Kết nối DB lấy từ " + name + " (" + found.host() + ")");
+        }, () -> log.warn(name + " có giá trị nhưng không phải URL postgresql://user:pass@host/db hợp lệ — "
+                + "dùng DB_URL mặc định"));
     }
 
     @Override
@@ -54,7 +73,7 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
     static Optional<JdbcConnection> toJdbc(String raw) {
         URI uri;
         try {
-            uri = new URI(raw.trim());
+            uri = new URI(unquote(raw));
         } catch (URISyntaxException e) {
             return Optional.empty();
         }
@@ -97,6 +116,18 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
         return joined.toString();
     }
 
+    /** Bỏ khoảng trắng và một cặp ngoặc kép / ngoặc đơn bao ngoài (cách file .env hay bọc giá trị). */
+    private static String unquote(String raw) {
+        String value = raw.trim();
+        if (value.length() >= 2) {
+            char first = value.charAt(0);
+            if ((first == '"' || first == '\'') && value.charAt(value.length() - 1) == first) {
+                return value.substring(1, value.length() - 1).trim();
+            }
+        }
+        return value;
+    }
+
     private static String decode(String value) {
         return URLDecoder.decode(value, StandardCharsets.UTF_8);
     }
@@ -118,6 +149,13 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
                 properties.put("DB_PASSWORD", password);
             }
             return properties;
+        }
+
+        /** Host (kèm cổng nếu có) để ghi log — không có user / mật khẩu. */
+        String host() {
+            String rest = url.substring("jdbc:postgresql://".length());
+            int slash = rest.indexOf('/');
+            return slash < 0 ? rest : rest.substring(0, slash);
         }
 
         @Override

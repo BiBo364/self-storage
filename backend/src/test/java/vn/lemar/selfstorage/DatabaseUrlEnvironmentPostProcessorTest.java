@@ -1,7 +1,13 @@
 package vn.lemar.selfstorage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
+import org.apache.commons.logging.Log;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
 import org.springframework.core.Ordered;
@@ -9,11 +15,58 @@ import org.springframework.mock.env.MockEnvironment;
 
 class DatabaseUrlEnvironmentPostProcessorTest {
 
-    private final DatabaseUrlEnvironmentPostProcessor processor = new DatabaseUrlEnvironmentPostProcessor();
+    private final Log log = mock(Log.class);
+    private final DatabaseUrlEnvironmentPostProcessor processor =
+            new DatabaseUrlEnvironmentPostProcessor(destination -> log);
 
     private MockEnvironment run(MockEnvironment environment) {
         processor.postProcessEnvironment(environment, new SpringApplication());
         return environment;
+    }
+
+    @Test
+    void springBootFindsAndCreatesItFromSpringFactories() {
+        var processors = org.springframework.boot.env.EnvironmentPostProcessorsFactory
+                .fromSpringFactories(getClass().getClassLoader())
+                .getEnvironmentPostProcessors(new org.springframework.boot.logging.DeferredLogs(),
+                        new org.springframework.boot.DefaultBootstrapContext());
+
+        assertThat(processors).anyMatch(DatabaseUrlEnvironmentPostProcessor.class::isInstance);
+    }
+
+    @Test
+    void quotedValueFromNeonEnvPullIsAccepted() {
+        MockEnvironment env = run(new MockEnvironment().withProperty("DATABASE_URL_UNPOOLED",
+                " \"postgresql://app:secret@ep-x.ap.aws.neon.tech/neondb?sslmode=require\" "));
+        MockEnvironment single = run(new MockEnvironment().withProperty("DATABASE_URL",
+                "'postgresql://app:secret@ep-y.ap.aws.neon.tech/neondb'"));
+
+        assertThat(env.getProperty("DB_URL"))
+                .isEqualTo("jdbc:postgresql://ep-x.ap.aws.neon.tech/neondb?sslmode=require");
+        assertThat(env.getProperty("DB_PASSWORD")).isEqualTo("secret");
+        assertThat(single.getProperty("DB_URL")).isEqualTo("jdbc:postgresql://ep-y.ap.aws.neon.tech/neondb");
+        verify(log).info(argThat(message -> String.valueOf(message).contains("DATABASE_URL_UNPOOLED")
+                && String.valueOf(message).contains("ep-x.ap.aws.neon.tech")
+                && !String.valueOf(message).contains("secret")));
+    }
+
+    @Test
+    void unreadableUrlIsReportedInsteadOfSilentlyFallingBack() {
+        MockEnvironment env = run(new MockEnvironment()
+                .withProperty("DATABASE_URL_UNPOOLED", "\"postgresql://bad host"));
+
+        assertThat(env.getProperty("DB_URL")).isNull();
+        verify(log).warn(argThat(message -> String.valueOf(message).startsWith("DATABASE_URL_UNPOOLED")));
+    }
+
+    @Test
+    void explicitDbUrlWinsAndSaysSo() {
+        run(new MockEnvironment()
+                .withProperty("DB_URL", "jdbc:postgresql://localhost:5432/self_storage")
+                .withProperty("DATABASE_URL_UNPOOLED", "postgresql://app:secret@ep-x.neon.tech/neondb"));
+
+        verify(log).info(argThat(message -> String.valueOf(message).startsWith("DB_URL đã đặt")));
+        verify(log, never()).warn(any());
     }
 
     @Test
