@@ -148,6 +148,9 @@ Seed dev có 8 account `@lemar.vn`: 6 account phủ đủ 5 role (FM có 2) + 2 
 (chưa xác minh — login bị chặn 403) và `banned` (403), mật khẩu `Test@1234`.
 Chi tiết: `backend/sql/README.md`.
 
+Dữ liệu demo (tên đầy đủ, 5 cơ sở, nhân viên, khoang, kịch bản quá hạn) không nằm trong migration: chạy tay
+`backend\sql\dev\seed-demo.cmd` sau khi Flyway dựng DB — [backend/sql/README.md](../sql/README.md#dữ-liệu-demo-devdemo-seedsql--chạy-tay-một-lệnh).
+
 Schema Flow 1.3 đi bằng migration V8–V11:
 
 - Cột `rental_orders.needs_reproposal BOOLEAN NOT NULL DEFAULT FALSE` — gate đề xuất lại: FM được đề xuất lại khi

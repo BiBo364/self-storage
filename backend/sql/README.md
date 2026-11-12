@@ -46,3 +46,29 @@ từ Flyway sẽ lỗi trùng bảng. DB của app luôn để Flyway tự dựn
 ## Seed (V2) — mật khẩu dev
 
 Mọi account `@lemar.vn` dùng mật khẩu `Test@1234`: `admin`(ADMIN) · `bom1`(BOM) · `fm1`(FM, gán Q7) · `fm2`(FM, gán TD) · `fs1`(FS, gán Q7) · `customer1`(CUSTOMER) · `unverified`(CUSTOMER, chưa xác minh — login 403) · `banned`(CUSTOMER, BANNED — 403).
+
+## Dữ liệu demo (`dev/demo-seed.sql`) — chạy tay, một lệnh
+
+Không phải migration: test tích hợp và bản deploy không nhận dữ liệu này. Sau khi backend đã chạy Flyway trên DB,
+từ thư mục gốc repo:
+
+```bat
+backend\sql\dev\seed-demo.cmd
+```
+
+(Git Bash / macOS: `docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U self_storage -d self_storage < backend/sql/dev/demo-seed.sql`.)
+Lệnh tự đợi Flyway tới V34 (tối đa 3 phút) nên chạy ngay sau khi bật backend được. Reset rồi nạp lại:
+`docker compose down -v` → `docker compose up -d` → bật backend → chạy lệnh. Một DB chỉ nạp được một lần — lần
+hai báo lỗi và không ghi gì.
+
+Nạp vào:
+- họ tên đầy đủ cho 8 account seed V2 (chỉ đổi khi tên vẫn là tên mặc định của V13);
+- 3 cơ sở mới `BT` / `TB` / `GV`, mỗi cơ sở một FM (`fm3`–`fm5`); hai FS mỗi cơ sở (`fs2`–`fs10`) kèm hồ sơ nhân
+  viên và ca 07:00–21:00 từ 7 ngày trước tới 60 ngày sau;
+- khoang có vị trí trên sơ đồ ở cả 5 cơ sở;
+- 12 hợp đồng `Active` (`customer2`–`customer13`) kèm hoá đơn cọc / tiền thuê đã trả và giao dịch `Success`.
+
+Kịch bản quá hạn ở Q7 (mốc ngày tính theo ngày chạy, tiền theo policy hiện có), mô tả ở đầu file SQL: sắp hết hạn,
+trong ân hạn, quá hạn có phí `INV-OVD`, quá hạn kéo dài bị tạm khoá mã khoá số, quá hạn đã gửi yêu cầu trả kho, tiền
+thuê tháng quá hạn. Hoá đơn phí quá hạn, tạm khoá truy cập và thông báo được dựng đúng như `OverdueJob` tạo, nên
+lượt cron đầu không tạo thêm hay đổi số tiền và không gửi lại mail.
