@@ -39,6 +39,7 @@ import vn.lemar.selfstorage.backoffice.application.BackofficeService;
 import vn.lemar.selfstorage.backoffice.application.BackofficeService.Report;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.Kpis;
+import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.Coordinates;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.FacilityRow;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.UnitRow;
 import vn.lemar.selfstorage.identity.application.AccountAdminService;
@@ -84,10 +85,10 @@ class BackofficeControllerTest {
     @Test
     void managerRoutes() throws Exception {
         login("fm@x.vn", "FM", 2L);
-        UnitRow unit = new UnitRow(9L, "A-9", 1L, 1L, "Available", null, null);
+        UnitRow unit = new UnitRow(9L, "A-9", 1L, 1L, "Available", null, null, null, null, null);
         when(backoffice.facilityContracts(1L, "Active")).thenReturn(List.of());
         when(backoffice.facilityReport(eq(1L), any(), any())).thenReturn(report());
-        when(backoffice.createUnit(1L, "A-9", 1L, null)).thenReturn(unit);
+        when(backoffice.createUnit(1L, "A-9", 1L, null, null)).thenReturn(unit);
         when(backoffice.updateUnit(9L, null, new BigDecimal("1000"))).thenReturn(unit);
         when(backoffice.setMaintenance(9L, true)).thenThrow(new IllegalStateException("Đang có đơn"));
         when(backoffice.setAccessOptions(1L, true, false)).thenReturn(facility());
@@ -114,7 +115,8 @@ class BackofficeControllerTest {
     @Test
     void managerHoldsPostReturnMaintenance() throws Exception {
         login("fm@x.vn", "FM", 2L);
-        when(backoffice.holdMaintenance(9L)).thenReturn(new UnitRow(9L, "A-9", 1L, 1L, "Maintenance", null, null));
+        when(backoffice.holdMaintenance(9L)).thenReturn(
+                new UnitRow(9L, "A-9", 1L, 1L, "Maintenance", null, null, null, null, null));
         when(backoffice.holdMaintenance(10L))
                 .thenThrow(new IllegalStateException("Chỉ giữ bảo trì được cho khoang đang bảo trì sau trả kho"));
 
@@ -132,8 +134,10 @@ class BackofficeControllerTest {
     void bomRoutes() throws Exception {
         login("bom@x.vn", "BOM", 3L);
         when(backoffice.listFacilities()).thenReturn(List.of(facility()));
-        when(backoffice.createFacility("Q9", "Quận 9", null, null)).thenReturn(facility());
-        when(backoffice.updateFacility(1L, "Mới", null, null, null)).thenReturn(facility());
+        when(backoffice.createFacility("Q9", "Quận 9", null, null, new Coordinates(null, null), null, List.of()))
+                .thenReturn(facility());
+        when(backoffice.updateFacility(1L, "Mới", null, null, null, new Coordinates(null, null), null))
+                .thenReturn(facility());
         when(accounts.get(4L)).thenReturn(account("FM"));
         when(backoffice.assignManager(1L, 4L, true)).thenReturn(facility());
         when(backoffice.policies()).thenReturn(List.of(new PolicyRow(1L, "k", "1", null, Instant.now())));
@@ -243,7 +247,8 @@ class BackofficeControllerTest {
     }
 
     private static FacilityRow facility() {
-        return new FacilityRow(1L, "Q7", "Quận 7", null, null, "Active", 4L, "fm@x.vn", true, true, 8, 2, 1);
+        return new FacilityRow(1L, "Q7", "Quận 7", null, null, "Active", 4L, "fm@x.vn", true, true, 8, 2, 1, null,
+                null, 1);
     }
 
     private static AccountRow account(String role) {

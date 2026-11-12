@@ -35,8 +35,9 @@ class ChatServiceTest {
         service = new ChatService(model, facilities, pricing);
         when(model.available()).thenReturn(true);
         when(facilities.listActive()).thenReturn(List.of(
-                new FacilityCatalogView(1L, "Q7", "Kho Quận 7", "1 Nguyễn Văn Linh", "7:00–21:00", List.of(1L)),
-                new FacilityCatalogView(2L, "TD", "Kho Thủ Đức", null, null, List.of(9L))));
+                new FacilityCatalogView(1L, "Q7", "Kho Quận 7", "1 Nguyễn Văn Linh", "7:00–21:00", List.of(1L), null,
+                        null, 1),
+                new FacilityCatalogView(2L, "TD", "Kho Thủ Đức", null, null, List.of(9L), null, null, 1)));
         when(pricing.unitTypes()).thenReturn(List.of(new UnitTypeRow(1L, "Small", BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.TEN, new BigDecimal("1.00"), "Vali, thùng nhỏ", new BigDecimal("500000")),
                 new UnitTypeRow(2L, "Large", BigDecimal.TEN, BigDecimal.TEN, BigDecimal.TEN, BigDecimal.TEN, null,

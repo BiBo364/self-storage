@@ -17,7 +17,8 @@ Trả danh sách khoang của cơ sở trong phạm vi FM.
 - `unitTypeId` optional.
 - Order by `code`; MVP không phân trang.
 - Mỗi dòng: `id`, `code`, `facilityId`, `unitTypeId`, `unitTypeName`, `size`, `area`, `status`,
-  `monthlyPrice`, `unitPrice`, `maintenanceStartedAt`.
+  `monthlyPrice`, `unitPrice`, `maintenanceStartedAt`, `floorNo`, `aisleSide`, `aislePosition` (vị trí trên sơ đồ,
+  cả ba `null` khi chưa xếp). FE vẽ sơ đồ có màu trạng thái từ danh sách này.
 - `monthlyPrice = coalesce(storage_units.monthly_price, unit_types.monthly_price)`; `unitPrice` = giá riêng của
   khoang (`null` = dùng giá loại khoang).
 - `maintenanceStartedAt` = mốc bảo trì sau trả kho (cron tự mở lại sau `unit.maintenance_days`); `null` = khoang không

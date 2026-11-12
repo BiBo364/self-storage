@@ -40,6 +40,7 @@ import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { DemoNotice } from "../components/ui/DemoNotice";
 import { DetailPanel } from "../components/ui/DetailPanel";
 import { FIELD_LABEL, INPUT_ELEMENT, INPUT_WRAP } from "../components/ui/FormField";
+import { UnitLocationCard } from "../components/domain/UnitLocationCard";
 import { SectionTitle } from "../components/ui/SectionTitle";
 import { StatusTag } from "../components/ui/StatusTag";
 import { SurfaceState } from "../components/ui/SurfaceState";
@@ -218,6 +219,8 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
           </Button>
         </div>
       </div>
+
+      <UnitLocationCard facilityId={contract.facilityId} unitCode={contract.unitCode} />
 
       <div className="grid grid-cols-4 gap-2 max-[980px]:grid-cols-2 max-[760px]:grid-cols-1">
         <Summary label="Giá thuê / tháng" value={formatMoney(contract.monthlyPrice)} />

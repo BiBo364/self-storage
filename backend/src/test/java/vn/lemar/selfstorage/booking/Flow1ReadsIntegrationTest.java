@@ -254,6 +254,27 @@ class Flow1ReadsIntegrationTest {
     }
 
     @Test
+    void publicLayoutShowsSeededFloorsWithoutUnitStatusAndMapPin() throws Exception {
+        mockMvc.perform(get("/api/facilities"))
+                .andExpect(jsonPath("$.data[0].latitude").value(10.72965))
+                .andExpect(jsonPath("$.data[0].floorCount").value(2));
+        // Public, không cần token; không lộ trạng thái khoang.
+        mockMvc.perform(get("/api/facilities/" + q7 + "/layout"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Sơ đồ cơ sở"))
+                .andExpect(jsonPath("$.data.floorCount").value(2))
+                .andExpect(jsonPath("$.data.units.length()").value(8))
+                .andExpect(jsonPath("$.data.units[0].code").value("A-01"))
+                .andExpect(jsonPath("$.data.units[0].floorNo").value(1))
+                .andExpect(jsonPath("$.data.units[0].aisleSide").value("Left"))
+                .andExpect(jsonPath("$.data.units[0].aislePosition").value(1))
+                .andExpect(jsonPath("$.data.units[0].status").doesNotExist());
+        mockMvc.perform(get("/api/facilities/-1/layout"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Không tìm thấy cơ sở"));
+    }
+
+    @Test
     void publicFacilitiesHidesInactiveFacility() throws Exception {
         jdbc.update("update facilities set status = 'Inactive' where id = ?", td);
 

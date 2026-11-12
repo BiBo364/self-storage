@@ -23,14 +23,18 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.lemar.selfstorage.ApiEnvelope;
 import vn.lemar.selfstorage.backoffice.application.BackofficeService;
+import vn.lemar.selfstorage.backoffice.application.BackofficeService.NewUnit;
 import vn.lemar.selfstorage.backoffice.application.BackofficeService.Report;
 import vn.lemar.selfstorage.backoffice.application.BackofficeService.StaffReport;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.AuditRow;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.ContractRow;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository.InvoiceRow;
+import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.Coordinates;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.FacilityRow;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.UnitRow;
+import vn.lemar.selfstorage.facility.application.StorageUnitListView;
+import vn.lemar.selfstorage.facility.application.UnitLocation;
 import vn.lemar.selfstorage.identity.application.AccountAdminService;
 import vn.lemar.selfstorage.identity.application.AccountAdminService.AccountRow;
 import vn.lemar.selfstorage.identity.application.AccountAdminService.LoginEventRow;
@@ -88,10 +92,23 @@ public class BackofficeController {
         return ok("Báo cáo nhân sự", backoffice.facilityStaffReport(facilityId, from, to));
     }
 
+    @Operation(summary = "Thêm khoang", description = "Vị trí tuỳ chọn: đủ `floorNo` + `aisleSide` (`Left`/`Right` "
+            + "nhìn từ cửa vào) + `aislePosition` (1 = sát cửa), hoặc bỏ cả ba. Thiếu một phần / tầng vượt số tầng → "
+            + "400; vị trí đã có khoang → 409.")
     @PostMapping("/api/fm/storage-units")
     public ResponseEntity<ApiEnvelope<UnitRow>> createUnit(@Valid @RequestBody UnitBody body) {
         return ok("Đã thêm khoang", backoffice.createUnit(body.facilityId(), body.code(), body.unitTypeId(),
-                body.monthlyPrice()));
+                body.monthlyPrice(), UnitLocation.of(body.floorNo(), body.aisleSide(), body.aislePosition())));
+    }
+
+    @Operation(summary = "Đặt vị trí khoang trên sơ đồ", description = "Đủ ba trường = đặt / đổi vị trí; bỏ cả ba = "
+            + "gỡ khoang khỏi sơ đồ. Mọi trạng thái khoang. Thiếu một phần / tầng vượt số tầng → 400; vị trí đã có "
+            + "khoang khác → 409. Audit `STORAGE_UNIT_UPDATED` (vị trí cũ / mới).")
+    @PutMapping("/api/fm/storage-units/{unitId}/location")
+    public ResponseEntity<ApiEnvelope<UnitRow>> unitLocation(@PathVariable Long unitId,
+                                                             @RequestBody LocationBody body) {
+        return ok("Đã cập nhật vị trí khoang", backoffice.setUnitLocation(unitId,
+                UnitLocation.of(body.floorNo(), body.aisleSide(), body.aislePosition())));
     }
 
     @PatchMapping("/api/fm/storage-units/{unitId}")
@@ -135,17 +152,42 @@ public class BackofficeController {
         return ok("Danh sách cơ sở", backoffice.listFacilities());
     }
 
+    @Operation(summary = "Tạo cơ sở", description = "Kèm ghim bản đồ (`latitude` + `longitude`, tuỳ chọn), số tầng "
+            + "(`floorCount` 1–20, mặc định 1) và sơ đồ khoang ban đầu (`units`: mã, loại khoang, vị trí bắt buộc). "
+            + "Một transaction: khoang sai (mã lặp, loại không tồn tại, tầng vượt số tầng, hai khoang một vị trí) "
+            + "→ 400 và không tạo gì.")
     @PostMapping("/api/bom/facilities")
     public ResponseEntity<ApiEnvelope<FacilityRow>> createFacility(@Valid @RequestBody FacilityBody body) {
+        List<NewUnit> units = body.units() == null ? List.of() : body.units().stream()
+                .map(unit -> new NewUnit(unit.code(), unit.unitTypeId(),
+                        UnitLocation.of(unit.floorNo(), unit.aisleSide(), unit.aislePosition())))
+                .toList();
         return ok("Đã tạo cơ sở", backoffice.createFacility(body.code(), body.name(), body.address(),
-                body.operatingHours()));
+                body.operatingHours(), new Coordinates(body.latitude(), body.longitude()), body.floorCount(),
+                units));
     }
 
+    @Operation(summary = "Sửa cơ sở", description = "Trường `null` giữ nguyên. Toạ độ đổi khi gửi đủ `latitude` + "
+            + "`longitude`. Giảm `floorCount` xuống dưới tầng đang có khoang → 409.")
     @PatchMapping("/api/bom/facilities/{id}")
     public ResponseEntity<ApiEnvelope<FacilityRow>> updateFacility(@PathVariable Long id,
                                                                    @RequestBody FacilityUpdateBody body) {
         return ok("Đã cập nhật cơ sở", backoffice.updateFacility(id, body.name(), body.address(),
-                body.operatingHours(), body.status()));
+                body.operatingHours(), body.status(), new Coordinates(body.latitude(), body.longitude()),
+                body.floorCount()));
+    }
+
+    @Operation(summary = "Khoang của cơ sở (BOM)",
+            description = "Mọi khoang kèm trạng thái và vị trí — vẽ sơ đồ có màu trạng thái. Không có cơ sở → 400.")
+    @GetMapping("/api/bom/facilities/{id}/units")
+    public ResponseEntity<ApiEnvelope<List<StorageUnitListView>>> bomFacilityUnits(@PathVariable Long id) {
+        return ok("Khoang của cơ sở", backoffice.facilityUnits(id));
+    }
+
+    @PutMapping("/api/bom/storage-units/{unitId}/location")
+    public ResponseEntity<ApiEnvelope<UnitRow>> bomUnitLocation(@PathVariable Long unitId,
+                                                                @RequestBody LocationBody body) {
+        return unitLocation(unitId, body);
     }
 
     @PutMapping("/api/bom/facilities/{id}/manager")
@@ -297,7 +339,17 @@ public class BackofficeController {
     }
 
     public record UnitBody(@NotNull Long facilityId, @NotBlank @Size(max = 50) String code, @NotNull Long unitTypeId,
-                           BigDecimal monthlyPrice) {
+                           BigDecimal monthlyPrice, Integer floorNo, String aisleSide, Integer aislePosition) {
+    }
+
+    /** Vị trí khoang: đủ ba trường hoặc bỏ cả ba (gỡ khỏi sơ đồ). */
+    public record LocationBody(Integer floorNo, String aisleSide, Integer aislePosition) {
+    }
+
+    /** Khoang trên sơ đồ lúc tạo cơ sở — vị trí bắt buộc. */
+    public record LayoutUnitBody(@NotBlank @Size(max = 50) String code, @NotNull Long unitTypeId,
+                                 @NotNull Integer floorNo, @NotBlank String aisleSide,
+                                 @NotNull Integer aislePosition) {
     }
 
     public record UnitUpdateBody(Long unitTypeId, BigDecimal monthlyPrice) {
@@ -312,10 +364,12 @@ public class BackofficeController {
     /** Mã cơ sở nằm trong mã hoá đơn ({@code INV-XXX-{code}-yyMMdd-xxxxxx}, cột 50 ký tự) nên giới hạn 20. */
     public record FacilityBody(@NotBlank @Size(max = 20) @Pattern(regexp = "[A-Za-z0-9-]+") String code,
                                @NotBlank @Size(max = 255) String name,
-                               String address, String operatingHours) {
+                               String address, String operatingHours, BigDecimal latitude, BigDecimal longitude,
+                               Integer floorCount, @Size(max = 500) List<@Valid LayoutUnitBody> units) {
     }
 
-    public record FacilityUpdateBody(String name, String address, String operatingHours, String status) {
+    public record FacilityUpdateBody(String name, String address, String operatingHours, String status,
+                                     BigDecimal latitude, BigDecimal longitude, Integer floorCount) {
     }
 
     public record ManagerBody(Long fmAccountId) {

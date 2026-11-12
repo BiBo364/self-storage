@@ -13,6 +13,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { FilterSelect } from "../components/ui/FilterSelect";
 import { SurfaceState } from "../components/ui/SurfaceState";
+import { FacilityMapSection } from "../components/domain/FacilityMapSection";
 import { UnitDetailsDialog } from "../components/domain/UnitDetailsDialog";
 
 export function BrowsePage({ navigate }: { navigate: Navigate }) {
@@ -73,6 +74,17 @@ export function BrowsePage({ navigate }: { navigate: Navigate }) {
                 {data.unitTypes.length} loại khoang · {facilities.length} cơ sở
               </span>
             )}
+          </div>
+
+          <div className="mb-6">
+            <FacilityMapSection
+              facilities={facilities}
+              selectedId={facilityFilter ? Number(facilityFilter) : null}
+              onSelect={(id) => {
+                setFacilityFilter(String(id) === facilityFilter ? "" : String(id));
+                setTypeFilter("");
+              }}
+            />
           </div>
 
           <div className="grid grid-cols-[1.15fr_1fr_1fr_auto] items-end gap-3 max-[900px]:grid-cols-2 max-[760px]:grid-cols-1">

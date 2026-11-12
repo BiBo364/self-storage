@@ -363,6 +363,68 @@ select option:checked {
 .pop-enter {
   animation: pop-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
+/* Ghim bản đồ cơ sở (Leaflet divIcon) — giọt nước vàng thương hiệu, rơi xuống khi xuất hiện. */
+.facility-pin {
+  background: transparent;
+  border: 0;
+}
+.facility-pin__dot {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin: 2px 4px;
+  background: var(--brand);
+  border: 3px solid #101413;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  animation: pin-drop 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.facility-pin__dot.is-picked {
+  background: #ffffff;
+  border-color: var(--brand-strong);
+}
+@keyframes pin-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) rotate(-45deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-45deg);
+  }
+}
+.facility-map .leaflet-popup-content-wrapper,
+.facility-map .leaflet-popup-tip {
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink);
+}
+.facility-map .leaflet-popup-content {
+  margin: 12px 14px;
+  font: inherit;
+  font-size: 0.875rem;
+}
+.facility-map .leaflet-popup-content a {
+  color: var(--accent);
+  font-weight: 600;
+}
+[data-theme="dark"] .facility-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.6);
+}
+/* Ô khoang trên sơ đồ: khoang của khách / đang chọn nhấp nháy viền để dễ tìm. */
+@keyframes slot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(242, 195, 0, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(242, 195, 0, 0);
+  }
+}
+.slot-highlight {
+  animation: slot-pulse 1.6s ease-in-out infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

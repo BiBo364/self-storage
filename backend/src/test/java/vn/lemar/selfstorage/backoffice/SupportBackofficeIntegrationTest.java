@@ -26,9 +26,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.lemar.selfstorage.backoffice.application.BackofficeService;
+import vn.lemar.selfstorage.backoffice.application.BackofficeService.NewUnit;
 import vn.lemar.selfstorage.backoffice.application.BackofficeService.Report;
 import vn.lemar.selfstorage.backoffice.repository.BackofficeReadRepository;
+import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.Coordinates;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.FacilityRow;
+import vn.lemar.selfstorage.facility.application.FacilityCatalogQuery;
+import vn.lemar.selfstorage.facility.application.FacilityLayoutView;
+import vn.lemar.selfstorage.facility.application.UnitLocation;
 import vn.lemar.selfstorage.facility.application.FacilityAdminCommands.UnitRow;
 import vn.lemar.selfstorage.facility.application.StorageUnitListQuery;
 import vn.lemar.selfstorage.identity.application.AccountAdminService;
@@ -68,6 +73,8 @@ class SupportBackofficeIntegrationTest {
     private SupportService support;
     @Autowired
     private BackofficeService backoffice;
+    @Autowired
+    private FacilityCatalogQuery catalog;
     @Autowired
     private BackofficeReadRepository readRepository;
     @Autowired
@@ -207,11 +214,11 @@ class SupportBackofficeIntegrationTest {
         loginAs(FM);
         long smallType = id("select id from unit_types where name = 'Small'");
         String code = "BO-" + SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000;
-        UnitRow unit = backoffice.createUnit(facilityId, code, smallType, null);
+        UnitRow unit = backoffice.createUnit(facilityId, code, smallType, null, null);
         assertThat(unit.status()).isEqualTo("Available");
-        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, smallType, null))
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, smallType, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> backoffice.createUnit(facilityId, "X", -1L, null))
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, "X", -1L, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
 
         UnitRow priced = backoffice.updateUnit(unit.id(), null, new BigDecimal("750000"));
@@ -244,7 +251,7 @@ class SupportBackofficeIntegrationTest {
         loginAs(FM);
         long smallType = id("select id from unit_types where name = 'Small'");
         UnitRow unit = backoffice.createUnit(facilityId, "MH-" + SEQ.incrementAndGet() + "-" + System.nanoTime()
-                % 100000, smallType, null);
+                % 100000, smallType, null, null);
         // Khoang Available: không có bảo trì sau trả kho để giữ.
         assertThatThrownBy(() -> backoffice.holdMaintenance(unit.id())).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> backoffice.holdMaintenance(-1L)).isInstanceOf(IllegalArgumentException.class);
@@ -272,16 +279,111 @@ class SupportBackofficeIntegrationTest {
     // ------------------------------------------------------------------ BOM
 
     @Test
+    void bomCreatesFacilityWithMapPinAndLayoutInOneGo() {
+        loginAs(BOM);
+        long small = id("select id from unit_types where name = 'Small'");
+        long large = id("select id from unit_types where name = 'Large'");
+        String code = "M" + SEQ.incrementAndGet() + System.nanoTime() % 1000;
+        Coordinates pin = new Coordinates(new BigDecimal("10.7769"), new BigDecimal("106.7009"));
+
+        // Sơ đồ sai thì không tạo gì: tầng vượt số tầng, hai khoang một vị trí, mã lặp, vị trí thiếu.
+        assertThatThrownBy(() -> backoffice.createFacility(code, "Kho sơ đồ", null, null, pin, 1,
+                List.of(new NewUnit("A-01", small, new UnitLocation(2, "Left", 1)))))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("chỉ có 1 tầng");
+        assertThatThrownBy(() -> backoffice.createFacility(code, "Kho sơ đồ", null, null, pin, 2,
+                List.of(new NewUnit("A-01", small, new UnitLocation(1, "Left", 1)),
+                        new NewUnit("A-02", small, new UnitLocation(1, "Left", 1)))))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("có hai khoang");
+        assertThatThrownBy(() -> backoffice.createFacility(code, "Kho sơ đồ", null, null, pin, 2,
+                List.of(new NewUnit("A-01", small, new UnitLocation(1, "Left", 1)),
+                        new NewUnit("a-01", small, new UnitLocation(1, "Right", 1)))))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("bị lặp");
+        assertThatThrownBy(() -> backoffice.createFacility(code, "Kho sơ đồ", null, null, pin, 2,
+                List.of(new NewUnit("A-01", small, null)))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> backoffice.createFacility(code, "Kho sơ đồ", null, null,
+                new Coordinates(new BigDecimal("91"), BigDecimal.ONE), 1, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> backoffice.createFacility(code, "Kho sơ đồ", null, null, pin, 21, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(count("select count(*) from facilities where code = ?", code.toUpperCase())).isZero();
+
+        FacilityRow created = backoffice.createFacility(code, "Kho sơ đồ", "1 Lê Lợi", null, pin, 2,
+                List.of(new NewUnit("A-01", small, new UnitLocation(1, "Left", 1)),
+                        new NewUnit("A-02", small, new UnitLocation(1, "Right", 1)),
+                        new NewUnit("B-01", large, new UnitLocation(2, "Left", 1))));
+        assertThat(created.floorCount()).isEqualTo(2);
+        assertThat(created.latitude()).isEqualByComparingTo("10.776900");
+        assertThat(created.unitCount()).isEqualTo(3);
+        assertThat(count("select count(*) from audit_logs where action = 'STORAGE_UNIT_CREATED' and entity_id in "
+                + "(select id::text from storage_units where facility_id = ?)", created.id())).isEqualTo(3);
+
+        FacilityLayoutView layout = catalog.layout(created.id()).orElseThrow();
+        assertThat(layout.floorCount()).isEqualTo(2);
+        assertThat(layout.units()).extracting(FacilityLayoutView.Slot::code).containsExactly("A-01", "A-02", "B-01");
+        assertThat(layout.units().get(2).unitTypeName()).isEqualTo("Large");
+        assertThat(catalog.layout(-1L)).isEmpty();
+        assertThat(catalog.listActive()).filteredOn(f -> f.id().equals(created.id())).singleElement()
+                .satisfies(f -> assertThat(f.longitude()).isEqualByComparingTo("106.7009"));
+
+        // Giảm tầng xuống dưới tầng đang có khoang → 409; sửa toạ độ giữ số tầng.
+        assertThatThrownBy(() -> backoffice.updateFacility(created.id(), null, null, null, null, null, 1))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("Tầng 2");
+        FacilityRow moved = backoffice.updateFacility(created.id(), null, null, null, null,
+                new Coordinates(new BigDecimal("10.8"), new BigDecimal("106.65")), null);
+        assertThat(moved.floorCount()).isEqualTo(2);
+        assertThat(moved.latitude()).isEqualByComparingTo("10.8");
+        assertThat(backoffice.updateFacility(created.id(), null, null, null, null, null, 3).floorCount()).isEqualTo(3);
+
+        // Đổi vị trí: trùng → 409, tầng vượt → 400, gỡ khỏi sơ đồ được; BOM xem trạng thái + vị trí.
+        long a01 = id("select id from storage_units where facility_id = " + created.id() + " and code = 'A-01'");
+        assertThatThrownBy(() -> backoffice.setUnitLocation(a01, new UnitLocation(1, "Right", 1)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("A-02");
+        assertThatThrownBy(() -> backoffice.setUnitLocation(a01, new UnitLocation(4, "Left", 1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(backoffice.setUnitLocation(a01, new UnitLocation(3, "Right", 5)).floorNo()).isEqualTo(3);
+        assertThat(backoffice.setUnitLocation(a01, null).floorNo()).isNull();
+        assertThat(backoffice.facilityUnits(created.id())).hasSize(3)
+                .filteredOn(u -> u.code().equals("B-01")).singleElement()
+                .satisfies(u -> assertThat(u.aisleSide()).isEqualTo("Left"));
+        assertThatThrownBy(() -> backoffice.facilityUnits(-1L)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> UnitLocation.of(1, null, 2)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> UnitLocation.of(1, "Middle", 2)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(UnitLocation.of(null, " ", null)).isNull();
+    }
+
+    @Test
+    void managerPlacesUnitsWithinFacilityFloors() {
+        loginAs(FM);
+        long small = id("select id from unit_types where name = 'Small'");
+        int floors = jdbc.queryForObject("select floor_count from facilities where id = ?", Integer.class,
+                facilityId);
+        String code = "LOC-" + SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000;
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, small, null,
+                new UnitLocation(floors + 1, "Left", 1))).isInstanceOf(IllegalArgumentException.class);
+        int slot = 101 + (int) (System.nanoTime() % 99);
+        UnitRow placed = backoffice.createUnit(facilityId, code, small, null, new UnitLocation(1, "Left", slot));
+        assertThat(placed.aislePosition()).isEqualTo(slot);
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code + "B", small, null,
+                new UnitLocation(1, "Left", slot))).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(code);
+        assertThat(count("select count(*) from audit_logs where action = 'STORAGE_UNIT_UPDATED' and entity_id = ?",
+                String.valueOf(placed.id()))).isZero();
+        backoffice.setUnitLocation(placed.id(), new UnitLocation(1, "Right", slot));
+        assertThat(count("select count(*) from audit_logs where action = 'STORAGE_UNIT_UPDATED' and entity_id = ?",
+                String.valueOf(placed.id()))).isEqualTo(1);
+    }
+
+    @Test
     void bomManagesFacilitiesPoliciesAndPrices() {
         loginAs(BOM);
         String code = "F" + SEQ.incrementAndGet() + System.nanoTime() % 1000;
-        FacilityRow created = backoffice.createFacility(code, "Cơ sở thử", "1 Lê Lợi", "8:00–20:00");
+        FacilityRow created = backoffice.createFacility(code, "Cơ sở thử", "1 Lê Lợi", "8:00–20:00", null, null, null);
         assertThat(created.status()).isEqualTo("Active");
-        assertThatThrownBy(() -> backoffice.createFacility(code, "Trùng", null, null))
+        assertThatThrownBy(() -> backoffice.createFacility(code, "Trùng", null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThat(backoffice.updateFacility(created.id(), "Cơ sở mới", null, null, "Inactive").status())
+        assertThat(backoffice.updateFacility(created.id(), "Cơ sở mới", null, null, "Inactive", null, null).status())
                 .isEqualTo("Inactive");
-        assertThatThrownBy(() -> backoffice.updateFacility(created.id(), null, null, null, "Closed"))
+        assertThatThrownBy(() -> backoffice.updateFacility(created.id(), null, null, null, "Closed", null, null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> backoffice.assignManager(created.id(), customerId, false))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -439,10 +541,10 @@ class SupportBackofficeIntegrationTest {
         assertThat(backoffice.facilityContracts(facilityId, null)).isNotEmpty();
         assertThat(backoffice.facilityReport(facilityId, LocalDate.now().minusMonths(1), LocalDate.now()).revenue())
                 .isNotNull();
-        assertThatThrownBy(() -> backoffice.createUnit(facilityId, " ", 1L, null))
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, " ", 1L, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> backoffice.createUnit(facilityId, "NEG", id("select id from unit_types limit 1"),
-                new BigDecimal("-1"))).isInstanceOf(IllegalArgumentException.class);
+                new BigDecimal("-1"), null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> backoffice.updateUnit(-1L, null, null)).isInstanceOf(IllegalArgumentException.class);
         long unitId = id("select id from storage_units where facility_id = " + facilityId
                 + " and status = 'Available' limit 1");
@@ -453,9 +555,9 @@ class SupportBackofficeIntegrationTest {
         loginAs(BOM);
         assertThat(backoffice.chainInvoices(facilityId, null, null)).isNotEmpty();
         assertThat(backoffice.chainReport(facilityId, null, null).occupancy()).isNotEmpty();
-        assertThatThrownBy(() -> backoffice.createFacility(" ", "x", null, null))
+        assertThatThrownBy(() -> backoffice.createFacility(" ", "x", null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> backoffice.updateFacility(-1L, null, null, null, null))
+        assertThatThrownBy(() -> backoffice.updateFacility(-1L, null, null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> backoffice.assignManager(-1L, null, false))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -551,13 +653,13 @@ class SupportBackofficeIntegrationTest {
         long smallType = id("select id from unit_types where name = 'Small'");
         String code = "PV-" + SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000;
         // Giá 0 → hoá đơn cọc 0đ không thanh toán được; giá lẻ → payOS thu số làm tròn, không khớp hoá đơn.
-        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, smallType, BigDecimal.ZERO))
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, smallType, BigDecimal.ZERO, null))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("lớn hơn 0");
-        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, smallType, new BigDecimal("750000.50")))
+        assertThatThrownBy(() -> backoffice.createUnit(facilityId, code, smallType, new BigDecimal("750000.50"), null))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("số nguyên");
         assertThatThrownBy(() -> backoffice.updateUnitTypePrice(smallType, new BigDecimal("500000.5")))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("số nguyên");
-        assertThat(backoffice.createUnit(facilityId, code, smallType, new BigDecimal("750000.00")).monthlyPrice())
+        assertThat(backoffice.createUnit(facilityId, code, smallType, new BigDecimal("750000.00"), null).monthlyPrice())
                 .isEqualByComparingTo("750000");
 
         // Policy số nguyên đọc bằng Integer.parseInt — "2.5" / "1e2" / quá miền int làm mọi chỗ đọc lỗi.

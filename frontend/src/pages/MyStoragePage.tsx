@@ -16,6 +16,7 @@ import {
   type OrderOverview,
   type RentalView,
 } from "../app/services/customer";
+import { UnitLocationCard } from "../components/domain/UnitLocationCard";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { DemoNotice } from "../components/ui/DemoNotice";
@@ -328,6 +329,9 @@ function RentalCard({ rental, navigate }: { rental: RentalView; navigate: Naviga
             Xem
           </Button>
         </div>
+      </div>
+      <div className="mt-4">
+        <UnitLocationCard facilityId={rental.facilityId} unitCode={rental.unitCode} compact />
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
         <div>

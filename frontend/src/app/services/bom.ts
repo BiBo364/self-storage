@@ -1,4 +1,5 @@
 import { authed, query } from "../http";
+import type { StorageUnit } from "./fm";
 
 // BOM — /api/bom/**. Field name khớp record Java của backend (backoffice, facility, pricing, identity).
 
@@ -77,6 +78,19 @@ export type FacilityRow = {
   rentedCount: number;
   /** Số FS `ACTIVE` đang được gán vào cơ sở. */
   staffCount: number;
+  /** Ghim bản đồ — cùng `null` khi chưa ghim. */
+  latitude: number | null;
+  longitude: number | null;
+  floorCount: number;
+};
+
+/** Khoang trên sơ đồ lúc tạo cơ sở (vị trí bắt buộc). */
+export type LayoutUnitInput = {
+  code: string;
+  unitTypeId: number;
+  floorNo: number;
+  aisleSide: "Left" | "Right";
+  aislePosition: number;
 };
 
 /** `PricingAdminCommands.PolicyRow` */
@@ -135,15 +149,32 @@ export function createBomFacility(body: {
   name: string;
   address?: string;
   operatingHours?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  floorCount?: number;
+  units?: LayoutUnitInput[];
 }): Promise<FacilityRow> {
   return authed<FacilityRow>("/api/bom/facilities", { method: "POST", body });
 }
 
 export function updateBomFacility(
   id: number,
-  body: { name?: string; address?: string; operatingHours?: string; status?: string },
+  body: {
+    name?: string;
+    address?: string;
+    operatingHours?: string;
+    status?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    floorCount?: number;
+  },
 ): Promise<FacilityRow> {
   return authed<FacilityRow>(`/api/bom/facilities/${id}`, { method: "PATCH", body });
+}
+
+/** GET /api/bom/facilities/{id}/units — mọi khoang kèm trạng thái + vị trí (sơ đồ toàn chuỗi). */
+export function fetchBomFacilityUnits(id: number): Promise<StorageUnit[]> {
+  return authed<StorageUnit[]>(`/api/bom/facilities/${id}/units`);
 }
 
 export function assignFacilityManager(

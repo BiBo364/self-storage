@@ -23,7 +23,8 @@ public class StorageUnitReadRepository {
         StringBuilder sql = new StringBuilder(
                 "select u.id, u.code, u.facility_id, u.unit_type_id, t.name as unit_type_name, u.size, "
                         + "t.area, u.status, coalesce(u.monthly_price, t.monthly_price) as monthly_price, "
-                        + "u.monthly_price as unit_price, u.maintenance_started_at "
+                        + "u.monthly_price as unit_price, u.maintenance_started_at, u.floor_no, u.aisle_side, "
+                        + "u.aisle_position "
                         + "from storage_units u join unit_types t on t.id = u.unit_type_id "
                         + "where u.facility_id = ?");
         List<Object> args = new ArrayList<>();
@@ -41,7 +42,8 @@ public class StorageUnitReadRepository {
                 rs.getLong("id"), rs.getString("code"), rs.getLong("facility_id"), rs.getLong("unit_type_id"),
                 rs.getString("unit_type_name"), rs.getString("size"), rs.getBigDecimal("area"),
                 rs.getString("status"), rs.getBigDecimal("monthly_price"), rs.getBigDecimal("unit_price"),
-                instant(rs.getTimestamp("maintenance_started_at"))),
+                instant(rs.getTimestamp("maintenance_started_at")), rs.getObject("floor_no", Integer.class),
+                rs.getString("aisle_side"), rs.getObject("aisle_position", Integer.class)),
                 args.toArray());
     }
 

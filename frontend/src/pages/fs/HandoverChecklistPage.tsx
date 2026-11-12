@@ -23,6 +23,7 @@ import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { FIELD_LABEL } from "../../components/ui/FormField";
 import { ImageLightbox } from "../../components/ui/ImageLightbox";
+import { UnitLocationCard } from "../../components/domain/UnitLocationCard";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 import {
@@ -390,6 +391,13 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
               <Row term="Cơ sở">{current.facilityName ?? "—"}</Row>
             </dl>
           </div>
+
+          <UnitLocationCard
+            facilityId={current.facilityId}
+            unitCode={current.unitCode}
+            title="Dẫn khách tới khoang"
+            compact
+          />
 
           {(current.identityPhotos?.length ?? 0) > 0 && (
             <div className="step-enter bg-surface p-5">

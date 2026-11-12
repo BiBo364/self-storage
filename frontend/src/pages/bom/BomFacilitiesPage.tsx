@@ -1,16 +1,27 @@
-import { Building2, Plus } from "lucide-react";
+import { Building2, Layers, MapPin, Plus } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { errorMessage, errorStatus } from "../../app/http";
 import {
   assignFacilityManager,
   createBomFacility,
   fetchBomFacilities,
+  fetchBomFacilityUnits,
   fetchBomManagers,
+  fetchBomUnitTypes,
   setFacilityAccessOptions,
   updateBomFacility,
   type FacilityRow,
   type ManagerRow,
+  type UnitTypeRow,
 } from "../../app/services/bom";
+import { isPlaced } from "../../app/facilityLayout";
+import type { StorageUnit } from "../../app/services/fm";
+import {
+  FacilityLayoutDiagram,
+  type DiagramUnit,
+} from "../../components/domain/FacilityLayoutDiagram";
+import { FacilityMap, type LatLng } from "../../components/domain/FacilityMap";
+import { LayoutBuilder, type BuilderUnit } from "../../components/domain/LayoutBuilder";
 import type { Navigate } from "../../app/types";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
@@ -180,6 +191,37 @@ function HoursPicker({
   );
 }
 
+/** Bấm bản đồ để đặt ghim; hiện toạ độ và nút bỏ ghim. */
+function PinPicker({
+  value,
+  onChange,
+}: {
+  value: LatLng | null;
+  onChange: (value: LatLng | null) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      <FacilityMap picked={value} onPick={onChange} height={280} />
+      <div className="flex flex-wrap items-center justify-between gap-2 text-small">
+        <span className={value ? "text-ink" : "text-muted"}>
+          {value
+            ? `Ghim: ${value.latitude.toFixed(6)}, ${value.longitude.toFixed(6)}`
+            : "Bấm lên bản đồ để đặt ghim vị trí cơ sở (không bắt buộc)."}
+        </span>
+        {value && (
+          <button
+            type="button"
+            className="text-label text-muted underline hover:text-ink"
+            onClick={() => onChange(null)}
+          >
+            Bỏ ghim
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function statusTag(status: string): ReactNode {
   return status === "Active" ? (
     <StatusTag tone="success">Đang hoạt động</StatusTag>
@@ -315,6 +357,17 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
                   {facility.address ?? "—"}
                   {facility.operatingHours ? ` · ${facility.operatingHours}` : ""}
                 </span>
+                <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-muted">
+                  <span className="inline-flex items-center gap-1">
+                    <Layers size={13} /> {facility.floorCount} tầng
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 ${facility.latitude === null ? "text-warning" : ""}`}
+                  >
+                    <MapPin size={13} />{" "}
+                    {facility.latitude === null ? "Chưa ghim bản đồ" : "Đã ghim bản đồ"}
+                  </span>
+                </span>
                 <span className="mt-1 block text-label text-muted">
                   FM: {facility.fmEmail ?? "Chưa gán"} · Truy cập:{" "}
                   {[facility.keyAccess && "khoá cơ", facility.codeAccess && "mã số"]
@@ -374,8 +427,22 @@ function CreatePanel({
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [hours, setHours] = useState("");
+  const [pin, setPin] = useState<LatLng | null>(null);
+  const [floorCount, setFloorCount] = useState(1);
+  const [units, setUnits] = useState<BuilderUnit[]>([]);
+  const [unitTypes, setUnitTypes] = useState<UnitTypeRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchBomUnitTypes()
+      .then((list) => active && setUnitTypes(list))
+      .catch((caught) => active && setError(errorMessage(caught)));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function submit() {
     if (!code.trim() || !name.trim()) {
@@ -391,6 +458,10 @@ function CreatePanel({
           name: name.trim(),
           address: address.trim() || undefined,
           operatingHours: hours.trim() || undefined,
+          latitude: pin?.latitude ?? null,
+          longitude: pin?.longitude ?? null,
+          floorCount,
+          units,
         }),
       );
     } catch (caught) {
@@ -402,33 +473,67 @@ function CreatePanel({
 
   return (
     <DetailPanel
+      wide
       title="Thêm cơ sở"
       onClose={onClose}
       footer={
         <>
+          {error && (
+            <span className="mr-auto self-center text-small text-danger" role="alert">
+              {error}
+            </span>
+          )}
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Huỷ
           </Button>
           <Button pending={busy} onClick={submit}>
-            Tạo cơ sở
+            Tạo cơ sở{units.length ? ` + ${units.length} khoang` : ""}
           </Button>
         </>
       }
     >
       <div className="grid gap-4">
-        <TextInput
-          id="facility-code"
-          label="Mã cơ sở"
-          value={code}
-          onChange={setCode}
-          required
-          placeholder="Ví dụ: Q7"
-        />
-        <TextInput id="facility-name" label="Tên cơ sở" value={name} onChange={setName} required />
+        <SectionTitle>Thông tin</SectionTitle>
+        <div className="grid grid-cols-2 gap-4 max-[640px]:grid-cols-1">
+          <TextInput
+            id="facility-code"
+            label="Mã cơ sở"
+            value={code}
+            onChange={setCode}
+            required
+            placeholder="Ví dụ: Q7"
+          />
+          <TextInput
+            id="facility-name"
+            label="Tên cơ sở"
+            value={name}
+            onChange={setName}
+            required
+          />
+        </div>
         <TextInput id="facility-address" label="Địa chỉ" value={address} onChange={setAddress} />
         <HoursPicker id="facility-hours" label="Giờ mở cửa" value={hours} onChange={setHours} />
       </div>
-      {error && <DemoNotice tone="error">{error}</DemoNotice>}
+
+      <div className="mt-8 grid gap-3">
+        <SectionTitle>Vị trí trên bản đồ</SectionTitle>
+        <PinPicker value={pin} onChange={setPin} />
+      </div>
+
+      <div className="mt-8 grid gap-3">
+        <SectionTitle>Sơ đồ khoang</SectionTitle>
+        {unitTypes.length === 0 ? (
+          <p className="m-0 text-small text-muted">Đang tải loại khoang…</p>
+        ) : (
+          <LayoutBuilder
+            floorCount={floorCount}
+            onFloorCountChange={setFloorCount}
+            units={units}
+            onChange={setUnits}
+            unitTypes={unitTypes}
+          />
+        )}
+      </div>
     </DetailPanel>
   );
 }
@@ -451,14 +556,50 @@ function EditPanel({
   const [fmId, setFmId] = useState(facility.fmAccountId ? String(facility.fmAccountId) : "");
   const [keyAccess, setKeyAccess] = useState(facility.keyAccess);
   const [codeAccess, setCodeAccess] = useState(facility.codeAccess);
-  const [busy, setBusy] = useState<"info" | "manager" | "access" | null>(null);
+  const [pin, setPin] = useState<LatLng | null>(
+    facility.latitude !== null && facility.longitude !== null
+      ? { latitude: Number(facility.latitude), longitude: Number(facility.longitude) }
+      : null,
+  );
+  const [floorCount, setFloorCount] = useState(facility.floorCount);
+  const [units, setUnits] = useState<StorageUnit[] | null>(null);
+  const [busy, setBusy] = useState<"info" | "manager" | "access" | "map" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function save(kind: "info" | "manager" | "access") {
+  useEffect(() => {
+    let active = true;
+    fetchBomFacilityUnits(facility.id)
+      .then((list) => active && setUnits(list))
+      .catch(() => active && setUnits([]));
+    return () => {
+      active = false;
+    };
+  }, [facility.id]);
+
+  const placed: DiagramUnit[] = (units ?? []).filter(isPlaced).map((unit) => ({
+    code: unit.code,
+    floorNo: unit.floorNo!,
+    aisleSide: unit.aisleSide!,
+    aislePosition: unit.aislePosition!,
+    unitTypeName: unit.unitTypeName,
+    status: unit.status,
+  }));
+  const unplaced = (units ?? []).filter((unit) => !isPlaced(unit));
+
+  async function save(kind: "info" | "manager" | "access" | "map") {
     setBusy(kind);
     setError(null);
     try {
-      if (kind === "info") {
+      if (kind === "map") {
+        onSaved(
+          await updateBomFacility(facility.id, {
+            latitude: pin?.latitude ?? null,
+            longitude: pin?.longitude ?? null,
+            floorCount,
+          }),
+          "Đã cập nhật bản đồ và số tầng.",
+        );
+      } else if (kind === "info") {
         onSaved(
           await updateBomFacility(facility.id, {
             name: name.trim(),
@@ -489,10 +630,54 @@ function EditPanel({
   const knownManager = managers.some((manager) => String(manager.id) === fmId);
 
   return (
-    <DetailPanel title={facility.name} eyebrow={`Cơ sở ${facility.code}`} onClose={onClose}>
+    <DetailPanel wide title={facility.name} eyebrow={`Cơ sở ${facility.code}`} onClose={onClose}>
       {error && <DemoNotice tone="error">{error}</DemoNotice>}
 
       <div className="mt-4 grid gap-4">
+        <SectionTitle>Bản đồ & sơ đồ</SectionTitle>
+        <PinPicker value={pin} onChange={setPin} />
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className={FIELD_LABEL} htmlFor="edit-floors">
+              Số tầng
+            </label>
+            <input
+              id="edit-floors"
+              type="number"
+              min={1}
+              max={20}
+              className={`${INPUT} max-w-[120px]`}
+              value={floorCount}
+              onChange={(event) =>
+                setFloorCount(Math.min(20, Math.max(1, Number(event.target.value))))
+              }
+            />
+          </div>
+          <Button
+            variant="secondary"
+            pending={busy === "map"}
+            disabled={busy !== null}
+            onClick={() => save("map")}
+          >
+            Lưu bản đồ & số tầng
+          </Button>
+        </div>
+        {units === null ? (
+          <p className="m-0 text-small text-muted">Đang tải sơ đồ…</p>
+        ) : (
+          <>
+            <FacilityLayoutDiagram floorCount={facility.floorCount} units={placed} />
+            {unplaced.length > 0 && (
+              <p className="m-0 text-small text-warning">
+                {unplaced.length} khoang chưa xếp lên sơ đồ:{" "}
+                {unplaced.map((unit) => unit.code).join(", ")} — FM xếp ở trang Quản lý khoang.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="mt-8 grid gap-4">
         <SectionTitle>Thông tin</SectionTitle>
         <TextInput id="edit-name" label="Tên cơ sở" value={name} onChange={setName} required />
         <TextInput id="edit-address" label="Địa chỉ" value={address} onChange={setAddress} />

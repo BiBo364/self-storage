@@ -1,15 +1,20 @@
 package vn.lemar.selfstorage.facility.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.lemar.selfstorage.ApiEnvelope;
+import vn.lemar.selfstorage.ApiError;
 import vn.lemar.selfstorage.facility.application.FacilityCatalogQuery;
 import vn.lemar.selfstorage.facility.application.FacilityCatalogView;
 
@@ -22,6 +27,7 @@ import vn.lemar.selfstorage.facility.application.FacilityCatalogView;
 public class FacilityCatalogController {
 
     static final String LIST_MESSAGE = "Lấy danh sách cơ sở thành công";
+    static final String LAYOUT_MESSAGE = "Sơ đồ cơ sở";
 
     private final FacilityCatalogQuery facilityCatalogQuery;
 
@@ -39,5 +45,24 @@ public class FacilityCatalogController {
     @GetMapping
     public ResponseEntity<ApiEnvelope<List<FacilityCatalogView>>> list() {
         return ResponseEntity.ok(ApiEnvelope.ok(LIST_MESSAGE, facilityCatalogQuery.listActive()));
+    }
+
+    @SecurityRequirements
+    @Operation(summary = "Sơ đồ cơ sở",
+            description = "Số tầng + khoang đã xếp vị trí (tầng, bên lối đi `Left`/`Right` nhìn từ cửa vào, thứ tự "
+                    + "từ cửa vào — 1 = sát cửa). Không có trạng thái khoang. Public như catalog; mọi trạng thái cơ "
+                    + "sở.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Sơ đồ cơ sở"),
+            @ApiResponse(responseCode = "404", description = "Cơ sở không tồn tại",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ApiError.class)))
+    })
+    @GetMapping("/{id}/layout")
+    public ResponseEntity<?> layout(@PathVariable Long id) {
+        return facilityCatalogQuery.layout(id)
+                .<ResponseEntity<?>>map(view -> ResponseEntity.ok(ApiEnvelope.ok(LAYOUT_MESSAGE, view)))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiError.now("Không tìm thấy cơ sở")));
     }
 }

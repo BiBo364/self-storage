@@ -30,7 +30,8 @@ Mọi route cần bearer token + `ACCOUNT_ACTIVE` và đúng role theo prefix (`
 | GET | `/api/fm/contracts?facilityId=&status=` | hợp đồng của cơ sở + tổng hoá đơn `Unpaid` |
 | GET | `/api/fm/reports?facilityId=&from=&to=` | KPI (gồm cọc đang giữ), doanh thu theo tháng × loại (bên dưới), số khoang theo trạng thái. Mặc định 6 tháng gần nhất |
 | GET | `/api/fm/reports/staff?facilityId=&from=&to=` | báo cáo nhân sự của cơ sở — [hr.md › Báo cáo nhân sự](hr.md#báo-cáo-nhân-sự) |
-| POST | `/api/fm/storage-units` `{facilityId, code, unitTypeId, monthlyPrice?}` | thêm khoang `Available`; mã trùng trong cơ sở → 400; cơ sở tự "cung cấp" loại khoang đó (`facility_unit_type`) |
+| POST | `/api/fm/storage-units` `{facilityId, code, unitTypeId, monthlyPrice?, floorNo?, aisleSide?, aislePosition?}` | thêm khoang `Available`; mã trùng trong cơ sở → 400; cơ sở tự "cung cấp" loại khoang đó (`facility_unit_type`). Vị trí: đủ ba trường hoặc bỏ cả ba — xem [Sơ đồ cơ sở](#sơ-đồ-cơ-sở) |
+| PUT | `/api/fm/storage-units/{id}/location` `{floorNo, aisleSide, aislePosition}` | đặt / đổi vị trí khoang trên sơ đồ; cả ba `null` = gỡ khỏi sơ đồ. Mọi trạng thái khoang. Audit `STORAGE_UNIT_UPDATED` (vị trí cũ / mới) |
 | PATCH | `/api/fm/storage-units/{id}` `{unitTypeId?, monthlyPrice?}` | đổi loại / giá riêng (`monthlyPrice` null = giá loại khoang; có giá thì là số nguyên VND > 0, cả lúc tạo khoang) |
 | POST | `/api/fm/storage-units/{id}/maintenance` `{maintenance}` | bảo trì tay: `Available ↔ Maintenance`. Khoang đang có đơn chưa hoàn tất trỏ tới → 409. Mở lại tay xoá `maintenance_started_at` |
 | POST | `/api/fm/storage-units/{id}/maintenance-hold` | "Giữ bảo trì": khoang `Maintenance` đang chờ cron mở lại (`maintenance_started_at` khác `null`) → xoá mốc, thành bảo trì thủ công — cron không tự mở lại, FM mở lại bằng `/maintenance`. Audit `STORAGE_UNIT_MAINTENANCE` (`new_value.reason` "FM giữ bảo trì", old/new `maintenanceStartedAt`). Không tìm thấy khoang → 400; ngoài cơ sở → 403; khoang không ở bảo trì sau trả kho → 409 |
@@ -70,8 +71,10 @@ qua `GET` / `POST /api/fm/invoices/{invoiceId}/refunds` (quyền `payment_transa
 
 | Method | Path | Hành vi |
 |---|---|---|
-| GET / POST | `/api/bom/facilities` | danh sách (kèm FM, số khoang, số khoang `Rented`, `staffCount` = số FS `ACTIVE` đang gán) / tạo cơ sở; mã viết hoa, chỉ `A-Z 0-9 -`, tối đa 20 ký tự (mã nằm trong mã hoá đơn, cột 50 ký tự), trùng → 400 |
-| PATCH | `/api/bom/facilities/{id}` | tên, địa chỉ, giờ mở cửa, `status` (`Active`/`Inactive`) |
+| GET / POST | `/api/bom/facilities` | danh sách (kèm FM, số khoang, số khoang `Rented`, `staffCount` = số FS `ACTIVE` đang gán, `latitude`, `longitude`, `floorCount`) / tạo cơ sở; mã viết hoa, chỉ `A-Z 0-9 -`, tối đa 20 ký tự (mã nằm trong mã hoá đơn, cột 50 ký tự), trùng → 400. Tạo kèm ghim bản đồ, số tầng và sơ đồ khoang ban đầu — [Sơ đồ cơ sở](#sơ-đồ-cơ-sở) |
+| PATCH | `/api/bom/facilities/{id}` | tên, địa chỉ, giờ mở cửa, `status` (`Active`/`Inactive`), `latitude` + `longitude` (đổi khi gửi đủ cả hai), `floorCount`; trường `null` giữ nguyên |
+| GET | `/api/bom/facilities/{id}/units` | mọi khoang của cơ sở kèm trạng thái + vị trí (cùng dạng `GET /api/fm/storage-units`) — sơ đồ có màu trạng thái cho BOM; không có cơ sở → 400 |
+| PUT | `/api/bom/storage-units/{id}/location` | như route FM |
 | PUT | `/api/bom/facilities/{id}/manager` `{fmAccountId}` | gán FM (1–1: FM đang ở cơ sở khác bị gỡ), `null` = bỏ FM; tài khoản không phải FM → 400 |
 | PUT | `/api/bom/facilities/{id}/access-options` | như route FM (cùng kiểm `facility.access`; BOM có quyền mọi cơ sở) |
 | GET | `/api/bom/managers` | tài khoản FM đang hoạt động |
@@ -89,6 +92,29 @@ Audit:
 - `FACILITY_CREATED`, `FACILITY_UPDATED` (`Facility`);
 - `STORAGE_UNIT_CREATED`, `STORAGE_UNIT_UPDATED`, `STORAGE_UNIT_MAINTENANCE`, `STORAGE_UNIT_AVAILABLE` (`StorageUnit`);
 - `POLICY_UPDATED` (`Policy`), `UNIT_TYPE_UPDATED` (`UnitType`).
+
+## Sơ đồ cơ sở
+
+Mỗi cơ sở có ghim bản đồ (`latitude` + `longitude`, tuỳ chọn) và số tầng (`floor_count` 1–20, mặc định 1). Mỗi khoang
+có thể có vị trí: **tầng** (`floor_no`) + **bên lối đi** nhìn từ cửa vào (`aisle_side` = `Left` / `Right`) + **thứ tự
+tính từ cửa vào** (`aisle_position`, 1 = sát cửa). Ba trường cùng có hoặc cùng `null` (khoang chưa xếp lên sơ đồ).
+
+- **Tạo cơ sở** (`POST /api/bom/facilities`): body thêm `latitude`, `longitude`, `floorCount`, `units[]`
+  (`code`, `unitTypeId`, `floorNo`, `aisleSide`, `aislePosition` — vị trí bắt buộc với khoang trên sơ đồ). Một
+  transaction: sơ đồ sai thì không tạo gì → 400 — mã lặp (không phân biệt hoa thường), loại khoang không tồn tại, thiếu
+  vị trí, tầng vượt `floorCount`, hai khoang một vị trí; toạ độ chỉ có một nửa / ngoài ±90, ±180; `floorCount` ngoài
+  1–20. Khoang tạo ra `Available`, giá theo loại khoang; mỗi khoang một audit `STORAGE_UNIT_CREATED`; `FACILITY_CREATED`
+  ghi thêm `floorCount`, `unitCount`, toạ độ.
+- **Sửa cơ sở**: giảm `floorCount` xuống dưới tầng cao nhất đang có khoang → 409 (`"Tầng N đang có khoang — …"`).
+  Audit `FACILITY_UPDATED` ghi tên, trạng thái, số tầng, toạ độ cũ / mới.
+- **Vị trí khoang** (FM theo cơ sở, BOM mọi cơ sở): tạo khoang kèm vị trí hoặc `PUT …/location`. Tầng vượt số tầng /
+  thiếu một phần → 400; vị trí đã có khoang khác → 409 kèm mã khoang đang chiếm (`"Tầng 1 · bên phải · vị trí 1 đã có
+  khoang A-03"`). Kiểm trước bằng `select`, unique index `uq_storage_units_slot` chặn khi hai request đua.
+- Đọc: FM / BOM qua danh sách khoang (có trạng thái); khách và FS qua `GET /api/facilities/{id}/layout` (không trạng
+  thái — [routes/facility/public-list.md](../routes/facility/public-list.md)). FE hiện vị trí khoang ở trang đề xuất
+  khoang (khi đề xuất đang chờ), thẻ khoang đang thuê, chi tiết hợp đồng và checklist bàn giao của FS.
+- V34 seed toạ độ cho Q7 / TD, Q7 2 tầng và xếp 8 khoang seed của Q7 (A-01…A-04 tầng 1, B-01…C-01 tầng 2) — chỉ khi
+  cơ sở chưa có toạ độ / khoang chưa có vị trí.
 
 ## Gán FS vào cơ sở
 

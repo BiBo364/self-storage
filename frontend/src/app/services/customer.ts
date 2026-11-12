@@ -13,6 +13,10 @@ export type CatalogFacility = {
   address: string | null;
   operatingHours: string | null;
   unitTypeIds: number[];
+  /** Ghim bản đồ — cùng `null` khi cơ sở chưa ghim. */
+  latitude: number | null;
+  longitude: number | null;
+  floorCount: number;
 };
 
 /** GET /api/unit-types?facilityId= — UnitTypeQueryService.UnitTypeOption. */

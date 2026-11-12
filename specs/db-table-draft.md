@@ -48,6 +48,8 @@
 - fm_account_id (N - 1: Account, nullable, unique) - FM phụ trách cơ sở; quan hệ 1–1
 - enabled_key_access (Boolean, default true) - cơ sở giao khóa cơ (Flow 2.4)
 - enabled_code_access (Boolean, default true) - cơ sở cấp mã khóa số (Flow 2.4)
+- latitude, longitude (Decimal(9,6), nullable, V34) - ghim bản đồ; cùng có hoặc cùng NULL
+- floor_count (SmallInt, default 1, 1–20, V34) - số tầng của cơ sở trên sơ đồ
 
 **NOTES:**
 - `fm_account_id` là nguồn duy nhất lưu quan hệ FM–Facility (1–1): mỗi facility có tối đa một FM; mỗi FM phụ trách tối đa một facility. Account không lưu `facility_id` cho FM — cần biết FM phụ trách facility nào thì truy vấn ngược từ `Facility`.
@@ -99,6 +101,9 @@ Bảng `facility_unit_type` (V4).
 - monthly_price (Decimal, nullable) - Giá override được BOM phê duyệt
 - reserved_order_id (N - 1: RentalOrder, nullable) - đơn đang giữ khoang khi `Reserved`; chỉ đơn này nhả được khoang. NULL ở trạng thái khác (và khoang `Reserved` trước V30 không xác định được đơn giữ)
 - maintenance_started_at (nullable) - chỉ do Flow 2.a set khi `Maintenance` phát sinh từ trả kho, để cron tính `unit.maintenance_days`; FM chuyển `Maintenance` do sự cố thì để trống
+- floor_no (SmallInt, nullable, V34) - tầng trên sơ đồ
+- aisle_side (Left/Right, nullable, V34) - bên lối đi, nhìn từ cửa vào
+- aisle_position (SmallInt, nullable, V34) - thứ tự tính từ cửa vào, 1 = sát cửa. Ba trường vị trí cùng có hoặc cùng NULL (chưa xếp lên sơ đồ); unique `(facility_id, floor_no, aisle_side, aisle_position)` khi có vị trí
 - status:
   - Available: khoang sẵn sàng cho thuê
   - Reserved: khoang đã được giữ sau khi khách đặt cọc

@@ -13,12 +13,15 @@ export function DetailPanel({
   onClose,
   children,
   footer,
+  wide = false,
 }: {
   title: string;
   eyebrow?: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** Panel rộng (~920px) cho nội dung có bản đồ / sơ đồ. */
+  wide?: boolean;
 }) {
   const titleId = useId();
   const containerRef = useModalA11y<HTMLElement>(onClose);
@@ -32,7 +35,7 @@ export function DetailPanel({
       <aside
         ref={containerRef}
         tabIndex={-1}
-        className="slide-enter flex h-full w-[min(480px,100%)] flex-col border-l border-[var(--container-border)] bg-surface shadow-[var(--shadow-soft)] max-[760px]:w-full focus:outline-none"
+        className={`slide-enter flex h-full ${wide ? "w-[min(920px,100%)]" : "w-[min(480px,100%)]"} flex-col border-l border-[var(--container-border)] bg-surface shadow-[var(--shadow-soft)] max-[760px]:w-full focus:outline-none`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

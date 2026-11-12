@@ -33,7 +33,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/health", "/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/rental-requests").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/unit-types").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/facilities").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/facilities", "/api/facilities/*/layout").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // Callback của VNPay: server VNPay gọi `/ipn` và không có JWT, còn `/return`
                         // là redirect trình duyệt nên cũng không mang Authorization. Bắt buộc public,

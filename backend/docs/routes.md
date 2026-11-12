@@ -22,7 +22,8 @@ hữu route (xem quy ước ở cuối trang).
 | POST | `/api/rental-requests` | Public | Gửi yêu cầu đặt kho (form public) | [routes/booking/rental-request-create.md](routes/booking/rental-request-create.md) |
 | GET | `/api/fm/rental-requests` | Bearer + role `FM`; `rental_request.read` + facility scope | Hàng đợi yêu cầu đặt kho | [routes/booking/fm-rental-request-queue.md](routes/booking/fm-rental-request-queue.md) |
 | GET | `/api/unit-types` | Public | Loại khoang cơ sở cung cấp cho form | [routes/pricing/unit-types.md](routes/pricing/unit-types.md) |
-| GET | `/api/facilities` | Public | Catalog cơ sở đang hoạt động + loại khoang mỗi cơ sở cung cấp | [routes/facility/public-list.md](routes/facility/public-list.md) |
+| GET | `/api/facilities` | Public | Catalog cơ sở đang hoạt động + loại khoang mỗi cơ sở cung cấp + ghim bản đồ, số tầng | [routes/facility/public-list.md](routes/facility/public-list.md) |
+| GET | `/api/facilities/{id}/layout` | Public | Sơ đồ cơ sở: số tầng + khoang đã xếp vị trí (không có trạng thái) | [routes/facility/public-list.md](routes/facility/public-list.md) |
 | GET | `/api/fm/facility` | Bearer + role `FM` | Cơ sở FM hiện tại phụ trách | [routes/booking/fm-facility.md](routes/booking/fm-facility.md) |
 | GET | `/api/fm/storage-units` | Bearer + role `FM`; `facility.access` + facility scope | Khoang của cơ sở, lọc `status`/`unitTypeId` | [routes/booking/fm-storage-units.md](routes/booking/fm-storage-units.md) |
 | GET | `/api/fm/invoices` | Bearer + role `FM`; `invoice.read` + facility scope | Hoá đơn cơ sở kèm trạng thái thanh toán; highlight Pending quá 15 phút | [routes/booking/fm-invoice-list.md](routes/booking/fm-invoice-list.md) |
@@ -78,6 +79,7 @@ hữu route (xem quy ước ở cuối trang).
 | POST | `/api/staff/support-requests/{id}/resolve` | Bearer + role `FS`; `unit_access_key.issue` + đúng FS | Xử lý (thay chìa, thu phí) | [support/requests.md](support/requests.md) |
 | GET | `/api/fm/contracts`, `/api/fm/reports` | Bearer + role `FM`; `facility.access` + facility scope | Hợp đồng / báo cáo của cơ sở | [backoffice/overview.md](backoffice/overview.md) |
 | POST / PATCH | `/api/fm/storage-units`, `/api/fm/storage-units/{id}`, `/api/fm/storage-units/{id}/maintenance` | Bearer + role `FM`; `facility.access` + facility scope | Thêm / sửa khoang, bảo trì tay | [backoffice/overview.md](backoffice/overview.md) |
+| PUT | `/api/fm/storage-units/{id}/location` | Bearer + role `FM`; `facility.access` + facility scope | Đặt / đổi / gỡ vị trí khoang trên sơ đồ | [backoffice/overview.md](backoffice/overview.md#sơ-đồ-cơ-sở) |
 | POST | `/api/fm/storage-units/{unitId}/maintenance-hold` | Bearer + role `FM`; `facility.access` + facility scope (cơ sở của khoang) | "Giữ bảo trì": khoang bảo trì sau trả kho thành bảo trì thủ công (cron không tự mở lại) | [backoffice/overview.md](backoffice/overview.md) |
 | GET / POST | `/api/fm/invoices/{invoiceId}/refunds` | Bearer + role `FM`; `payment_transaction.refund` + facility scope (cơ sở của hoá đơn) | Lịch sử hoàn tiền / ghi nhận hoàn tiền thủ công | [routes/booking/fm-invoice-refunds.md](routes/booking/fm-invoice-refunds.md) |
 | GET | `/api/fm/facilities/{id}/access-options` | Bearer + role `FM`; `facility.access` + facility scope | Cơ sở + hình thức truy cập đang bật | [backoffice/overview.md](backoffice/overview.md) |

@@ -92,6 +92,17 @@ export type StorageUnit = {
   unitPrice: number | null;
   /** Mốc bảo trì sau trả kho (cron tự mở lại); `null` = không bảo trì hoặc bảo trì thủ công. */
   maintenanceStartedAt: string | null;
+  /** Vị trí trên sơ đồ — cả ba `null` khi chưa xếp. */
+  floorNo: number | null;
+  aisleSide: "Left" | "Right" | null;
+  aislePosition: number | null;
+};
+
+/** Vị trí khoang gửi lên: đủ ba trường, hoặc cả ba `null` để gỡ khỏi sơ đồ. */
+export type UnitLocationInput = {
+  floorNo: number | null;
+  aisleSide: "Left" | "Right" | null;
+  aislePosition: number | null;
 };
 
 /** `GET /api/unit-types?facilityId=` — loại khoang cơ sở cung cấp. */
@@ -130,6 +141,10 @@ export type FacilityRow = {
   codeAccess: boolean;
   unitCount: number;
   rentedCount: number;
+  latitude: number | null;
+  longitude: number | null;
+  /** Số tầng — giới hạn tầng khi xếp khoang lên sơ đồ. */
+  floorCount: number;
 };
 
 export function fetchStorageUnits(
@@ -143,13 +158,20 @@ export function fetchUnitTypes(facilityId: number): Promise<UnitType[]> {
   return authed(`/api/unit-types${query({ facilityId })}`);
 }
 
-export function createStorageUnit(body: {
-  facilityId: number;
-  code: string;
-  unitTypeId: number;
-  monthlyPrice?: number | null;
-}): Promise<UnitRow> {
+export function createStorageUnit(
+  body: {
+    facilityId: number;
+    code: string;
+    unitTypeId: number;
+    monthlyPrice?: number | null;
+  } & Partial<UnitLocationInput>,
+): Promise<UnitRow> {
   return authed("/api/fm/storage-units", { method: "POST", body });
+}
+
+/** PUT /api/fm/storage-units/{id}/location — đặt / đổi / gỡ vị trí khoang (trùng vị trí → 409). */
+export function setStorageUnitLocation(unitId: number, body: UnitLocationInput): Promise<UnitRow> {
+  return authed(`/api/fm/storage-units/${unitId}/location`, { method: "PUT", body });
 }
 
 /** `monthlyPrice: null` = bỏ giá riêng, dùng giá loại khoang. */

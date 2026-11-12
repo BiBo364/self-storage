@@ -11,6 +11,7 @@ import {
   type Catalog,
   type UnitTypeOption,
 } from "../app/services/customer";
+import { FacilityMapSection } from "../components/domain/FacilityMapSection";
 import { Button } from "../components/ui/Button";
 import { SelectField } from "../components/ui/FormField";
 import { SurfaceState } from "../components/ui/SurfaceState";
@@ -420,6 +421,12 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
           </div>
           {catalogState ?? (
             <>
+              <div className="mb-6">
+                <FacilityMapSection
+                  facilities={facilities}
+                  onSelect={(id) => navigate(`/units?facility=${id}`)}
+                />
+              </div>
               <div className="mb-2 grid grid-cols-[1.25fr_1.55fr_0.95fr_0.8fr_120px] gap-5 px-4 text-label text-muted max-[900px]:hidden">
                 <span>Cơ sở</span>
                 <span>Địa chỉ</span>
