@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, FileText, IdCard, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, Download, FileText, IdCard, RefreshCw } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { formatDate, formatDateTime, formatMoney, formatTime, isoDate } from "../../app/format";
 import { errorMessage, errorStatus } from "../../app/http";
@@ -17,6 +17,7 @@ import {
   verifyHandoverIdentity,
   type HandoverView,
 } from "../../app/services/staff";
+import { downloadContractPdf } from "../../app/services/customer";
 import type { Navigate } from "../../app/types";
 import { Button } from "../../components/ui/Button";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
@@ -184,6 +185,7 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   const [overrideReason, setOverrideReason] = useState("");
   const [keyQuantity, setKeyQuantity] = useState(1);
   const [docLoading, setDocLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [correctionNotes, setCorrectionNotes] = useState("");
   const [correctionPhotos, setCorrectionPhotos] = useState<PickedFile[]>([]);
@@ -265,6 +267,18 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
       return false;
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function downloadPdf(contractId: number) {
+    setPdfLoading(true);
+    setActionError(null);
+    try {
+      await downloadContractPdf(contractId);
+    } catch (caught) {
+      setActionError(errorMessage(caught));
+    } finally {
+      setPdfLoading(false);
     }
   }
 
@@ -683,6 +697,9 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                     >
                       <FileText size={16} /> Xem / in hợp đồng
                     </Button>
+                    <Button pending={pdfLoading} onClick={() => downloadPdf(contract.id)}>
+                      {!pdfLoading && <Download size={16} />} Tải PDF hợp đồng
+                    </Button>
                     <Button variant="secondary" onClick={() => setOverrideOpen((open) => !open)}>
                       Đề nghị đổi mốc tính tiền
                     </Button>
@@ -743,6 +760,21 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                       </div>
                     </div>
                   )}
+
+                  <ol className="mb-0 mt-4 grid list-none gap-2 rounded-xl border border-dashed border-rule-strong p-4 text-small text-muted">
+                    <li>
+                      <strong className="text-ink">1. Tải PDF hợp đồng</strong> bằng nút ở trên.
+                    </li>
+                    <li>
+                      <strong className="text-ink">2. Khách ký:</strong> mở file bằng Microsoft Edge
+                      → “Vẽ” → ký vào cuối hợp đồng → Lưu. Muốn ký bằng Paint: chụp phần cần ký (Win
+                      + Shift + S), dán vào Paint, ký rồi lưu PNG. Hoặc in ra ký tay rồi chụp ảnh.
+                    </li>
+                    <li>
+                      <strong className="text-ink">3. Tải bản đã ký lên</strong> ô bên dưới (PDF
+                      hoặc ảnh) rồi bấm “Xác nhận đã ký”.
+                    </li>
+                  </ol>
 
                   <div className="mt-4">
                     <FileUploadField

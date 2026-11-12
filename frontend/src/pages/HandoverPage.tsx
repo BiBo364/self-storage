@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, FileText, MapPin } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, FileText, MapPin } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import type { Navigate } from "../app/types";
 import { pathId } from "../app/routes";
@@ -13,6 +13,7 @@ import {
   fetchMyHandover,
   HANDOVER_STEP_LABEL,
   INVOICE_STATUS,
+  downloadContractPdf,
   openContractDocument,
   rejectHandover,
   rotateAccessCode,
@@ -82,6 +83,7 @@ function Handover({ handoverId, navigate }: { handoverId: number; navigate: Navi
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState(false);
   const [docPending, setDocPending] = useState(false);
+  const [pdfPending, setPdfPending] = useState(false);
   const [agreeNote, setAgreeNote] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -151,6 +153,18 @@ function Handover({ handoverId, navigate }: { handoverId: number; navigate: Navi
       setNotice({ tone: "info", message: `Đã huỷ đơn #${view.orderId}.` });
     });
     setCancelConfirm(false);
+  }
+
+  async function downloadPdf(contractId: number) {
+    setPdfPending(true);
+    setNotice(null);
+    try {
+      await downloadContractPdf(contractId);
+    } catch (caught) {
+      setNotice({ tone: "error", message: errorMessage(caught) });
+    } finally {
+      setPdfPending(false);
+    }
   }
 
   async function openDocument(contractId: number) {
@@ -427,6 +441,15 @@ function Handover({ handoverId, navigate }: { handoverId: number; navigate: Navi
               onClick={() => view.contract && openDocument(view.contract.id)}
             >
               {!docPending && <FileText size={16} />} Xem bản hợp đồng
+            </Button>
+          )}
+          {view.contract && (
+            <Button
+              variant="secondary"
+              pending={pdfPending}
+              onClick={() => view.contract && downloadPdf(view.contract.id)}
+            >
+              {!pdfPending && <Download size={16} />} Tải PDF
             </Button>
           )}
         </div>
