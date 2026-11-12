@@ -72,7 +72,7 @@ function LocationFields({
   onChange: (value: UnitLocationInput) => void;
 }) {
   const select =
-    "min-h-[44px] w-full rounded-[2px] border border-rule-strong bg-surface px-3 text-body text-ink outline-0 focus:border-brand";
+    "min-h-[44px] w-full rounded-lg border border-rule-strong bg-surface px-3 text-body text-ink outline-0 focus:border-brand";
   return (
     <div className="grid grid-cols-3 gap-3 max-[560px]:grid-cols-1">
       <div>
@@ -152,7 +152,11 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
   const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "map">("list");
   const [newLocation, setNewLocation] = useState<UnitLocationInput>(EMPTY_LOCATION);
+  const [newCode, setNewCode] = useState("");
+  const [previewFloor, setPreviewFloor] = useState(1);
   const createAction = useFmAction();
+  // Mọi khoang của cơ sở (không theo bộ lọc) — sơ đồ xem trước ở form thêm khoang.
+  const allUnits = useFmLoad("units-all", (facility) => fetchStorageUnits(facility.id));
   const facilityInfo = useFmLoad("facility-info", (facility) =>
     fetchFacilityAccessOptions(facility.id),
   );
@@ -165,6 +169,23 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
 
   const list = units.data ?? [];
   const types = unitTypes.data ?? [];
+  const placedAll: DiagramUnit[] = (allUnits.data ?? []).filter(isPlaced).map((unit) => ({
+    code: unit.code,
+    floorNo: unit.floorNo!,
+    aisleSide: unit.aisleSide!,
+    aislePosition: unit.aislePosition!,
+    unitTypeName: unit.unitTypeName,
+    status: unit.status,
+  }));
+  const chosen = isPlaced(newLocation) ? newLocation : null;
+  const occupant = chosen
+    ? placedAll.find(
+        (unit) =>
+          unit.floorNo === chosen.floorNo &&
+          unit.aisleSide === chosen.aisleSide &&
+          unit.aislePosition === chosen.aislePosition,
+      )
+    : undefined;
   const openUnit = list.find((unit) => unit.id === openId) ?? null;
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
@@ -189,9 +210,11 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
     if (outcome.ok) {
       form.reset();
       setNewLocation(EMPTY_LOCATION);
+      setNewCode("");
       setCreating(false);
       setNotice(`Đã thêm khoang ${outcome.value.code}.`);
       units.reload();
+      allUnits.reload();
     }
   }
 
@@ -217,38 +240,75 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
       </div>
 
       {creating && (
-        <form onSubmit={submitCreate} className="step-enter bg-surface p-5">
+        <form
+          onSubmit={submitCreate}
+          onChange={(event) => {
+            const target = event.target as unknown as HTMLInputElement;
+            if (target.name === "unitCode") setNewCode(target.value.trim());
+          }}
+          className="step-enter bg-surface p-5"
+        >
           <SectionTitle>Khoang mới</SectionTitle>
-          <div className="mt-4 grid grid-cols-3 gap-4 max-[760px]:grid-cols-1">
-            <FormField label="Mã khoang" name="unitCode" placeholder="VD: A-05" required />
-            <SelectField
-              label="Loại khoang"
-              name="unitTypeId"
-              required
-              placeholder="— Chọn loại —"
-              options={types.map((type) => ({
-                value: String(type.id),
-                label: `${type.name} · ${formatMoney(type.monthlyPrice)}/tháng`,
-              }))}
-            />
-            <FormField
-              label="Giá riêng / tháng (tuỳ chọn)"
-              name="monthlyPrice"
-              type="number"
-              placeholder="Để trống = giá loại khoang"
-              suffix="đ"
-            />
-          </div>
-          <div className="mt-2">
-            <span className="mb-2 flex items-center gap-1.5 text-small font-semibold text-ink">
-              <MapPin size={15} /> Vị trí trên sơ đồ (tuỳ chọn)
-            </span>
-            <LocationFields
-              idPrefix="new-unit"
-              floorCount={floorCount}
-              value={newLocation}
-              onChange={setNewLocation}
-            />
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(320px,400px)] items-start gap-6 max-[1100px]:grid-cols-1">
+            <div>
+              <div className="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
+                <FormField label="Mã khoang" name="unitCode" placeholder="VD: A-05" required />
+                <SelectField
+                  label="Loại khoang"
+                  name="unitTypeId"
+                  required
+                  placeholder="— Chọn loại —"
+                  options={types.map((type) => ({
+                    value: String(type.id),
+                    label: `${type.name} · ${formatMoney(type.monthlyPrice)}/tháng`,
+                  }))}
+                />
+                <FormField
+                  label="Giá riêng / tháng (tuỳ chọn)"
+                  name="monthlyPrice"
+                  type="number"
+                  placeholder="Để trống = giá loại khoang"
+                  suffix="đ"
+                />
+              </div>
+              <div className="mt-2">
+                <span className="mb-2 flex items-center gap-1.5 text-small font-semibold text-ink">
+                  <MapPin size={15} /> Vị trí trên sơ đồ (tuỳ chọn)
+                </span>
+                <LocationFields
+                  idPrefix="new-unit"
+                  floorCount={floorCount}
+                  value={newLocation}
+                  onChange={(next) => {
+                    setNewLocation(next);
+                    if (next.floorNo !== null) setPreviewFloor(next.floorNo);
+                  }}
+                />
+                {occupant && (
+                  <p className="mb-0 mt-2 text-small text-danger" role="alert">
+                    Ô này đã có khoang {occupant.code} — chọn ô khác trên sơ đồ.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <span className="text-small font-semibold text-ink">Xem trước trên sơ đồ</span>
+              <FacilityLayoutDiagram
+                floorCount={floorCount}
+                units={placedAll}
+                floor={chosen?.floorNo ?? previewFloor}
+                onFloorChange={(next) => {
+                  setPreviewFloor(next);
+                  if (chosen) setNewLocation({ ...chosen, floorNo: next });
+                }}
+                onEmptySlot={(slot) => setNewLocation(slot)}
+                preview={chosen ? { ...chosen, label: newCode || "Khoang mới" } : null}
+              />
+              <p className="m-0 text-label text-muted">
+                Bấm ô <strong>+</strong> để chọn vị trí; khoang mới hiện nhấp nháy, ô đã có khoang
+                viền đỏ.
+              </p>
+            </div>
           </div>
           {unitTypes.error && (
             <DemoNotice tone="error">
@@ -405,6 +465,7 @@ export function StorageUnitManagementPage({ navigate }: { navigate: Navigate }) 
             setOpenId(null);
             setNotice(message);
             units.reload();
+            allUnits.reload();
           }}
         />
       )}

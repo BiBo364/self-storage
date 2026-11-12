@@ -23,7 +23,7 @@ hữu route (xem quy ước ở cuối trang).
 | GET | `/api/fm/rental-requests` | Bearer + role `FM`; `rental_request.read` + facility scope | Hàng đợi yêu cầu đặt kho | [routes/booking/fm-rental-request-queue.md](routes/booking/fm-rental-request-queue.md) |
 | GET | `/api/unit-types` | Public | Loại khoang cơ sở cung cấp cho form | [routes/pricing/unit-types.md](routes/pricing/unit-types.md) |
 | GET | `/api/facilities` | Public | Catalog cơ sở đang hoạt động + loại khoang mỗi cơ sở cung cấp + ghim bản đồ, số tầng | [routes/facility/public-list.md](routes/facility/public-list.md) |
-| GET | `/api/facilities/{id}/layout` | Public | Sơ đồ cơ sở: số tầng + khoang đã xếp vị trí (không có trạng thái) | [routes/facility/public-list.md](routes/facility/public-list.md) |
+| GET | `/api/facilities/{id}/layout` | Public | Sơ đồ cơ sở: số tầng + khoang đã xếp vị trí, kèm cờ còn trống `available` | [routes/facility/public-list.md](routes/facility/public-list.md) |
 | GET | `/api/fm/facility` | Bearer + role `FM` | Cơ sở FM hiện tại phụ trách | [routes/booking/fm-facility.md](routes/booking/fm-facility.md) |
 | GET | `/api/fm/storage-units` | Bearer + role `FM`; `facility.access` + facility scope | Khoang của cơ sở, lọc `status`/`unitTypeId` | [routes/booking/fm-storage-units.md](routes/booking/fm-storage-units.md) |
 | GET | `/api/fm/invoices` | Bearer + role `FM`; `invoice.read` + facility scope | Hoá đơn cơ sở kèm trạng thái thanh toán; highlight Pending quá 15 phút | [routes/booking/fm-invoice-list.md](routes/booking/fm-invoice-list.md) |

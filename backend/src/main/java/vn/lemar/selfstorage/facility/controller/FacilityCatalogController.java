@@ -50,8 +50,8 @@ public class FacilityCatalogController {
     @SecurityRequirements
     @Operation(summary = "Sơ đồ cơ sở",
             description = "Số tầng + khoang đã xếp vị trí (tầng, bên lối đi `Left`/`Right` nhìn từ cửa vào, thứ tự "
-                    + "từ cửa vào — 1 = sát cửa). Không có trạng thái khoang. Public như catalog; mọi trạng thái cơ "
-                    + "sở.")
+                    + "từ cửa vào — 1 = sát cửa) kèm cờ `available` (khoang `Available`). Không lộ trạng thái chi "
+                    + "tiết. Public như catalog; mọi trạng thái cơ sở.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Sơ đồ cơ sở"),
             @ApiResponse(responseCode = "404", description = "Cơ sở không tồn tại",

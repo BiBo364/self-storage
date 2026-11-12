@@ -14,6 +14,8 @@ import { Button } from "../components/ui/Button";
 import { FilterSelect } from "../components/ui/FilterSelect";
 import { SurfaceState } from "../components/ui/SurfaceState";
 import { FacilityMapSection } from "../components/domain/FacilityMapSection";
+import { FacilityShowcase } from "../components/domain/FacilityShowcase";
+import { Reveal } from "../components/ui/Reveal";
 import { UnitDetailsDialog } from "../components/domain/UnitDetailsDialog";
 
 export function BrowsePage({ navigate }: { navigate: Navigate }) {
@@ -29,6 +31,7 @@ export function BrowsePage({ navigate }: { navigate: Navigate }) {
 
   const data = catalog.data;
   const facilities = data?.facilities ?? [];
+  const selectedFacility = facilities.find((item) => String(item.id) === facilityFilter) ?? null;
   const pool = data
     ? facilityFilter
       ? (data.offerings[Number(facilityFilter)] ?? [])
@@ -86,6 +89,26 @@ export function BrowsePage({ navigate }: { navigate: Navigate }) {
               }}
             />
           </div>
+
+          {selectedFacility ? (
+            <div key={selectedFacility.id} className="step-enter mb-8">
+              <FacilityShowcase
+                facility={selectedFacility}
+                offerings={data?.offerings[selectedFacility.id] ?? []}
+                navigate={navigate}
+                withDiagram
+              />
+            </div>
+          ) : (
+            facilities.length > 0 && (
+              <Reveal className="mb-8">
+                <p className="m-0 rounded-xl border border-dashed border-rule-strong p-4 text-center text-small text-muted">
+                  Bấm một cơ sở trên bản đồ (hoặc chọn ở ô "Cơ sở" bên dưới) để xem giới thiệu, sơ
+                  đồ các tầng và số khoang còn trống.
+                </p>
+              </Reveal>
+            )
+          )}
 
           <div className="grid grid-cols-[1.15fr_1fr_1fr_auto] items-end gap-3 max-[900px]:grid-cols-2 max-[760px]:grid-cols-1">
             <FilterSelect
@@ -157,7 +180,7 @@ export function BrowsePage({ navigate }: { navigate: Navigate }) {
                 return (
                   <div
                     key={unit.id}
-                    className="grid grid-cols-[64px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.7fr)_120px] items-center gap-5 bg-surface px-4 py-4 max-[900px]:grid-cols-[56px_minmax(0,1fr)_auto] max-[760px]:gap-3"
+                    className="lift grid grid-cols-[64px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.7fr)_120px] items-center gap-5 bg-surface px-4 py-4 max-[900px]:grid-cols-[56px_minmax(0,1fr)_auto] max-[760px]:gap-3"
                   >
                     <div className="grid h-14 w-14 place-items-center border-2 border-[#101413] bg-brand text-center text-label font-semibold text-signal-ink max-[900px]:row-span-3">
                       {formatArea(unit.area)}

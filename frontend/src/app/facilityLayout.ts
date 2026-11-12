@@ -10,8 +10,8 @@ export type UnitPlacement = {
   aislePosition: number;
 };
 
-/** GET /api/facilities/{id}/layout — FacilityLayoutView.Slot (không có trạng thái khoang). */
-export type LayoutSlot = UnitPlacement & { code: string; unitTypeName: string };
+/** GET /api/facilities/{id}/layout — FacilityLayoutView.Slot; `available` = khoang còn nhận thuê. */
+export type LayoutSlot = UnitPlacement & { code: string; unitTypeName: string; available: boolean };
 
 export type FacilityLayout = {
   facilityId: number;

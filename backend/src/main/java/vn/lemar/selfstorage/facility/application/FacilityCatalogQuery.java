@@ -60,12 +60,12 @@ public class FacilityCatalogQuery {
                         rs.getInt("floor_count")), facilityId).stream().findFirst();
         return header.map(facility -> new FacilityLayoutView(facility.id(), facility.code(), facility.name(),
                 facility.floorCount(), jdbc.query("""
-                        select u.code, t.name, u.floor_no, u.aisle_side, u.aisle_position
+                        select u.code, t.name, u.floor_no, u.aisle_side, u.aisle_position, u.status = 'Available'
                         from storage_units u join unit_types t on t.id = u.unit_type_id
                         where u.facility_id = ? and u.floor_no is not null
                         order by u.floor_no, u.aisle_side, u.aisle_position""",
                         (rs, i) -> new FacilityLayoutView.Slot(rs.getString(1), rs.getString(2), rs.getInt(3),
-                                rs.getString(4), rs.getInt(5)), facilityId)));
+                                rs.getString(4), rs.getInt(5), rs.getBoolean(6)), facilityId)));
     }
 
     /** Cơ sở FM đang phụ trách; rỗng nếu account chưa được gán. */

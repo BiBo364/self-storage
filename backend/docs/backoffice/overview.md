@@ -110,9 +110,10 @@ tính từ cửa vào** (`aisle_position`, 1 = sát cửa). Ba trường cùng c
 - **Vị trí khoang** (FM theo cơ sở, BOM mọi cơ sở): tạo khoang kèm vị trí hoặc `PUT …/location`. Tầng vượt số tầng /
   thiếu một phần → 400; vị trí đã có khoang khác → 409 kèm mã khoang đang chiếm (`"Tầng 1 · bên phải · vị trí 1 đã có
   khoang A-03"`). Kiểm trước bằng `select`, unique index `uq_storage_units_slot` chặn khi hai request đua.
-- Đọc: FM / BOM qua danh sách khoang (có trạng thái); khách và FS qua `GET /api/facilities/{id}/layout` (không trạng
-  thái — [routes/facility/public-list.md](../routes/facility/public-list.md)). FE hiện vị trí khoang ở trang đề xuất
-  khoang (khi đề xuất đang chờ), thẻ khoang đang thuê, chi tiết hợp đồng và checklist bàn giao của FS.
+- Đọc: FM / BOM qua danh sách khoang (có trạng thái); khách và FS qua `GET /api/facilities/{id}/layout` (chỉ cờ còn
+  trống `available` — [routes/facility/public-list.md](../routes/facility/public-list.md)). FE hiện sơ đồ còn trống ở
+  trang chọn kho, và vị trí khoang ở trang đề xuất khoang (khi đề xuất đang chờ), thẻ khoang đang thuê, chi tiết hợp
+  đồng và checklist bàn giao của FS.
 - V34 seed toạ độ cho Q7 / TD, Q7 2 tầng và xếp 8 khoang seed của Q7 (A-01…A-04 tầng 1, B-01…C-01 tầng 2) — chỉ khi
   cơ sở chưa có toạ độ / khoang chưa có vị trí.
 

@@ -24,10 +24,12 @@ Trả các cơ sở đang hoạt động, kèm loại khoang mỗi cơ sở cung
 - Public (`permitAll` `GET /api/facilities/*/layout`), mọi trạng thái cơ sở (khách của cơ sở đã ngưng vẫn cần tìm
   khoang). Không có cơ sở → 404 `"Không tìm thấy cơ sở"`.
 - Trả `facilityId`, `code`, `name`, `floorCount` và `units` = khoang **đã xếp vị trí**: `code`, `unitTypeName`,
-  `floorNo`, `aisleSide` (`Left`/`Right`, nhìn từ cửa vào), `aislePosition` (1 = sát cửa vào); order theo tầng, bên,
-  thứ tự.
-- **Không** có trạng thái khoang: khách xem đề xuất / khoang đang thuê và FS khi bàn giao chỉ cần biết khoang nằm ở
-  đâu. FM / BOM đọc trạng thái qua danh sách khoang của back-office ([backoffice/overview.md](../../backoffice/overview.md)).
+  `floorNo`, `aisleSide` (`Left`/`Right`, nhìn từ cửa vào), `aislePosition` (1 = sát cửa vào), `available`; order theo
+  tầng, bên, thứ tự.
+- `available` = khoang đang `Available` (còn nhận thuê); `Reserved` / `Rented` / `Maintenance` đều là `false` — không
+  lộ trạng thái chi tiết. Trang chọn kho dùng cờ này để khách thấy còn bao nhiêu khoang trống ở từng tầng; thẻ vị trí
+  khoang của khách / FS không dùng. FM / BOM đọc trạng thái đầy đủ qua danh sách khoang của back-office
+  ([backoffice/overview.md](../../backoffice/overview.md)).
 - Vị trí khoang: tầng 1..`facilities.floor_count`, một vị trí một khoang (unique index `uq_storage_units_slot`). Khoang
   chưa xếp không có trong `units`.
 
@@ -47,7 +49,7 @@ curl -s http://localhost:8080/api/facilities
 
 curl -s http://localhost:8080/api/facilities/1/layout
 # {"message":"Sơ đồ cơ sở","data":{"facilityId":1,"code":"Q7","name":"Self Storage Quận 7","floorCount":2,
-#  "units":[{"code":"A-01","unitTypeName":"Small","floorNo":1,"aisleSide":"Left","aislePosition":1}, ...]}}
+#  "units":[{"code":"A-01","unitTypeName":"Small","floorNo":1,"aisleSide":"Left","aislePosition":1,"available":true}, ...]}}
 ```
 
 ## Liên quan
