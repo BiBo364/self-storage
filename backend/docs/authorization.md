@@ -141,16 +141,18 @@ Chi tiết: [error-handling.md](error-handling.md).
   (`ADMIN` không chỉnh được; code / scope sai → 400) và xem ma trận qua `GET /api/admin/permissions`
   ([backoffice/overview.md › Admin](backoffice/overview.md#admin-apiadmin-role-admin)). Role đọc lại quyền từ DB mỗi
   request nên thay đổi có hiệu lực ngay.
-- **FM của cơ sở:** BOM gán / bỏ FM qua `PUT /api/bom/facilities/{id}/manager` (1–1: FM đang phụ trách cơ sở khác bị
-  gỡ khỏi cơ sở đó; chỉ nhận FM `ACTIVE`). Khoá (`BANNED`) một tài khoản FM không tự gỡ `facilities.fm_account_id` — BOM
-  gán FM khác bằng route trên. Đổi role khỏi `FM` thì tự gỡ.
+- **FM của cơ sở:** BOM gán / bỏ FM qua `PUT /api/bom/facilities/{id}/manager` (1–1: FM đang phụ trách cơ sở khác →
+  409, BOM phải bỏ FM ở cơ sở đó trước — hệ thống không tự gỡ, tránh để cơ sở cũ trống FM; chỉ nhận FM `ACTIVE`). Khoá (`BANNED`) một tài khoản FM không tự gỡ `facilities.fm_account_id` — BOM
+  gán FM khác bằng route trên. Đổi role khỏi `FM` thì tự gỡ. FM nghỉ việc: BOM gửi yêu cầu thay người, ADMIN duyệt
+  thì FM mới thế chỗ ở cơ sở và FM cũ chuyển `INACTIVE`
+  ([backoffice/overview.md › Yêu cầu tạo tài khoản](backoffice/overview.md#yêu-cầu-tạo-tài-khoản-bom--admin)).
 - **Nhân sự:** ca làm việc, nghỉ phép và hồ sơ nhân viên dùng permission `staff_shift.manage`, `staff_leave.review`,
   `staff_profile.read`, `staff_profile.manage` ([backoffice/hr.md › Quyền](backoffice/hr.md#quyền)); số giấy tờ tuỳ
   thân chỉ có trong response của ADMIN/BOM — route FM/FS trả kiểu dữ liệu không có field này.
 - **FS của cơ sở:** BOM gán qua `PUT /api/bom/staff/{id}/facilities`, ADMIN qua `PUT /api/admin/accounts/{id}/facilities`
   (cùng logic). Gỡ FS khỏi cơ sở mà FS còn việc mở ở đó → 409
   ([backoffice/overview.md › Gán FS vào cơ sở](backoffice/overview.md#gán-fs-vào-cơ-sở)); đổi role khỏi `FS` thì gán
-  cơ sở bị xoá.
+  cơ sở bị xoá. FS nghỉ việc: duyệt yêu cầu thay người chuyển hết việc còn mở sang FS mới rồi mới gỡ FS cũ.
 - Namespace `/api/fm/**`, `/api/bom/**`, `/api/admin/**` đều role-bound như bảng trên; route FM còn kiểm permission
   theo cơ sở ở service. Thao tác đề xuất khoang theo quy tắc đặt route ở trên: `/api/proposals/**` (ownership) và
   `/api/rental-orders/{orderId}/proposals` (permission `proposal_feedback.repropose` theo cơ sở) nằm trong `/api/**`

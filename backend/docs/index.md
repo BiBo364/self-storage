@@ -50,7 +50,11 @@ kiểm). Hai phụ thuộc cần biết khi đọc flow sau bàn giao:
   `MediaAttachments.attach` khi lưu URL ảnh / scan (bên dưới, [Upload file](#upload-file-module-media));
 - `booking`, `tenancy`, `support` → `staffing::application` — `StaffAvailability` kiểm ca / nghỉ phép khi phân công FS;
   `staffing` đọc việc FS đang giữ qua SPI `identity.application.StaffOpenWork` nên không phụ thuộc ngược
-  ([backoffice/hr.md](backoffice/hr.md)).
+  ([backoffice/hr.md](backoffice/hr.md));
+- `backoffice` → `notification::application` — báo ADMIN / BOM / tài khoản mới khi gửi, duyệt, từ chối yêu cầu tạo
+  tài khoản; chuyển việc FS nghỉ việc qua SPI `identity.application.StaffWorkTransfer` (booking, handover, support,
+  tenancy, staffing cài) nên backoffice không phụ thuộc các module đó
+  ([backoffice/overview.md › Yêu cầu tạo tài khoản](backoffice/overview.md#yêu-cầu-tạo-tài-khoản-bom--admin)).
 
 Layout trong một module:
 
@@ -237,6 +241,11 @@ Schema Flow 1.3 đi bằng migration V8–V11:
   `audit_logs_entity_type_check` (thêm `StaffShift`, `StaffLeave`, `StaffProfile`) — hai CHECK là đúng tập giá trị
   của `AuditAction` / `AuditEntityType`. Notification type `STAFF_SHIFT_CHANGED`, `STAFF_LEAVE_REQUESTED`,
   `STAFF_LEAVE_REVIEWED` chỉ thêm ở code. Xem [backoffice/hr.md](backoffice/hr.md).
+- V35 thêm bảng `account_requests` (yêu cầu tạo tài khoản FM / FS của BOM, `replaces_account_id` khi thay người nghỉ
+  việc; unique `lower(email)` và `replaces_account_id` khi `Pending`), trạng thái tài khoản `INACTIVE` trong
+  `accounts_status_check`; dựng lại hai CHECK của `audit_logs` (thêm `ACCOUNT_REQUEST_*`, `AccountRequest`).
+  Notification type `ACCOUNT_REQUEST_SUBMITTED`, `ACCOUNT_REQUEST_REVIEWED`, `ACCOUNT_READY` chỉ thêm ở code. Xem
+  [backoffice/overview.md › Yêu cầu tạo tài khoản](backoffice/overview.md#yêu-cầu-tạo-tài-khoản-bom--admin).
 - Policy `appointment.checkin_reschedule_enabled` không được seed: khách không đổi được lịch check-in `Pending`
   ([booking/appointment-booking.md](booking/appointment-booking.md)).
 

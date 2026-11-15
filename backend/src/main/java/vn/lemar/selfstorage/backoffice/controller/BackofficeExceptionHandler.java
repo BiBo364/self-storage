@@ -13,7 +13,7 @@ import vn.lemar.selfstorage.ApiError;
  * {@link BackofficeController} để không đổi cách map lỗi lập trình ở các controller khác.
  */
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@RestControllerAdvice(assignableTypes = BackofficeController.class)
+@RestControllerAdvice(assignableTypes = {BackofficeController.class, AccountRequestController.class})
 public class BackofficeExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)

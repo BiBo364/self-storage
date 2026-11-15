@@ -28,7 +28,7 @@ import vn.lemar.selfstorage.identity.domain.Account;
 public class AccountAdminService {
 
     public static final Set<String> ROLES = Set.of("ADMIN", "BOM", "FM", "FS", "CUSTOMER");
-    public static final Set<String> STATUSES = Set.of("ACTIVE", "BANNED");
+    public static final Set<String> STATUSES = Set.of("ACTIVE", "BANNED", "INACTIVE");
     private static final int MAX_OPEN_ITEMS_SHOWN = 5;
 
     private final JdbcTemplate jdbc;

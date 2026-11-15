@@ -8,5 +8,6 @@ public enum NotificationRecipient {
     CUSTOMER,
     FM,
     FS,
-    ADMIN
+    ADMIN,
+    BOM
 }

@@ -116,7 +116,11 @@ export function BomStaffPage(_props: { navigate: Navigate }) {
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {member.status !== "ACTIVE" && <StatusTag tone="danger">Đã khoá</StatusTag>}
+                {member.status === "INACTIVE" ? (
+                  <StatusTag tone="neutral">Đã nghỉ việc</StatusTag>
+                ) : (
+                  member.status !== "ACTIVE" && <StatusTag tone="danger">Đã khoá</StatusTag>
+                )}
                 <span className="text-small text-ink">
                   {member.facilityIds.length > 0
                     ? member.facilityIds.map(facilityLabel).join(", ")

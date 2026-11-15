@@ -340,7 +340,15 @@ export function AdminAccountsPage({ navigate }: { navigate: Navigate }) {
                       {ROLE_LABEL[account.role] ?? account.role}
                     </td>
                     <td className="px-3.5 py-3">
-                      <StatusTag tone={account.status === "ACTIVE" ? "success" : "danger"}>
+                      <StatusTag
+                        tone={
+                          account.status === "ACTIVE"
+                            ? "success"
+                            : account.status === "INACTIVE"
+                              ? "neutral"
+                              : "danger"
+                        }
+                      >
                         {ACCOUNT_STATUS_LABEL[account.status] ?? account.status}
                       </StatusTag>
                     </td>

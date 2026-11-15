@@ -52,7 +52,9 @@ import { BomStaffPage } from "./pages/bom/BomStaffPage";
 import { BomPricingPage } from "./pages/bom/BomPricingPage";
 import { BomInvoicesPage } from "./pages/bom/BomInvoicesPage";
 import { BomStaffReportPage } from "./pages/bom/BomStaffReportPage";
+import { BomAccountRequestsPage } from "./pages/bom/BomAccountRequestsPage";
 import { AdminAccountsPage } from "./pages/admin/AdminAccountsPage";
+import { AdminAccountRequestsPage } from "./pages/admin/AdminAccountRequestsPage";
 import { AdminPermissionsPage } from "./pages/admin/AdminPermissionsPage";
 import { AdminLoginEventsPage } from "./pages/admin/AdminLoginEventsPage";
 import { AdminAuditLogsPage } from "./pages/admin/AdminAuditLogsPage";
@@ -311,6 +313,7 @@ function App() {
           {view === "bom-pricing" && <BomPricingPage navigate={navigate} />}
           {view === "bom-invoices" && <BomInvoicesPage navigate={navigate} />}
           {view === "bom-staff-report" && <BomStaffReportPage />}
+          {view === "bom-account-requests" && <BomAccountRequestsPage />}
         </BomShell>
       ) : isAdminView ? (
         <AdminShell view={view} navigate={navigate} theme={theme} onThemeToggle={toggleTheme}>
@@ -319,6 +322,7 @@ function App() {
           {view === "admin-login-events" && <AdminLoginEventsPage navigate={navigate} />}
           {view === "admin-audit-logs" && <AdminAuditLogsPage navigate={navigate} />}
           {view === "admin-payments" && <PaymentReconciliationPage />}
+          {view === "admin-account-requests" && <AdminAccountRequestsPage />}
         </AdminShell>
       ) : (
         <>

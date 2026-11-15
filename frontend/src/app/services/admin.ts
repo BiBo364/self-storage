@@ -1,4 +1,5 @@
 import { authed, query } from "../http";
+import type { AccountRequestRow } from "./bom";
 
 // Admin — /api/admin/**. Field name khớp record Java (identity/AccountAdminService, BackofficeReadRepository).
 
@@ -59,7 +60,7 @@ export type PublicFacility = {
 };
 
 export const ROLE_OPTIONS = ["ADMIN", "BOM", "FM", "FS", "CUSTOMER"] as const;
-export const ACCOUNT_STATUS_OPTIONS = ["ACTIVE", "BANNED"] as const;
+export const ACCOUNT_STATUS_OPTIONS = ["ACTIVE", "BANNED", "INACTIVE"] as const;
 
 export const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
@@ -72,6 +73,7 @@ export const ROLE_LABEL: Record<string, string> = {
 export const ACCOUNT_STATUS_LABEL: Record<string, string> = {
   ACTIVE: "Đang hoạt động",
   BANNED: "Đã khoá",
+  INACTIVE: "Đã nghỉ việc",
 };
 
 export function fetchAccounts(params: {
@@ -144,5 +146,26 @@ export function setRolePermissions(
   return authed<PermissionRow[]>(`/api/admin/roles/${encodeURIComponent(role)}/permissions`, {
     method: "PUT",
     body: scopes,
+  });
+}
+
+// ------------------------------------------------------------------ yêu cầu tạo tài khoản (BOM gửi, ADMIN duyệt)
+
+export function fetchAdminAccountRequests(status?: string): Promise<AccountRequestRow[]> {
+  return authed<AccountRequestRow[]>(`/api/admin/account-requests${query({ status })}`);
+}
+
+/** Duyệt: tạo tài khoản với mật khẩu ban đầu (Admin tự đưa cho người dùng). */
+export function approveAccountRequest(id: number, password: string): Promise<AccountRequestRow> {
+  return authed<AccountRequestRow>(`/api/admin/account-requests/${id}/approve`, {
+    method: "POST",
+    body: { password },
+  });
+}
+
+export function rejectAccountRequest(id: number, reason: string): Promise<AccountRequestRow> {
+  return authed<AccountRequestRow>(`/api/admin/account-requests/${id}/reject`, {
+    method: "POST",
+    body: { reason },
   });
 }

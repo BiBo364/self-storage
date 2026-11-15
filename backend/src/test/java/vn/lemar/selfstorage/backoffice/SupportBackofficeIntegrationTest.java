@@ -374,6 +374,33 @@ class SupportBackofficeIntegrationTest {
     }
 
     @Test
+    void fmManagingAnotherFacilityIsBlockedUntilReleased() {
+        loginAs(BOM);
+        String code = "M" + SEQ.incrementAndGet() + System.nanoTime() % 1000;
+        FacilityRow target = backoffice.createFacility(code, "Cơ sở gán FM", null, null, null, null, null);
+        long fm2 = id("select id from accounts where email = 'fm2@lemar.vn'");
+        long td = id("select id from facilities where code = 'TD'");
+
+        assertThatThrownBy(() -> backoffice.assignManager(target.id(), fm2, true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("TD")
+                .hasMessageContaining("Gỡ FM khỏi cơ sở đó trước");
+        assertThat(jdbc.queryForObject("select fm_account_id from facilities where id = ?", Long.class, td))
+                .isEqualTo(fm2);
+        assertThat(jdbc.queryForObject("select fm_account_id from facilities where id = ?", Long.class,
+                target.id())).isNull();
+
+        assertThat(backoffice.assignManager(td, fm2, true).fmAccountId()).isEqualTo(fm2);
+        try {
+            backoffice.assignManager(td, null, false);
+            assertThat(backoffice.assignManager(target.id(), fm2, true).fmAccountId()).isEqualTo(fm2);
+        } finally {
+            backoffice.assignManager(target.id(), null, false);
+            backoffice.assignManager(td, fm2, true);
+        }
+    }
+
+    @Test
     void bomManagesFacilitiesPoliciesAndPrices() {
         loginAs(BOM);
         String code = "F" + SEQ.incrementAndGet() + System.nanoTime() % 1000;

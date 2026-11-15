@@ -93,13 +93,20 @@ public class FacilityAdminCommands {
         return floor == null ? 0 : floor;
     }
 
-    /** Gán FM (1–1): FM đang phụ trách cơ sở khác bị gỡ khỏi cơ sở đó. {@code null} = bỏ FM. */
+    /** Cơ sở <b>khác</b> {@code facilityId} mà FM đang phụ trách (quan hệ 1–1), nếu có. */
+    @Transactional(readOnly = true)
+    public Optional<FacilityRow> managedElsewhere(Long fmAccountId, Long facilityId) {
+        return jdbc.query("select id from facilities where fm_account_id = ? and id <> ?",
+                        (rs, i) -> rs.getLong(1), fmAccountId, facilityId)
+                .stream().findFirst().flatMap(this::find);
+    }
+
+    /**
+     * Gán FM ({@code null} = bỏ FM). Không tự gỡ FM khỏi cơ sở khác — caller kiểm {@link #managedElsewhere} trước;
+     * unique constraint {@code facilities.fm_account_id} chặn lượt gán đồng thời ({@link DuplicateKeyException}).
+     */
     @Transactional(propagation = Propagation.MANDATORY)
     public void assignManager(Long facilityId, Long fmAccountId) {
-        if (fmAccountId != null) {
-            jdbc.update("update facilities set fm_account_id = null where fm_account_id = ? and id <> ?",
-                    fmAccountId, facilityId);
-        }
         jdbc.update("update facilities set fm_account_id = ? where id = ?", fmAccountId, facilityId);
     }
 

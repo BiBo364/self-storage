@@ -1,6 +1,7 @@
 package vn.lemar.selfstorage.notification.application;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -246,6 +247,20 @@ public class NotificationTemplateCatalog {
         put(NotificationType.STAFF_LEAVE_REVIEWED, NotificationRecipient.FS,
                 "Đơn nghỉ phép {{result}}",
                 "Đơn nghỉ phép từ {{fromDate}} đến {{toDate}} {{result}}.{{noteText}}");
+        put(NotificationType.ACCOUNT_REQUEST_SUBMITTED, NotificationRecipient.ADMIN,
+                "Yêu cầu tạo tài khoản mới",
+                "{{requesterName}} đề nghị tạo tài khoản {{roleLabel}} cho {{name}} ({{email}}){{facilityText}}"
+                        + "{{replaceText}}. Duyệt hoặc từ chối tại mục Yêu cầu tài khoản.");
+        put(NotificationType.ACCOUNT_REQUEST_REVIEWED, NotificationRecipient.BOM,
+                "Yêu cầu tạo tài khoản {{result}}",
+                "Yêu cầu tạo tài khoản {{roleLabel}} cho {{name}} ({{email}}){{replaceText}} {{result}}."
+                        + "{{noteText}}");
+        for (NotificationRecipient staff : List.of(NotificationRecipient.FM, NotificationRecipient.FS)) {
+            put(NotificationType.ACCOUNT_READY, staff,
+                    "Tài khoản Kho Mộc của bạn đã được tạo",
+                    "Tài khoản {{roleLabel}} cho email {{email}} đã sẵn sàng{{facilityText}}. Quản trị viên sẽ gửi "
+                            + "mật khẩu đăng nhập cho bạn; đăng nhập tại {{loginLink}}.");
+        }
     }
 
     /**

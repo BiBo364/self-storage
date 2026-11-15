@@ -1,4 +1,4 @@
-import { ClipboardCheck, LogIn, ScrollText, ShieldCheck, Users } from "lucide-react";
+import { ClipboardCheck, LogIn, ScrollText, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { authGateway } from "../../app/auth";
 import type { Navigate, View } from "../../app/types";
 import type { Theme } from "../ui/ThemeToggle";
@@ -6,6 +6,12 @@ import { WorkspaceShell, type WorkspaceNavItem } from "./WorkspaceShell";
 
 const navigation: (WorkspaceNavItem & { view: View })[] = [
   { label: "Tài khoản", path: "/admin/accounts", view: "admin-accounts", icon: Users },
+  {
+    label: "Yêu cầu tài khoản",
+    path: "/admin/account-requests",
+    view: "admin-account-requests",
+    icon: UserPlus,
+  },
   { label: "Phân quyền", path: "/admin/permissions", view: "admin-permissions", icon: ShieldCheck },
   {
     label: "Đối soát thanh toán",

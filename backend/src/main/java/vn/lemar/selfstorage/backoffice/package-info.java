@@ -5,5 +5,5 @@
 @org.springframework.modulith.ApplicationModule(
         displayName = "Back-office (F4/F5/Admin)",
         allowedDependencies = {"facility::application", "pricing::application", "identity::application",
-                "audit::application"})
+                "audit::application", "notification::application"})
 package vn.lemar.selfstorage.backoffice;

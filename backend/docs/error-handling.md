@@ -56,9 +56,9 @@ cao không đè nhau vì mỗi cái match theo exception type riêng.
 | 401 | `AuthExceptionHandler` | `Email hoặc mật khẩu không đúng` (sai email/mật khẩu) |
 | 401 | `AuthExceptionHandler` | `Yêu cầu chưa được xác thực` (guard chạy khi thiếu/xóa account) |
 | 401 | `JsonAuthenticationEntryPoint` | `Bạn cần đăng nhập để tiếp tục.` + header `WWW-Authenticate` (`Bearer` / `Bearer error="invalid_token"`) |
-| 403 | `AuthExceptionHandler` | `Tài khoản đã bị chặn` (login với account `BANNED`) hoặc `Tài khoản chưa xác minh email` (account legacy chưa xác minh) |
+| 403 | `AuthExceptionHandler` | `Tài khoản đã bị chặn` (login với account `BANNED`), `Tài khoản đã ngừng hoạt động (nhân viên đã nghỉ việc)` (`INACTIVE`) hoặc `Tài khoản chưa xác minh email` (account legacy chưa xác minh) |
 | 403 | `AuthExceptionHandler` | `Bạn không có quyền thực hiện thao tác này` (thiếu permission) hoặc `Bạn không được gán vào cơ sở này` (ngoài facility scope) |
-| 403 | `JsonAccessDeniedHandler` | `Tài khoản đã bị chặn` (`BANNED`), `Tài khoản chưa xác minh email` (token của account chưa xác minh) hoặc `Bạn không có quyền truy cập` (sai role) |
+| 403 | `JsonAccessDeniedHandler` | `Tài khoản đã bị chặn` (`BANNED` hoặc `INACTIVE`), `Tài khoản chưa xác minh email` (token của account chưa xác minh) hoặc `Bạn không có quyền truy cập` (sai role) |
 | 404 | `AuthExceptionHandler` | `Không tìm thấy tài khoản` / `Không tìm thấy cơ sở` (nghiệp vụ) |
 | 404 | `NotificationExceptionHandler` | `Không tìm thấy thông báo` (nghiệp vụ) |
 | 404 | `ApiExceptionHandler` | `Không tìm thấy tài nguyên` (khung — sai path) |

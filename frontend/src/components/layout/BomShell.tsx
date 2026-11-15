@@ -1,4 +1,12 @@
-import { BarChart3, Building2, Receipt, SlidersHorizontal, UserCheck, Users } from "lucide-react";
+import {
+  BarChart3,
+  Building2,
+  Receipt,
+  SlidersHorizontal,
+  UserCheck,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { authGateway } from "../../app/auth";
 import type { Navigate, View } from "../../app/types";
 import type { Theme } from "../ui/ThemeToggle";
@@ -8,6 +16,12 @@ const navigation: (WorkspaceNavItem & { view: View })[] = [
   { label: "Tổng quan doanh thu", path: "/bom/dashboard", view: "bom-dashboard", icon: BarChart3 },
   { label: "Cơ sở & FM", path: "/bom/facilities", view: "bom-facilities", icon: Building2 },
   { label: "Nhân viên FS", path: "/bom/staff", view: "bom-staff", icon: Users },
+  {
+    label: "Yêu cầu tài khoản",
+    path: "/bom/account-requests",
+    view: "bom-account-requests",
+    icon: UserPlus,
+  },
   {
     label: "Báo cáo nhân sự",
     path: "/bom/staff-report",

@@ -105,7 +105,12 @@ public enum AuditAction {
     STAFF_LEAVE_REJECTED(AuditEntityType.STAFF_LEAVE),
     STAFF_LEAVE_CANCELED(AuditEntityType.STAFF_LEAVE),
     /** ADMIN / BOM sửa hồ sơ nhân viên; số giấy tờ được che trong old/new. */
-    STAFF_PROFILE_UPDATED(AuditEntityType.STAFF_PROFILE);
+    STAFF_PROFILE_UPDATED(AuditEntityType.STAFF_PROFILE),
+    /** BOM gửi / huỷ yêu cầu tạo tài khoản nhân sự; ADMIN duyệt (tạo tài khoản) hoặc từ chối. */
+    ACCOUNT_REQUEST_CREATED(AuditEntityType.ACCOUNT_REQUEST),
+    ACCOUNT_REQUEST_APPROVED(AuditEntityType.ACCOUNT_REQUEST),
+    ACCOUNT_REQUEST_REJECTED(AuditEntityType.ACCOUNT_REQUEST),
+    ACCOUNT_REQUEST_CANCELED(AuditEntityType.ACCOUNT_REQUEST);
 
     private final Set<AuditEntityType> entityTypes;
 

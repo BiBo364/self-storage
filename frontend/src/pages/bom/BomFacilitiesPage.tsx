@@ -9,6 +9,7 @@ import {
   fetchBomManagers,
   fetchBomUnitTypes,
   setFacilityAccessOptions,
+  submitAccountRequest,
   updateBomFacility,
   type FacilityRow,
   type ManagerRow,
@@ -241,6 +242,7 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
   const [openId, setOpenId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [requestErrors, setRequestErrors] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -271,20 +273,11 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
   }
 
   function upsert(row: FacilityRow) {
-    setFacilities((list) => {
-      // Mỗi FM một cơ sở — backend đã gỡ FM khỏi cơ sở cũ, gỡ theo ở danh sách hiện tại.
-      const cleared =
-        row.fmAccountId === null
-          ? list
-          : list.map((item) =>
-              item.id !== row.id && item.fmAccountId === row.fmAccountId
-                ? { ...item, fmAccountId: null, fmEmail: null }
-                : item,
-            );
-      return cleared.some((item) => item.id === row.id)
-        ? cleared.map((item) => (item.id === row.id ? row : item))
-        : [...cleared, row];
-    });
+    setFacilities((list) =>
+      list.some((item) => item.id === row.id)
+        ? list.map((item) => (item.id === row.id ? row : item))
+        : [...list, row],
+    );
   }
 
   const openFacility = facilities.find((facility) => facility.id === openId) ?? null;
@@ -309,6 +302,12 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
       </div>
 
       {notice && <DemoNotice tone="success">{notice}</DemoNotice>}
+      {requestErrors.length > 0 && (
+        <DemoNotice tone="error">
+          Không gửi được {requestErrors.length} yêu cầu tài khoản: {requestErrors.join("; ")}. Gửi
+          lại ở mục Yêu cầu tài khoản.
+        </DemoNotice>
+      )}
 
       {isLoading ? (
         <SurfaceState variant="loading" title="Đang tải cơ sở…" />
@@ -392,10 +391,16 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
       {creating && (
         <CreatePanel
           onClose={() => setCreating(false)}
-          onCreated={(row) => {
+          onCreated={(row, requests) => {
             upsert(row);
             setCreating(false);
-            setNotice(`Đã tạo cơ sở ${row.name}.`);
+            setNotice(
+              `Đã tạo cơ sở ${row.name}.` +
+                (requests.sent
+                  ? ` Đã gửi ${requests.sent} yêu cầu tạo tài khoản tới Admin (xem mục Yêu cầu tài khoản).`
+                  : ""),
+            );
+            setRequestErrors(requests.failed);
           }}
         />
       )}
@@ -404,6 +409,7 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
         <EditPanel
           key={openFacility.id}
           facility={openFacility}
+          facilities={facilities}
           managers={managers}
           onClose={() => setOpenId(null)}
           onSaved={(row, message) => {
@@ -416,13 +422,62 @@ export function BomFacilitiesPage({ navigate }: { navigate: Navigate }) {
   );
 }
 
+type StaffDraft = { name: string; email: string; phone: string };
+const EMPTY_STAFF: StaffDraft = { name: "", email: "", phone: "" };
+const isFilled = (draft: StaffDraft) => Boolean(draft.name.trim() || draft.email.trim());
+
+/** Họ tên / email / SĐT của một người cần tạo tài khoản (gửi thành yêu cầu cho Admin). */
+function StaffFields({
+  idPrefix,
+  value,
+  onChange,
+  onRemove,
+}: {
+  idPrefix: string;
+  value: StaffDraft;
+  onChange: (next: StaffDraft) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_1fr_160px_auto] items-end gap-3 max-[760px]:grid-cols-1">
+      <TextInput
+        id={`${idPrefix}-name`}
+        label="Họ tên"
+        value={value.name}
+        onChange={(name) => onChange({ ...value, name })}
+      />
+      <TextInput
+        id={`${idPrefix}-email`}
+        label="Email"
+        value={value.email}
+        onChange={(email) => onChange({ ...value, email })}
+      />
+      <TextInput
+        id={`${idPrefix}-phone`}
+        label="Số điện thoại"
+        value={value.phone}
+        onChange={(phone) => onChange({ ...value, phone })}
+      />
+      {onRemove ? (
+        <Button size="sm" variant="secondary" onClick={onRemove}>
+          Bỏ
+        </Button>
+      ) : (
+        <span />
+      )}
+    </div>
+  );
+}
+
 function CreatePanel({
   onClose,
   onCreated,
 }: {
   onClose: () => void;
-  onCreated: (row: FacilityRow) => void;
+  onCreated: (row: FacilityRow, requests: { sent: number; failed: string[] }) => void;
 }) {
+  const [fm, setFm] = useState<StaffDraft>(EMPTY_STAFF);
+  const [fsList, setFsList] = useState<StaffDraft[]>([]);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -449,21 +504,46 @@ function CreatePanel({
       setError("Vui lòng nhập mã và tên cơ sở.");
       return;
     }
+    const staff = [
+      ...(isFilled(fm) ? [{ ...fm, role: "FM" as const }] : []),
+      ...fsList.filter(isFilled).map((draft) => ({ ...draft, role: "FS" as const })),
+    ];
+    if (staff.some((draft) => !draft.name.trim() || !draft.email.trim())) {
+      setError("Mỗi tài khoản cần có cả họ tên và email.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      onCreated(
-        await createBomFacility({
-          code: code.trim(),
-          name: name.trim(),
-          address: address.trim() || undefined,
-          operatingHours: hours.trim() || undefined,
-          latitude: pin?.latitude ?? null,
-          longitude: pin?.longitude ?? null,
-          floorCount,
-          units,
-        }),
-      );
+      const row = await createBomFacility({
+        code: code.trim(),
+        name: name.trim(),
+        address: address.trim() || undefined,
+        operatingHours: hours.trim() || undefined,
+        latitude: pin?.latitude ?? null,
+        longitude: pin?.longitude ?? null,
+        floorCount,
+        units,
+      });
+      // Cơ sở đã tạo xong; yêu cầu tài khoản gửi riêng từng người — lỗi của một người không huỷ cơ sở.
+      let sent = 0;
+      const failed: string[] = [];
+      for (const draft of staff) {
+        try {
+          await submitAccountRequest({
+            role: draft.role,
+            email: draft.email.trim(),
+            name: draft.name.trim(),
+            phone: draft.phone.trim() || undefined,
+            facilityIds: [row.id],
+            note: `Tạo cùng cơ sở ${row.code}`,
+          });
+          sent += 1;
+        } catch (caught) {
+          failed.push(`${draft.email.trim()}: ${errorMessage(caught)}`);
+        }
+      }
+      onCreated(row, { sent, failed });
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -521,6 +601,36 @@ function CreatePanel({
       </div>
 
       <div className="mt-8 grid gap-3">
+        <SectionTitle>Tài khoản nhân sự cho cơ sở này</SectionTitle>
+        <p className="m-0 text-small text-muted">
+          Không bắt buộc. Mỗi người nhập ở đây thành một yêu cầu tạo tài khoản gửi Admin (gắn sẵn cơ
+          sở mới); Admin duyệt và đặt mật khẩu ban đầu.
+        </p>
+        <span className={FIELD_LABEL}>FM phụ trách</span>
+        <StaffFields idPrefix="new-fm" value={fm} onChange={setFm} />
+        <span className={FIELD_LABEL}>Nhân viên FS</span>
+        {fsList.map((draft, index) => (
+          <StaffFields
+            key={index}
+            idPrefix={`new-fs-${index}`}
+            value={draft}
+            onChange={(next) =>
+              setFsList((list) => list.map((item, at) => (at === index ? next : item)))
+            }
+            onRemove={() => setFsList((list) => list.filter((_, at) => at !== index))}
+          />
+        ))}
+        <Button
+          size="sm"
+          variant="secondary"
+          className="w-fit"
+          onClick={() => setFsList((list) => [...list, EMPTY_STAFF])}
+        >
+          <Plus size={14} /> Thêm FS
+        </Button>
+      </div>
+
+      <div className="mt-8 grid gap-3">
         <SectionTitle>Sơ đồ khoang</SectionTitle>
         {unitTypes.length === 0 ? (
           <p className="m-0 text-small text-muted">Đang tải loại khoang…</p>
@@ -540,11 +650,13 @@ function CreatePanel({
 
 function EditPanel({
   facility,
+  facilities,
   managers,
   onClose,
   onSaved,
 }: {
   facility: FacilityRow;
+  facilities: FacilityRow[];
   managers: ManagerRow[];
   onClose: () => void;
   onSaved: (row: FacilityRow, message: string) => void;
@@ -628,6 +740,9 @@ function EditPanel({
   }
 
   const knownManager = managers.some((manager) => String(manager.id) === fmId);
+  // 1–1: FM đang phụ trách cơ sở khác không chọn được — phải gỡ khỏi cơ sở đó trước.
+  const managedElsewhere = (managerId: number) =>
+    facilities.find((item) => item.fmAccountId === managerId && item.id !== facility.id);
 
   return (
     <DetailPanel wide title={facility.name} eyebrow={`Cơ sở ${facility.code}`} onClose={onClose}>
@@ -709,7 +824,8 @@ function EditPanel({
       <div className="mt-8 grid gap-4">
         <SectionTitle>FM phụ trách</SectionTitle>
         <p className="m-0 text-small text-muted">
-          Mỗi FM phụ trách một cơ sở; gán FM đang ở cơ sở khác sẽ gỡ FM khỏi cơ sở cũ.
+          Mỗi FM chỉ phụ trách một cơ sở. FM đang phụ trách cơ sở khác không chọn được — muốn chuyển
+          FM, mở cơ sở đó và chọn "Chưa gán FM" trước.
         </p>
         <select
           aria-label="FM phụ trách"
@@ -721,11 +837,15 @@ function EditPanel({
           {!knownManager && fmId && (
             <option value={fmId}>{facility.fmEmail ?? `Tài khoản ${fmId}`}</option>
           )}
-          {managers.map((manager) => (
-            <option key={manager.id} value={manager.id}>
-              {manager.name ? `${manager.name} · ${manager.email}` : manager.email}
-            </option>
-          ))}
+          {managers.map((manager) => {
+            const other = managedElsewhere(manager.id);
+            const label = manager.name ? `${manager.name} · ${manager.email}` : manager.email;
+            return (
+              <option key={manager.id} value={manager.id} disabled={Boolean(other)}>
+                {other ? `${label} — đang quản lý ${other.code}` : label}
+              </option>
+            );
+          })}
         </select>
         <Button
           variant="secondary"

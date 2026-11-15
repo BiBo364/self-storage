@@ -256,3 +256,69 @@ export const INVOICE_STATUS_LABEL: Record<string, string> = {
   Canceled: "Đã huỷ",
   Expired: "Quá hạn",
 };
+
+// ------------------------------------------------------------------ yêu cầu tạo tài khoản (BOM → ADMIN)
+
+export type AccountRequestRole = "FM" | "FS";
+export type AccountRequestStatus = "Pending" | "Approved" | "Rejected" | "Canceled";
+
+/** `AccountRequestService.AccountRequestRow` */
+export type AccountRequestRow = {
+  id: number;
+  requestedById: number;
+  requestedByEmail: string;
+  requestedByName: string | null;
+  role: AccountRequestRole;
+  email: string;
+  name: string;
+  phone: string | null;
+  facilityIds: number[];
+  facilityCodes: string[];
+  note: string | null;
+  status: AccountRequestStatus;
+  reviewedById: number | null;
+  reviewedByEmail: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAccountId: number | null;
+  createdAt: string;
+  /** Người nghỉ việc được thay (cùng role); `null` = tuyển thêm. */
+  replacesAccountId: number | null;
+  replacesEmail: string | null;
+  replacesName: string | null;
+};
+
+export type AccountRequestInput = {
+  role: AccountRequestRole;
+  email: string;
+  name: string;
+  phone?: string;
+  facilityIds?: number[];
+  note?: string;
+  /** Thay FM / FS nghỉ việc — cơ sở lấy theo người cũ, `facilityIds` bị bỏ qua. */
+  replacesAccountId?: number;
+};
+
+export const ACCOUNT_REQUEST_ROLE_LABEL: Record<AccountRequestRole, string> = {
+  FM: "Quản lý cơ sở (FM)",
+  FS: "Nhân viên cơ sở (FS)",
+};
+
+export const ACCOUNT_REQUEST_STATUS_LABEL: Record<AccountRequestStatus, string> = {
+  Pending: "Chờ Admin duyệt",
+  Approved: "Đã tạo tài khoản",
+  Rejected: "Bị từ chối",
+  Canceled: "Đã huỷ",
+};
+
+export function fetchAccountRequests(): Promise<AccountRequestRow[]> {
+  return authed<AccountRequestRow[]>("/api/bom/account-requests");
+}
+
+export function submitAccountRequest(input: AccountRequestInput): Promise<AccountRequestRow> {
+  return authed<AccountRequestRow>("/api/bom/account-requests", { method: "POST", body: input });
+}
+
+export function cancelAccountRequest(id: number): Promise<AccountRequestRow> {
+  return authed<AccountRequestRow>(`/api/bom/account-requests/${id}/cancel`, { method: "POST" });
+}

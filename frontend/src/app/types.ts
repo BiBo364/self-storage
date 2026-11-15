@@ -78,10 +78,12 @@ export type View =
   | "bom-pricing"
   | "bom-invoices"
   | "bom-staff-report"
+  | "bom-account-requests"
   | "admin-accounts"
   | "admin-permissions"
   | "admin-login-events"
-  | "admin-audit-logs";
+  | "admin-audit-logs"
+  | "admin-account-requests";
 export type Navigate = (path: string) => void;
 export type NoticeTone = "info" | "success" | "error" | "pending";
 export type Notice = { tone: NoticeTone; message: string } | null;

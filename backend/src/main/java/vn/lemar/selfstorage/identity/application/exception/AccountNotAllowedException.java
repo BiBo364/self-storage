@@ -14,6 +14,7 @@ public class AccountNotAllowedException extends RuntimeException {
     private static String buildMessage(AccountStatus status) {
         return switch (status) {
             case BANNED -> "Tài khoản đã bị chặn";
+            case INACTIVE -> "Tài khoản đã ngừng hoạt động (nhân viên đã nghỉ việc)";
             default -> "Tài khoản không thể đăng nhập";
         };
     }

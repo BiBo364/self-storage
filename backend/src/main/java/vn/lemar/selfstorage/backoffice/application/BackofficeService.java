@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.lemar.selfstorage.audit.application.AuditEntry;
@@ -406,7 +407,18 @@ public class BackofficeService {
         if (fmAccountId != null && !isFm) {
             throw new IllegalArgumentException("Tài khoản được gán phải có role FM và đang hoạt động");
         }
-        facilities.assignManager(facilityId, fmAccountId);
+        // 1–1: FM đang phụ trách cơ sở khác thì chặn — BOM gỡ FM khỏi cơ sở đó trước, không tự để cơ sở cũ trống FM.
+        if (fmAccountId != null) {
+            facilities.managedElsewhere(fmAccountId, facilityId).ifPresent(other -> {
+                throw new IllegalStateException("FM " + other.fmEmail() + " đang phụ trách cơ sở " + other.code()
+                        + " — " + other.name() + ". Gỡ FM khỏi cơ sở đó trước khi gán sang cơ sở khác.");
+            });
+        }
+        try {
+            facilities.assignManager(facilityId, fmAccountId);
+        } catch (DuplicateKeyException e) {
+            throw new IllegalStateException("FM này vừa được gán cho cơ sở khác. Tải lại trang rồi thử lại.");
+        }
         Map<String, Object> oldValue = new HashMap<>();
         oldValue.put("fmAccountId", before.fmAccountId());
         Map<String, Object> newValue = new HashMap<>();

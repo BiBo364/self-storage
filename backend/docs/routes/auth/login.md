@@ -20,6 +20,7 @@ purpose: Đăng nhập bằng email + mật khẩu, trả access token (JWT).
    — ghi nhận 1 lần sai.
 5. `account.isLoginAllowed()` (status `ACTIVE` **và** email đã xác minh):
    - `BANNED` → 403 "Tài khoản đã bị chặn";
+   - `INACTIVE` (đã nghỉ việc) → 403 "Tài khoản đã ngừng hoạt động (nhân viên đã nghỉ việc)";
    - chưa xác minh email (account legacy/seed) → 403 "Tài khoản chưa xác minh email" (không tính là lần sai).
 6. Xoá bộ đếm sai của email; `JwtService.issueAccessToken` → envelope
    `{message: "Đăng nhập thành công", data: {accountId, email, token}}`.

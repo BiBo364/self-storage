@@ -39,10 +39,12 @@ export function viewFromLocation(): View {
   if (path === "/bom/pricing") return "bom-pricing";
   if (path === "/bom/invoices") return "bom-invoices";
   if (path === "/bom/staff-report") return "bom-staff-report";
+  if (path === "/bom/account-requests") return "bom-account-requests";
   if (path === "/admin/accounts") return "admin-accounts";
   if (path === "/admin/permissions") return "admin-permissions";
   if (path === "/admin/login-events") return "admin-login-events";
   if (path === "/admin/audit-logs") return "admin-audit-logs";
+  if (path === "/admin/account-requests") return "admin-account-requests";
   if (path === "/fm/rental-requests") return "fm-rental-requests";
   if (path === "/fm/rental-orders") return "fm-orders";
   if (path.startsWith("/fm/rental-orders/") && path.endsWith("/re-propose")) {

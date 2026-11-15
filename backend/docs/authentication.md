@@ -61,7 +61,7 @@ Jwt (claims: email, iss, exp…)
   │      authorities = [ACCOUNT_ACTIVE, ROLE_<role>]
   │    ACTIVE nhưng chưa xác minh email:
   │      authorities = [ACCOUNT_UNVERIFIED] → 403 "Tài khoản chưa xác minh email"
-  │    BANNED:
+  │    BANNED / INACTIVE:
   │      authorities = []                   → 403 "Tài khoản đã bị chặn"
   ▼
 JwtAuthenticationToken → SecurityContext
@@ -90,7 +90,10 @@ return new JwtAuthenticationToken(jwt, authorities, account.getEmail());
 
 ## Trạng thái account
 
-- `status` (`AccountStatus`): `ACTIVE` (mặc định khi tạo) | `BANNED` — chỉ dùng để chặn truy cập.
+- `status` (`AccountStatus`): `ACTIVE` (mặc định khi tạo) | `BANNED` (bị khoá) | `INACTIVE` (nhân viên đã nghỉ
+  việc — đặt khi ADMIN duyệt yêu cầu thay người, xem
+  [backoffice/overview.md › Yêu cầu tạo tài khoản](backoffice/overview.md#yêu-cầu-tạo-tài-khoản-bom--admin)). Hai
+  trạng thái khác `ACTIVE` đều chặn đăng nhập và mọi thao tác authenticated.
 - `email_verified_at = null` (chỉ còn ở account legacy/seed/admin tạo tay) **chặn đăng nhập và mọi
   thao tác authenticated** — account tự đăng ký luôn được tạo **sau khi** xác minh; chỉ luồng xác
   minh email (register/verify/resend) hoạt động. Login trả 403 `Tài khoản chưa xác minh email`; token

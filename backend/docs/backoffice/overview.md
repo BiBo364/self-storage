@@ -75,7 +75,7 @@ qua `GET` / `POST /api/fm/invoices/{invoiceId}/refunds` (quyền `payment_transa
 | PATCH | `/api/bom/facilities/{id}` | tên, địa chỉ, giờ mở cửa, `status` (`Active`/`Inactive`), `latitude` + `longitude` (đổi khi gửi đủ cả hai), `floorCount`; trường `null` giữ nguyên |
 | GET | `/api/bom/facilities/{id}/units` | mọi khoang của cơ sở kèm trạng thái + vị trí (cùng dạng `GET /api/fm/storage-units`) — sơ đồ có màu trạng thái cho BOM; không có cơ sở → 400 |
 | PUT | `/api/bom/storage-units/{id}/location` | như route FM |
-| PUT | `/api/bom/facilities/{id}/manager` `{fmAccountId}` | gán FM (1–1: FM đang ở cơ sở khác bị gỡ), `null` = bỏ FM; tài khoản không phải FM → 400 |
+| PUT | `/api/bom/facilities/{id}/manager` `{fmAccountId}` | gán FM (1–1: FM đang phụ trách cơ sở khác → 409 nêu cơ sở đó, bỏ FM ở đó trước; hai lượt gán đồng thời cùng một FM → 409), `null` = bỏ FM; tài khoản không phải FM → 400. Màn BOM làm mờ FM đang có cơ sở |
 | PUT | `/api/bom/facilities/{id}/access-options` | như route FM (cùng kiểm `facility.access`; BOM có quyền mọi cơ sở) |
 | GET | `/api/bom/managers` | tài khoản FM đang hoạt động |
 | GET | `/api/bom/staff` | tài khoản FS (mọi trạng thái) kèm `facilityIds` đang gán |
@@ -169,7 +169,7 @@ Lần 409 không ghi audit; lần 200 ghi `ACCOUNT_UPDATED | Account | 5 | {"fac
 |---|---|---|
 | GET | `/api/admin/accounts?role=&status=&q=&page=&size=` | tài khoản + cơ sở được gán / phụ trách + lần đăng nhập thành công gần nhất |
 | POST | `/api/admin/accounts` `{email, password, name?, phone?, role, facilityIds?}` | tạo tài khoản đã xác minh email; mật khẩu ≥ 8; email trùng → 409. `facilityIds` gán cơ sở ngay lúc tạo — chỉ cho role `FS` (role khác kèm cơ sở → 400), cơ sở không tồn tại → 400; ghi vào audit `ACCOUNT_CREATED` (`new_value.facilityIds`). FS mới chưa có ca: khi `staff.shift_required` bật, FM xếp ca trước khi phân công |
-| PATCH | `/api/admin/accounts/{id}` `{role?, status?, name?, phone?}` | đổi role / khoá (`BANNED`) / mở; không tự đổi role hoặc khoá chính mình (409); đổi khỏi FS thì gỡ gán cơ sở |
+| PATCH | `/api/admin/accounts/{id}` `{role?, status?, name?, phone?}` | đổi role / khoá (`BANNED`) / đánh dấu nghỉ việc (`INACTIVE`) / mở; không tự đổi role hoặc khoá chính mình (409); đổi khỏi FS thì gỡ gán cơ sở |
 | GET / PUT | `/api/admin/accounts/{id}/profile` | hồ sơ nhân viên của tài khoản FS / FM gồm số giấy tờ ([hr.md › Hồ sơ nhân viên](hr.md#hồ-sơ-nhân-viên)) |
 | PUT | `/api/admin/accounts/{id}/facilities` `{facilityIds}` | gán FS vào đúng các cơ sở này (thay toàn bộ); không phải tài khoản FS → 409; cơ sở không tồn tại → 400; gỡ khỏi cơ sở mà FS còn việc mở → 409 ([Gán FS vào cơ sở](#gán-fs-vào-cơ-sở)) |
 | GET | `/api/admin/login-events?email=` | lịch sử đăng nhập (thành công / thất bại + lý do + IP), mới nhất trước |
@@ -181,6 +181,80 @@ Lần 409 không ghi audit; lần 200 ghi `ACCOUNT_UPDATED | Account | 5 | {"fac
   `reason` = tên lỗi (`InvalidCredentials`, `AccountNotAllowed`, `EmailNotVerified`, `TooManyLoginAttempts`…).
 - **Audit:** `ACCOUNT_CREATED`, `ACCOUNT_UPDATED` (`Account`), `ROLE_PERMISSIONS_UPDATED` (`Role`).
 
+## Yêu cầu tạo tài khoản (BOM → Admin)
+
+BOM không tự tạo tài khoản nhân sự: BOM gửi yêu cầu tạo tài khoản **FM** hoặc **FS**, ADMIN duyệt (đặt mật khẩu ban
+đầu) hoặc từ chối. Tài khoản **BOM** do ADMIN tự tạo qua `POST /api/admin/accounts`, không qua yêu cầu. Bảng
+`account_requests` (V35), code `backoffice/application/AccountRequestService`.
+
+| Method | Path | Ai | Hành vi |
+|---|---|---|---|
+| GET | `/api/bom/account-requests` | BOM | mọi yêu cầu, mới nhất trước |
+| POST | `/api/bom/account-requests` `{role, email, name, phone?, facilityIds?, note?, replacesAccountId?}` | BOM | gửi yêu cầu (`Pending`); ADMIN `ACTIVE` nhận `ACCOUNT_REQUEST_SUBMITTED` |
+| POST | `/api/bom/account-requests/{id}/cancel` | BOM gửi yêu cầu đó | huỷ (`Canceled`); người khác / đã xử lý → 409 |
+| GET | `/api/admin/account-requests?status=` | ADMIN | lọc `Pending` / `Approved` / `Rejected` / `Canceled`; bỏ trống = tất cả; sai → 400 |
+| POST | `/api/admin/account-requests/{id}/approve` `{password}` | ADMIN | tạo tài khoản + gán cơ sở, `Approved` |
+| POST | `/api/admin/account-requests/{id}/reject` `{reason}` | ADMIN | `Rejected` + `review_note`; lý do bắt buộc ≤ 500 |
+
+**Gửi (tuyển thêm, `replacesAccountId` rỗng):**
+
+- `role` chỉ `FM` / `FS` — role khác → 400 "Chỉ gửi yêu cầu tạo tài khoản FM hoặc FS (tài khoản BOM do Admin tạo)".
+- Email chuẩn hoá (trim + lowercase); họ tên bắt buộc ≤ 255; SĐT ≤ 20; ghi chú ≤ 500; sai → 400.
+- FS: ≥ 1 cơ sở; FM: đúng 1 cơ sở và cơ sở đó chưa có FM (đã có → 409, quan hệ FM 1–1). Cơ sở không tồn tại → 400.
+- Email đã có tài khoản → 409; email đang có yêu cầu `Pending` → 409 (unique index `lower(email)` khi `Pending`).
+
+**Gửi (thay người nghỉ việc, `replacesAccountId` có giá trị):**
+
+- Người được thay phải cùng `role` (khác → 400) và đang `ACTIVE` (khác → 409 "không còn hoạt động").
+- Cơ sở lấy theo người cũ, `facilityIds` bị bỏ qua: FM — cơ sở đang phụ trách; FS — các cơ sở đang gán. Người cũ
+  không có cơ sở nào → 409 ("gửi yêu cầu tuyển thêm thay vì thay người").
+- Mỗi người chỉ có một yêu cầu thay đang chờ (unique index `replaces_account_id` khi `Pending`) → 409.
+
+**Duyệt** (một transaction; lỗi bất kỳ → rollback, không tạo tài khoản, yêu cầu vẫn `Pending`):
+
+1. Khoá dòng yêu cầu (`FOR UPDATE`); không còn `Pending` → 409.
+2. Thay người: kiểm lại người cũ còn `ACTIVE` và cùng role (→ 409 / 400).
+3. Tạo tài khoản đã xác minh email với mật khẩu ADMIN đặt (≥ 8; email vừa có tài khoản → 409). FS được gán cơ sở
+   ngay; FS thay người nhận cơ sở lúc gửi **cộng** cơ sở hiện tại của FS cũ (`facility_ids` của yêu cầu ghi lại tập
+   cuối cùng).
+4. FM: khoá dòng cơ sở; tuyển thêm mà cơ sở đã có FM → 409; thay người mà cơ sở không còn do FM cũ phụ trách → 409.
+   Rồi `assignManager` đặt FM mới (thay người: FM mới thế chỗ FM cũ, việc của cơ sở theo cơ sở nên FM mới nhận hết).
+5. FS thay người: mọi bản cài `identity.application.StaffWorkTransfer` chuyển việc còn mở của FS cũ sang FS mới:
+
+   | Module | Việc chuyển |
+   |---|---|
+   | booking | lịch hẹn `Pending` (check-in / trả kho) |
+   | handover | lịch hẹn của phiên bàn giao `IN_PROGRESS` |
+   | support | yêu cầu hỗ trợ `Assigned` |
+   | tenancy | yêu cầu trả kho `Assigned` + lịch `RETURN` của yêu cầu |
+   | staffing | ca làm từ hôm nay (giờ VN) trở đi; đơn nghỉ phép `Pending` của FS cũ → `Canceled` |
+
+   Sau đó gỡ FS cũ khỏi mọi cơ sở (`setStaffFacilities` — lúc này không còn việc mở nên không bị chặn). Ca đã qua giữ
+   nguyên người cũ.
+6. Thay người: tài khoản cũ → `INACTIVE` ("Đã nghỉ việc" — không đăng nhập được, lịch sử giữ nguyên; audit
+   `ACCOUNT_UPDATED`).
+7. Yêu cầu → `Approved` (`reviewed_by/at`, `created_account_id`). BOM gửi nhận `ACCOUNT_REQUEST_REVIEWED` (thay người:
+   kèm số việc đã chuyển); tài khoản mới nhận `ACCOUNT_READY` (email báo tài khoản sẵn sàng + link đăng nhập,
+   **không** kèm mật khẩu — ADMIN tự đưa mật khẩu).
+
+**Audit** (`AccountRequest`): `ACCOUNT_REQUEST_CREATED` (`role`, `email`, `facilityIds`, `replacesAccountId`),
+`ACCOUNT_REQUEST_APPROVED` (`accountId`; thay người thêm `replacedAccountId` và `transferred` — số việc theo nhãn),
+`ACCOUNT_REQUEST_REJECTED` (`reason`), `ACCOUNT_REQUEST_CANCELED`.
+
+**Thông báo:**
+
+| Type | Người nhận | Khi nào |
+|---|---|---|
+| `ACCOUNT_REQUEST_SUBMITTED` | mọi ADMIN `ACTIVE` | BOM gửi yêu cầu (thay người: nêu tên người nghỉ việc) |
+| `ACCOUNT_REQUEST_REVIEWED` | BOM gửi yêu cầu | ADMIN duyệt / từ chối (kèm lý do) |
+| `ACCOUNT_READY` | tài khoản FM / FS vừa tạo | ADMIN duyệt |
+
+**Tạo cơ sở kèm nhân sự:** form tạo cơ sở của BOM cho nhập thêm một FM và nhiều FS; sau khi cơ sở được tạo, frontend
+gửi mỗi người một yêu cầu với `facilityIds = [cơ sở mới]` (ghi chú "Tạo cùng cơ sở …"). Cơ sở vẫn được tạo khi một
+yêu cầu lỗi — trang báo yêu cầu nào không gửi được.
+
 ## Test
 
-`backoffice/SupportBackofficeIntegrationTest.java` (Postgres), `backoffice/controller/BackofficeControllerTest.java`.
+`backoffice/SupportBackofficeIntegrationTest.java` (Postgres), `backoffice/controller/BackofficeControllerTest.java`,
+`backoffice/AccountRequestIntegrationTest.java` (Postgres — tuyển thêm, thay FS / FM nghỉ việc),
+`backoffice/controller/AccountRequestControllerTest.java`.
