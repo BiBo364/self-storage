@@ -246,6 +246,8 @@ Schema Flow 1.3 đi bằng migration V8–V11:
   `accounts_status_check`; dựng lại hai CHECK của `audit_logs` (thêm `ACCOUNT_REQUEST_*`, `AccountRequest`).
   Notification type `ACCOUNT_REQUEST_SUBMITTED`, `ACCOUNT_REQUEST_REVIEWED`, `ACCOUNT_READY` chỉ thêm ở code. Xem
   [backoffice/overview.md › Yêu cầu tạo tài khoản](backoffice/overview.md#yêu-cầu-tạo-tài-khoản-bom--admin).
+- V36 hạ policy `fee.lost_key` (phí mỗi chìa cơ mất / không trả lại) từ 200000 xuống 100000 — chỉ khi DB còn giữ
+  giá seed V25; giá BOM đã chỉnh giữ nguyên.
 - Policy `appointment.checkin_reschedule_enabled` không được seed: khách không đổi được lịch check-in `Pending`
   ([booking/appointment-booking.md](booking/appointment-booking.md)).
 

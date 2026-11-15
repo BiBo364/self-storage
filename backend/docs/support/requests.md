@@ -29,7 +29,7 @@ Loại: `LOST_KEY`, `ACCESS_CODE`, `UNIT_ISSUE`, `BILLING`, `OTHER`.
   (`RentalContractService.replacePhysicalKey`). Audit `ACCESS_KEY_REVOKED` + `ACCESS_KEY_ISSUED`.
 - **Thu phí:** phí > 0 → hoá đơn `Service`:
   - phí = `feeAmount` nếu có nhập (kể cả `0` = không thu);
-  - bỏ trống `feeAmount` + yêu cầu `LOST_KEY` + có thay chìa → phí mặc định = `fee.lost_key × quantity` của bộ chìa
+  - bỏ trống `feeAmount` + yêu cầu `LOST_KEY` + có thay chìa → phí mặc định = `fee.lost_key` (mặc định 100.000 đ / chìa) × `quantity` của bộ chìa
     `Active` bị thay (đọc trước khi bộ cũ chuyển `Lost`; không có bộ chìa đang dùng → 0, không thu);
   - loại yêu cầu khác không có phí tự động;
   - mã `INV-SVC-{facility}-…`, gắn hợp đồng, hạn 7 ngày;

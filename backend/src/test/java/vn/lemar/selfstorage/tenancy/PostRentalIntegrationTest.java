@@ -99,6 +99,8 @@ class PostRentalIntegrationTest {
         customerId = id("select id from accounts where email = '" + CUSTOMER + "'");
         fsId = id("select id from accounts where email = '" + FS + "'");
         facilityId = id("select id from facilities where code = 'Q7'");
+        // Kịch bản quyết toán bên dưới tính với 200.000 đ / chìa — ghim giá trị, không phụ thuộc seed mặc định (V36).
+        jdbc.update("update policies set value = '200000' where key = 'fee.lost_key'");
         when(gateway.buildPaymentUrl(any())).thenReturn("https://pay.test/x");
         when(gateway.newTxnRef(any())).thenCallRealMethod();
         when(gateway.verifySignature(anyMap())).thenReturn(true);

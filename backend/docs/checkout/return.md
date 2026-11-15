@@ -137,6 +137,6 @@ flowchart TB
 | Key | Mặc định |
 |---|---:|
 | `fee.cleaning` | 100000 |
-| `fee.lost_key` | 200000 |
+| `fee.lost_key` | 100000 (mỗi chìa; seed V25 là 200000, V36 hạ xuống 100000 nếu BOM chưa chỉnh) |
 | `unit.maintenance_days` | 2 |
 | `checkout.invoice_due_days` | 7 |
