@@ -16,7 +16,11 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-/** Yêu cầu hỗ trợ (V26): {@code Open} → {@code Assigned} → {@code Resolved}; khách huỷ khi chưa xử lý xong. */
+/**
+ * Yêu cầu hỗ trợ (V26): {@code Open} → {@code Assigned} → {@code Resolved}; khách huỷ khi chưa xử lý xong. Khoang hư
+ * không sửa ngay được (V37): {@code Assigned} → {@code Transferring} (đang chuyển khoang) → {@code Resolved} khi chuyển
+ * xong, hoặc về {@code Assigned} khi FM huỷ chuyển.
+ */
 @Entity
 @Table(name = "support_requests")
 @Getter
@@ -25,6 +29,7 @@ public class SupportRequest {
 
     public static final String OPEN = "Open";
     public static final String ASSIGNED = "Assigned";
+    public static final String TRANSFERRING = "Transferring";
     public static final String RESOLVED = "Resolved";
     public static final String CANCELED = "Canceled";
     public static final Set<String> CATEGORIES = Set.of("LOST_KEY", "ACCESS_CODE", "UNIT_ISSUE", "BILLING", "OTHER");
@@ -99,20 +104,54 @@ public class SupportRequest {
     }
 
     public boolean isActive() {
-        return OPEN.equals(status) || ASSIGNED.equals(status);
+        return OPEN.equals(status) || ASSIGNED.equals(status) || TRANSFERRING.equals(status);
     }
 
-    /** FM giao (hoặc giao lại) cho FS. */
+    public boolean isTransferring() {
+        return TRANSFERRING.equals(status);
+    }
+
+    /** FM giao (hoặc giao lại) cho FS; đang chuyển khoang thì giữ trạng thái, chỉ đổi FS. */
     public void assign(Long staffId) {
         requireActive();
         this.assignedStaffId = Objects.requireNonNull(staffId);
-        this.status = ASSIGNED;
+        if (!TRANSFERRING.equals(status)) {
+            this.status = ASSIGNED;
+        }
         this.assignedAt = Instant.now();
         this.updatedAt = assignedAt;
     }
 
+    /** FS đề xuất chuyển khoang: {@code Assigned -> Transferring}. */
+    public void startTransfer() {
+        if (!ASSIGNED.equals(status)) {
+            throw new IllegalStateException("Yêu cầu hỗ trợ " + id + " không ở trạng thái đã giao: " + status);
+        }
+        this.status = TRANSFERRING;
+        this.updatedAt = Instant.now();
+    }
+
+    /** FM huỷ chuyển khoang: {@code Transferring -> Assigned}. */
+    public void cancelTransfer() {
+        requireTransferring();
+        this.status = ASSIGNED;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Chuyển khoang xong: {@code Transferring -> Resolved}. */
+    public void completeTransfer(String resolutionNote) {
+        requireTransferring();
+        this.resolution = Objects.requireNonNull(resolutionNote);
+        this.status = RESOLVED;
+        this.resolvedAt = Instant.now();
+        this.updatedAt = resolvedAt;
+    }
+
     public void resolve(String resolutionNote, Long feeInvoice) {
         requireActive();
+        if (TRANSFERRING.equals(status)) {
+            throw new IllegalStateException("Yêu cầu hỗ trợ " + id + " đang chuyển khoang");
+        }
         this.resolution = Objects.requireNonNull(resolutionNote);
         this.feeInvoiceId = feeInvoice;
         this.status = RESOLVED;
@@ -122,8 +161,17 @@ public class SupportRequest {
 
     public void cancel() {
         requireActive();
+        if (TRANSFERRING.equals(status)) {
+            throw new IllegalStateException("Yêu cầu hỗ trợ " + id + " đang chuyển khoang");
+        }
         this.status = CANCELED;
         this.updatedAt = Instant.now();
+    }
+
+    private void requireTransferring() {
+        if (!TRANSFERRING.equals(status)) {
+            throw new IllegalStateException("Yêu cầu hỗ trợ " + id + " không đang chuyển khoang: " + status);
+        }
     }
 
     private void requireActive() {

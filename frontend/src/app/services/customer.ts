@@ -483,6 +483,8 @@ export type RentalView = {
   returnRequest: ReturnRequestView | null;
   canExtend: boolean;
   canRequestReturn: boolean;
+  /** Đã chuyển khoang giữa kỳ (khoang hư) — bản hợp đồng đã ký vẫn ghi khoang cũ. */
+  unitMoves: { fromUnitCode: string; toUnitCode: string; movedAt: string | null }[];
 };
 
 /** CheckoutService.CheckoutView. */
@@ -812,6 +814,23 @@ export async function downloadContractPdf(contractId: number): Promise<void> {
 
 // ---------------------------------------------------------------- Support
 
+/** `SupportService.TransferView` — lần chuyển khoang gần nhất của yêu cầu hỗ trợ (khoang hư). */
+export type SupportTransfer = {
+  id: number;
+  status: "Requested" | "Allocated" | "Completed" | "Canceled";
+  fromUnitId: number;
+  fromUnitCode: string | null;
+  toUnitId: number | null;
+  toUnitCode: string | null;
+  toUnitTypeName: string | null;
+  reason: string;
+  cancelReason: string | null;
+  keyQuantity: number | null;
+  createdAt: string;
+  allocatedAt: string | null;
+  completedAt: string | null;
+};
+
 /** SupportService.SupportView. */
 export type SupportView = {
   id: number;
@@ -835,6 +854,7 @@ export type SupportView = {
   createdAt: string;
   assignedAt: string | null;
   resolvedAt: string | null;
+  transfer: SupportTransfer | null;
 };
 
 export type SupportCategory = "LOST_KEY" | "ACCESS_CODE" | "UNIT_ISSUE" | "BILLING" | "OTHER";
@@ -863,7 +883,7 @@ export function cancelSupportRequest(id: number): Promise<SupportView> {
 export const SUPPORT_CATEGORY_LABEL: Record<SupportCategory, string> = {
   LOST_KEY: "Mất chìa khoá",
   ACCESS_CODE: "Mã khoá số",
-  UNIT_ISSUE: "Sự cố khoang",
+  UNIT_ISSUE: "Khoang có vấn đề (hư hỏng, dột, kẹt cửa…)",
   BILLING: "Hoá đơn / thanh toán",
   OTHER: "Khác",
 };
@@ -874,6 +894,7 @@ export const SUPPORT_STATUS: Record<
 > = {
   Open: { label: "Mới gửi", tone: "warning" },
   Assigned: { label: "Đã phân công", tone: "info" },
+  Transferring: { label: "Đang chuyển khoang", tone: "info" },
   Resolved: { label: "Đã xử lý", tone: "success" },
   Canceled: { label: "Đã huỷ", tone: "neutral" },
 };

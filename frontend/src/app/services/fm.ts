@@ -432,6 +432,23 @@ export function fetchOverdueContracts(facilityId: number): Promise<OverdueContra
 
 // ------------------------------------------------------------------ Hỗ trợ
 
+/** `SupportService.TransferView` — lần chuyển khoang gần nhất của yêu cầu hỗ trợ (khoang hư). */
+export type SupportTransfer = {
+  id: number;
+  status: "Requested" | "Allocated" | "Completed" | "Canceled";
+  fromUnitId: number;
+  fromUnitCode: string | null;
+  toUnitId: number | null;
+  toUnitCode: string | null;
+  toUnitTypeName: string | null;
+  reason: string;
+  cancelReason: string | null;
+  keyQuantity: number | null;
+  createdAt: string;
+  allocatedAt: string | null;
+  completedAt: string | null;
+};
+
 /** `support/application/SupportService.SupportView`. */
 export type SupportRequest = {
   id: number;
@@ -455,7 +472,38 @@ export type SupportRequest = {
   createdAt: string;
   assignedAt: string | null;
   resolvedAt: string | null;
+  transfer: SupportTransfer | null;
 };
+
+/** `UnitTransferService.TransferCandidate` — `allowed` = được chọn (còn khoang cùng loại thì chỉ cùng loại). */
+export type TransferCandidate = {
+  unitId: number;
+  code: string;
+  unitTypeId: number;
+  unitTypeName: string;
+  area: number | null;
+  floorNo: number | null;
+  sameType: boolean;
+  allowed: boolean;
+};
+
+export function fetchTransferCandidates(requestId: number): Promise<TransferCandidate[]> {
+  return authed(`/api/fm/support-requests/${requestId}/transfer/candidates`);
+}
+
+export function allocateTransfer(requestId: number, unitId: number): Promise<SupportRequest> {
+  return authed(`/api/fm/support-requests/${requestId}/transfer/allocate`, {
+    method: "POST",
+    body: { unitId },
+  });
+}
+
+export function cancelTransfer(requestId: number, reason: string): Promise<SupportRequest> {
+  return authed(`/api/fm/support-requests/${requestId}/transfer/cancel`, {
+    method: "POST",
+    body: { reason },
+  });
+}
 
 export function fetchSupportRequests(
   facilityId: number,

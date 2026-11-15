@@ -1,10 +1,13 @@
-import { Check, ChevronRight, ImageIcon, User } from "lucide-react";
-import { useState } from "react";
+import { ArrowRightLeft, Check, ChevronRight, ImageIcon, User } from "lucide-react";
+import { useEffect, useState } from "react";
 import { formatDateTime, formatMoney } from "../../app/format";
 import { fetchFacilityStaff, staffDaySummary, type FmStaff } from "../../app/fmStaff";
 import {
+  allocateTransfer,
   assignSupportRequest,
+  cancelTransfer,
   fetchSupportRequests,
+  fetchTransferCandidates,
   INVOICE_STATUS_LABEL,
   labelOf,
   loadErrorState,
@@ -13,7 +16,9 @@ import {
   useFmAction,
   useFmLoad,
   type SupportRequest,
+  type TransferCandidate,
 } from "../../app/services/fm";
+import { errorMessage } from "../../app/http";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
@@ -27,6 +32,7 @@ type Tone = "success" | "warning" | "danger" | "info" | "neutral";
 const STATUS_LABEL: Record<string, string> = {
   Open: "Đang mở",
   Assigned: "Đã giao FS",
+  Transferring: "Đang chuyển khoang",
   Resolved: "Đã xử lý",
   Canceled: "Khách đã huỷ",
 };
@@ -34,6 +40,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_TONE: Record<string, Tone> = {
   Open: "warning",
   Assigned: "info",
+  Transferring: "warning",
   Resolved: "success",
   Canceled: "neutral",
 };
@@ -41,12 +48,12 @@ const STATUS_TONE: Record<string, Tone> = {
 const CATEGORY_LABEL: Record<string, string> = {
   LOST_KEY: "Mất chìa khoá",
   ACCESS_CODE: "Mã ra vào",
-  UNIT_ISSUE: "Sự cố khoang",
+  UNIT_ISSUE: "Khoang có vấn đề",
   BILLING: "Hoá đơn",
   OTHER: "Khác",
 };
 
-const OPEN_STATUSES = ["Open", "Assigned"];
+const OPEN_STATUSES = ["Open", "Assigned", "Transferring"];
 
 function staffLabel(staff: FmStaff) {
   return staff.name ? `${staff.name} · ${staff.email}` : staff.email;
@@ -72,7 +79,8 @@ export function SupportRequestQueuePage() {
         <h1 className="m-0 text-title text-ink">Yêu cầu hỗ trợ</h1>
         <p className="mt-1.5 text-small text-muted">
           {requests.data ? `${openCount} yêu cầu đang mở · ` : ""}Giao FS xử lý tại chỗ, hoặc ghi
-          nhận kết quả trực tiếp.
+          nhận kết quả trực tiếp. Khoang hư FS không sửa ngay được sẽ hiện “Đang chuyển khoang” —
+          chọn khoang trống (ưu tiên cùng loại để giữ cùng giá) cho FS chuyển khách.
         </p>
       </div>
 
@@ -136,6 +144,14 @@ export function SupportRequestQueuePage() {
                     <User size={12} /> {request.assignedStaffName}
                   </span>
                 )}
+                {request.status === "Transferring" && request.transfer && (
+                  <span className="mt-1 flex items-center gap-1.5 text-label font-semibold text-ink">
+                    <ArrowRightLeft size={12} />
+                    {request.transfer.status === "Allocated"
+                      ? `Đã điều khoang ${request.transfer.toUnitCode ?? ""} — chờ FS chuyển`
+                      : "Cần điều khoang trống"}
+                  </span>
+                )}
               </div>
               <ChevronRight size={16} className="mt-1 text-muted" />
             </button>
@@ -179,6 +195,7 @@ function SupportPanel({
   const [feeAmount, setFeeAmount] = useState("");
   const action = useFmAction();
   const isOpen = OPEN_STATUSES.includes(request.status);
+  const canResolve = request.status === "Open" || request.status === "Assigned";
 
   async function assign() {
     const outcome = await action.run("assign", () =>
@@ -255,6 +272,10 @@ function SupportPanel({
 
         {action.error && <DemoNotice tone="error">{action.error}</DemoNotice>}
 
+        {request.status === "Transferring" && request.transfer && (
+          <TransferSection request={request} onChanged={onChanged} />
+        )}
+
         {isOpen && (
           <section className="bg-surface-subtle p-4">
             <SectionTitle>{request.assignedStaffId ? "Giao lại FS" : "Giao FS xử lý"}</SectionTitle>
@@ -289,7 +310,7 @@ function SupportPanel({
           </section>
         )}
 
-        {isOpen && (
+        {canResolve && (
           <section className="bg-surface-subtle p-4">
             <SectionTitle>Ghi nhận kết quả</SectionTitle>
             <label className={`${FIELD_LABEL} mt-3`} htmlFor={`resolution-${request.id}`}>
@@ -356,6 +377,130 @@ function SupportPanel({
         )}
       </div>
     </DetailPanel>
+  );
+}
+
+/** Yêu cầu đang chuyển khoang: FM chọn khoang trống (ưu tiên cùng loại) hoặc huỷ chuyển. */
+function TransferSection({
+  request,
+  onChanged,
+}: {
+  request: SupportRequest;
+  onChanged: (message: string) => void;
+}) {
+  const transfer = request.transfer!;
+  const [candidates, setCandidates] = useState<TransferCandidate[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [unitId, setUnitId] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const action = useFmAction();
+
+  useEffect(() => {
+    let active = true;
+    fetchTransferCandidates(request.id)
+      .then((list) => active && setCandidates(list))
+      .catch((caught) => active && setLoadError(errorMessage(caught)));
+    return () => {
+      active = false;
+    };
+  }, [request.id]);
+
+  const allowed = (candidates ?? []).filter((candidate) => candidate.allowed);
+  const sameTypeLeft = allowed.some((candidate) => candidate.sameType);
+
+  async function allocate() {
+    const outcome = await action.run("allocate", () =>
+      allocateTransfer(request.id, Number(unitId)),
+    );
+    if (outcome.ok) {
+      onChanged(
+        `Đã điều khoang ${outcome.value.transfer?.toUnitCode ?? ""} cho “${request.title}” — FS chuyển khách rồi hoàn tất.`,
+      );
+    }
+  }
+
+  async function cancel() {
+    const outcome = await action.run("cancel", () =>
+      cancelTransfer(request.id, cancelReason.trim()),
+    );
+    if (outcome.ok) onChanged(`Đã huỷ chuyển khoang của “${request.title}”; FS tiếp tục xử lý.`);
+  }
+
+  return (
+    <section className="bg-surface-subtle p-4">
+      <SectionTitle>Chuyển khoang</SectionTitle>
+      <p className="mt-2 text-small text-ink">
+        FS đề xuất chuyển khách khỏi khoang <strong>{transfer.fromUnitCode}</strong>:{" "}
+        {transfer.reason}
+      </p>
+      {transfer.status === "Allocated" && (
+        <DemoNotice tone="info">
+          Đã điều khoang {transfer.toUnitCode}
+          {transfer.toUnitTypeName ? ` (loại ${transfer.toUnitTypeName})` : ""} — đang giữ chỗ, chờ
+          FS chuyển đồ và hoàn tất. Có thể điều lại khoang khác.
+        </DemoNotice>
+      )}
+      {action.error && <DemoNotice tone="error">{action.error}</DemoNotice>}
+      {loadError ? (
+        <DemoNotice tone="error">Không tải được khoang trống: {loadError}</DemoNotice>
+      ) : !candidates ? (
+        <p className="mt-2 text-label text-muted">Đang tải khoang trống…</p>
+      ) : allowed.length === 0 ? (
+        <p className="mt-2 text-label text-muted">
+          Không còn khoang trống cùng loại hoặc rộng hơn ở cơ sở này — huỷ chuyển khoang hoặc chờ có
+          khoang trống.
+        </p>
+      ) : (
+        <div className="mt-3">
+          <SelectField
+            label={
+              sameTypeLeft
+                ? "Khoang trống cùng loại (cùng giá)"
+                : "Khoang trống rộng hơn (giữ giá cũ)"
+            }
+            name={`transfer-unit-${request.id}`}
+            value={unitId}
+            onChange={setUnitId}
+            placeholder="— Chọn khoang —"
+            options={allowed.map((candidate) => ({
+              value: String(candidate.unitId),
+              label: `${candidate.code} · ${candidate.unitTypeName}${
+                candidate.floorNo ? ` · tầng ${candidate.floorNo}` : ""
+              }${candidate.sameType ? "" : " (khác loại — giữ giá cũ)"}`,
+            }))}
+          />
+          <Button pending={action.pending === "allocate"} disabled={!unitId} onClick={allocate}>
+            {action.pending !== "allocate" && <ArrowRightLeft size={16} />}{" "}
+            {transfer.status === "Allocated" ? "Điều lại khoang" : "Điều khoang"}
+          </Button>
+        </div>
+      )}
+      <div className="mt-4">
+        <label className={FIELD_LABEL} htmlFor={`transfer-cancel-${request.id}`}>
+          Huỷ chuyển khoang (lý do)
+        </label>
+        <div className={INPUT_WRAP}>
+          <input
+            id={`transfer-cancel-${request.id}`}
+            className={INPUT_ELEMENT}
+            value={cancelReason}
+            maxLength={500}
+            onChange={(event) => setCancelReason(event.target.value)}
+            placeholder="Ví dụ: Thợ sửa kịp trong ngày"
+          />
+        </div>
+        <div className="mt-2">
+          <Button
+            variant="secondary"
+            pending={action.pending === "cancel"}
+            disabled={!cancelReason.trim()}
+            onClick={cancel}
+          >
+            Huỷ chuyển khoang
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
 

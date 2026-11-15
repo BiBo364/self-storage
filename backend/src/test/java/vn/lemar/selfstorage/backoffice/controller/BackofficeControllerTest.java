@@ -54,6 +54,7 @@ import vn.lemar.selfstorage.identity.repository.AccountRepository;
 import vn.lemar.selfstorage.pricing.application.PricingAdminCommands.PolicyRow;
 import vn.lemar.selfstorage.support.application.SupportService;
 import vn.lemar.selfstorage.support.application.SupportService.SupportView;
+import vn.lemar.selfstorage.support.application.UnitTransferService;
 import vn.lemar.selfstorage.support.controller.SupportController;
 import vn.lemar.selfstorage.tenancy.controller.TenancyExceptionHandler;
 
@@ -77,6 +78,8 @@ class BackofficeControllerTest {
     private BackofficeReadRepository readRepository;
     @MockBean
     private SupportService support;
+    @MockBean
+    private UnitTransferService transfers;
     @MockBean
     private CurrentAccountProvider currentAccountProvider;
     @MockBean
@@ -240,6 +243,38 @@ class BackofficeControllerTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void unitTransferRoutes() throws Exception {
+        login("fs@x.vn", "FS", 3L);
+        when(transfers.request(5L, "Trần dột")).thenReturn(supportView());
+        when(transfers.complete(5L, 2)).thenReturn(new UnitTransferService.TransferCompletion(supportView(), "123456"));
+        mockMvc.perform(json(post("/api/staff/support-requests/5/transfer"), "fs@x.vn", "{\"reason\":\"Trần dột\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(json(post("/api/staff/support-requests/5/transfer"), "fs@x.vn", "{\"reason\":\" \"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(json(post("/api/staff/support-requests/5/transfer/complete"), "fs@x.vn",
+                "{\"keyQuantity\":2}")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessCode").value("123456"));
+        mockMvc.perform(as(get("/api/fm/support-requests/5/transfer/candidates"), "fs@x.vn"))
+                .andExpect(status().isForbidden());
+
+        login("fm@x.vn", "FM", 2L);
+        when(transfers.candidates(5L)).thenReturn(List.of(new UnitTransferService.TransferCandidate(9L, "A-9", 1L,
+                "Small", new java.math.BigDecimal("2.00"), 1, true, true)));
+        when(transfers.allocate(5L, 9L)).thenReturn(supportView());
+        when(transfers.cancel(5L, "Sửa kịp")).thenReturn(supportView());
+        mockMvc.perform(as(get("/api/fm/support-requests/5/transfer/candidates"), "fm@x.vn"))
+                .andExpect(jsonPath("$.data[0].sameType").value(true));
+        mockMvc.perform(json(post("/api/fm/support-requests/5/transfer/allocate"), "fm@x.vn", "{\"unitId\":9}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(json(post("/api/fm/support-requests/5/transfer/allocate"), "fm@x.vn", "{}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(json(post("/api/fm/support-requests/5/transfer/cancel"), "fm@x.vn",
+                "{\"reason\":\"Sửa kịp\"}")).andExpect(status().isOk());
+        mockMvc.perform(json(post("/api/staff/support-requests/5/transfer"), "fm@x.vn", "{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden());
+    }
+
     private static Report report() {
         return new Report(LocalDate.now(), LocalDate.now(),
                 new Kpis(1, 2, 3, 0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO), new BigDecimal("1000"), List.of(),
@@ -257,7 +292,7 @@ class BackofficeControllerTest {
 
     private static SupportView supportView() {
         return new SupportView(5L, 6L, "Khách", "c@x.vn", 1L, "Q7", null, null, null, "OTHER", "t", "d", List.of(),
-                "Open", null, null, null, null, Instant.now(), null, null);
+                "Open", null, null, null, null, Instant.now(), null, null, null);
     }
 
     private void login(String email, String roleName, Long accountId) {

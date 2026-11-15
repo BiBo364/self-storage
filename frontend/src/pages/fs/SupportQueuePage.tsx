@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { formatDateTime, formatMoney } from "../../app/format";
 import { errorMessage, errorStatus } from "../../app/http";
 import {
+  completeUnitTransfer,
   fetchStaffSupportRequests,
+  requestUnitTransfer,
   resolveSupportRequest,
   type SupportView,
 } from "../../app/services/staff";
@@ -19,7 +21,7 @@ import { INPUT_CLASS, TEXTAREA_CLASS } from "../../components/domain/FileUploadF
 const CATEGORY_LABEL: Record<string, string> = {
   LOST_KEY: "Mất chìa khoá",
   ACCESS_CODE: "Mã truy cập",
-  UNIT_ISSUE: "Sự cố khoang",
+  UNIT_ISSUE: "Khoang có vấn đề",
   BILLING: "Thanh toán",
   OTHER: "Khác",
 };
@@ -28,6 +30,7 @@ const STATUS: Record<string, { label: string; tone: "success" | "warning" | "neu
   {
     Open: { label: "Mới", tone: "warning" },
     Assigned: { label: "Đã giao", tone: "info" },
+    Transferring: { label: "Đang chuyển khoang", tone: "warning" },
     Resolved: { label: "Đã xử lý", tone: "success" },
     Canceled: { label: "Đã huỷ", tone: "neutral" },
   };
@@ -76,6 +79,8 @@ export function StaffSupportPage({ navigate }: { navigate: Navigate }) {
         <h1 className="m-0 text-title text-ink">Yêu cầu hỗ trợ</h1>
         <p className="mt-1.5 text-small text-muted">
           Yêu cầu FM đã giao cho bạn. Ghi kết quả xử lý, thay chìa hoặc thu phí dịch vụ nếu cần.
+          Khoang hư không sửa ngay được thì đề xuất chuyển khoang — FM điều khoang trống, bạn chuyển
+          đồ cho khách rồi bấm hoàn tất.
         </p>
       </div>
 
@@ -134,6 +139,13 @@ export function StaffSupportPage({ navigate }: { navigate: Navigate }) {
                       </span>
                     )}
                     <span>Giao lúc {formatDateTime(request.assignedAt)}</span>
+                    {request.status === "Transferring" && request.transfer && (
+                      <span className="font-semibold text-ink">
+                        {request.transfer.status === "Allocated"
+                          ? `FM đã điều khoang ${request.transfer.toUnitCode ?? ""} — chờ bạn chuyển`
+                          : "Chờ FM điều khoang trống"}
+                      </span>
+                    )}
                   </span>
                 </div>
                 <ChevronRight size={18} className="text-muted" />
@@ -148,11 +160,14 @@ export function StaffSupportPage({ navigate }: { navigate: Navigate }) {
           key={openRequest.id}
           request={openRequest}
           onClose={() => setOpenId(null)}
-          onResolved={(resolved) => {
+          onResolved={(resolved, message) => {
             setOpenId(null);
-            setNotice(`Đã xử lý yêu cầu “${resolved.title}”.`);
+            setNotice(message ?? `Đã xử lý yêu cầu “${resolved.title}”.`);
             setRequests((list) => list.filter((item) => item.id !== resolved.id));
           }}
+          onUpdated={(updated) =>
+            setRequests((list) => list.map((item) => (item.id === updated.id ? updated : item)))
+          }
         />
       )}
     </div>
@@ -163,16 +178,23 @@ function ResolvePanel({
   request,
   onClose,
   onResolved,
+  onUpdated,
 }: {
   request: SupportView;
   onClose: () => void;
-  onResolved: (resolved: SupportView) => void;
+  onResolved: (resolved: SupportView, message?: string) => void;
+  onUpdated: (updated: SupportView) => void;
 }) {
   const [resolution, setResolution] = useState("");
   const [newKeyQuantity, setNewKeyQuantity] = useState("");
   const [feeAmount, setFeeAmount] = useState("");
+  const [transferMode, setTransferMode] = useState(false);
+  const [transferReason, setTransferReason] = useState("");
+  const [transferKeys, setTransferKeys] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const transfer = request.status === "Transferring" ? request.transfer : null;
+  const canTransfer = request.status === "Assigned" && request.contractId !== null;
 
   async function submit() {
     if (!resolution.trim()) {
@@ -195,21 +217,87 @@ function ResolvePanel({
     }
   }
 
+  async function proposeTransfer() {
+    if (!transferReason.trim()) {
+      setError("Ghi lý do không sửa ngay được (FM xem khi điều khoang).");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      onUpdated(await requestUnitTransfer(request.id, transferReason.trim()));
+      setTransferMode(false);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishTransfer() {
+    setBusy(true);
+    setError(null);
+    try {
+      const done = await completeUnitTransfer(
+        request.id,
+        transferKeys.trim() === "" ? undefined : Number(transferKeys),
+      );
+      const to = done.request.transfer?.toUnitCode ?? "";
+      onResolved(
+        done.request,
+        done.accessCode
+          ? `Đã chuyển khách sang khoang ${to}. Mã khoá số mới: ${done.accessCode} — đưa cho khách (mã chỉ hiện một lần).`
+          : `Đã chuyển khách sang khoang ${to}.`,
+      );
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const footer = transfer ? (
+    <>
+      <Button variant="secondary" onClick={onClose} disabled={busy}>
+        Đóng
+      </Button>
+      {transfer.status === "Allocated" && (
+        <Button pending={busy} onClick={finishTransfer}>
+          Hoàn tất chuyển khoang
+        </Button>
+      )}
+    </>
+  ) : transferMode ? (
+    <>
+      <Button variant="secondary" onClick={() => setTransferMode(false)} disabled={busy}>
+        Quay lại
+      </Button>
+      <Button pending={busy} onClick={proposeTransfer}>
+        Gửi đề xuất chuyển khoang
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button variant="secondary" onClick={onClose} disabled={busy}>
+        Đóng
+      </Button>
+      {canTransfer && (
+        <Button variant="secondary" onClick={() => setTransferMode(true)} disabled={busy}>
+          Không sửa ngay được
+        </Button>
+      )}
+      <Button pending={busy} onClick={submit}>
+        Đánh dấu đã xử lý
+      </Button>
+    </>
+  );
+
   return (
     <DetailPanel
       title={request.title}
       eyebrow={`${CATEGORY_LABEL[request.category] ?? request.category} · #${request.id}`}
       onClose={onClose}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
-            Đóng
-          </Button>
-          <Button pending={busy} onClick={submit}>
-            Đánh dấu đã xử lý
-          </Button>
-        </>
-      }
+      footer={footer}
     >
       <dl className="m-0 grid gap-2 text-small">
         <div className="flex justify-between gap-3">
@@ -270,53 +358,102 @@ function ResolvePanel({
 
       {error && <DemoNotice tone="error">{error}</DemoNotice>}
 
-      <div className="mt-5 grid gap-4">
-        <div>
-          <label className={FIELD_LABEL} htmlFor="resolution">
-            Kết quả xử lý <span className="text-danger">*</span>
-          </label>
-          <textarea
-            id="resolution"
-            className={TEXTAREA_CLASS}
-            value={resolution}
-            maxLength={2000}
-            onChange={(event) => setResolution(event.target.value)}
-            placeholder="Ví dụ: Đã thay ổ khoá, giao 2 chìa mới cho khách."
-          />
-        </div>
-        {request.contractId !== null && (
-          <>
+      {transfer ? (
+        <div className="mt-5 grid gap-3">
+          <DemoNotice tone="info">
+            {transfer.status === "Allocated"
+              ? `FM đã điều khoang ${transfer.toUnitCode ?? ""}${
+                  transfer.toUnitTypeName ? ` (loại ${transfer.toUnitTypeName})` : ""
+                } thay khoang ${transfer.fromUnitCode ?? ""}. Chuyển đồ cho khách, giao chìa mới (nếu khách dùng chìa cơ) rồi bấm hoàn tất. Hợp đồng và giá thuê giữ nguyên.`
+              : `Đã đề xuất chuyển khoang khỏi ${transfer.fromUnitCode ?? ""}. Chờ FM điều khoang trống.`}
+          </DemoNotice>
+          <p className="m-0 text-small text-muted">Lý do: {transfer.reason}</p>
+          {transfer.status === "Allocated" && (
             <div>
-              <label className={FIELD_LABEL} htmlFor="new-key-quantity">
-                Cấp chìa mới (số lượng, để trống nếu không thay)
+              <label className={FIELD_LABEL} htmlFor="transfer-keys">
+                Số chìa giao cho khoang mới (bắt buộc nếu khách đang dùng chìa cơ)
               </label>
               <input
-                id="new-key-quantity"
+                id="transfer-keys"
                 type="number"
                 min={1}
                 max={10}
                 className={INPUT_CLASS}
-                value={newKeyQuantity}
-                onChange={(event) => setNewKeyQuantity(event.target.value)}
+                value={transferKeys}
+                onChange={(event) => setTransferKeys(event.target.value)}
               />
             </div>
-            <div>
-              <label className={FIELD_LABEL} htmlFor="fee-amount">
-                Phí dịch vụ (đ, để trống nếu không thu)
-              </label>
-              <input
-                id="fee-amount"
-                type="number"
-                min={0}
-                step={1000}
-                className={INPUT_CLASS}
-                value={feeAmount}
-                onChange={(event) => setFeeAmount(event.target.value)}
-              />
-            </div>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      ) : transferMode ? (
+        <div className="mt-5 grid gap-3">
+          <DemoNotice tone="info">
+            Khoang không sửa ngay được: gửi đề xuất để FM điều một khoang trống (ưu tiên cùng loại,
+            giá thuê giữ nguyên). Khách vẫn dùng khoang cũ tới khi bạn hoàn tất chuyển.
+          </DemoNotice>
+          <div>
+            <label className={FIELD_LABEL} htmlFor="transfer-reason">
+              Tình trạng khoang / lý do <span className="text-danger">*</span>
+            </label>
+            <textarea
+              id="transfer-reason"
+              className={TEXTAREA_CLASS}
+              value={transferReason}
+              maxLength={1000}
+              onChange={(event) => setTransferReason(event.target.value)}
+              placeholder="Ví dụ: Trần dột nặng, cần thợ chống thấm 3–4 ngày."
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="mt-5 grid gap-4">
+          <div>
+            <label className={FIELD_LABEL} htmlFor="resolution">
+              Kết quả xử lý <span className="text-danger">*</span>
+            </label>
+            <textarea
+              id="resolution"
+              className={TEXTAREA_CLASS}
+              value={resolution}
+              maxLength={2000}
+              onChange={(event) => setResolution(event.target.value)}
+              placeholder="Ví dụ: Đã thay ổ khoá, giao 2 chìa mới cho khách."
+            />
+          </div>
+          {request.contractId !== null && (
+            <>
+              <div>
+                <label className={FIELD_LABEL} htmlFor="new-key-quantity">
+                  Cấp chìa mới (số lượng, để trống nếu không thay)
+                </label>
+                <input
+                  id="new-key-quantity"
+                  type="number"
+                  min={1}
+                  max={10}
+                  className={INPUT_CLASS}
+                  value={newKeyQuantity}
+                  onChange={(event) => setNewKeyQuantity(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className={FIELD_LABEL} htmlFor="fee-amount">
+                  Phí dịch vụ (đ, để trống nếu không thu)
+                </label>
+                <input
+                  id="fee-amount"
+                  type="number"
+                  min={0}
+                  step={1000}
+                  className={INPUT_CLASS}
+                  value={feeAmount}
+                  onChange={(event) => setFeeAmount(event.target.value)}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </DetailPanel>
   );
 }

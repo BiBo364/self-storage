@@ -45,6 +45,9 @@ import vn.lemar.selfstorage.support.application.SupportService;
 import vn.lemar.selfstorage.support.application.SupportService.CreateInput;
 import vn.lemar.selfstorage.support.application.SupportService.ResolveInput;
 import vn.lemar.selfstorage.support.application.SupportService.SupportView;
+import vn.lemar.selfstorage.support.application.UnitTransferService;
+import vn.lemar.selfstorage.support.application.UnitTransferService.TransferCandidate;
+import vn.lemar.selfstorage.support.application.UnitTransferService.TransferCompletion;
 import vn.lemar.selfstorage.tenancy.application.TenancyException;
 
 /** Hỗ trợ / sự cố + back-office (FM, BOM, Admin) chạy thật trên Postgres. */
@@ -71,6 +74,10 @@ class SupportBackofficeIntegrationTest {
 
     @Autowired
     private SupportService support;
+    @Autowired
+    private UnitTransferService transfers;
+    @Autowired
+    private vn.lemar.selfstorage.tenancy.application.TenancyService tenancy;
     @Autowired
     private BackofficeService backoffice;
     @Autowired
@@ -184,11 +191,151 @@ class SupportBackofficeIntegrationTest {
 
         // Không phải LOST_KEY: thay chìa không tự thu phí.
         SupportView issue = support.create(customerId, new CreateInput(contractId, null, "UNIT_ISSUE", "Khoá kẹt",
-                "Ổ khoá kẹt", null));
+                "Ổ khoá kẹt", List.of(uploadedPhoto())));
         loginAs(FM);
         assertThat(support.resolve(issue.id(), new ResolveInput("Thay ổ khoá", 2, null)).feeInvoice()).isNull();
         assertThat(count("select count(*) from invoices where contract_id = ? and type = 'Service'", contractId))
                 .isEqualTo(1);
+    }
+
+    @Test
+    void unitIssueNeedsAnActiveContractAndPhotosTheCustomerUploaded() {
+        long contractId = seedActiveContract();
+        assertThatThrownBy(() -> support.create(customerId, new CreateInput(null, facilityId, "UNIT_ISSUE", "Hư",
+                "Cửa hư", List.of(uploadedPhoto())))).isInstanceOf(TenancyException.class)
+                .hasMessageContaining("hợp đồng đang thuê");
+        assertThatThrownBy(() -> support.create(customerId, new CreateInput(contractId, null, "UNIT_ISSUE", "Hư",
+                "Cửa hư", List.of()))).isInstanceOf(TenancyException.class).hasMessageContaining("ít nhất 1 ảnh");
+        assertThatThrownBy(() -> support.create(customerId, new CreateInput(contractId, null, "UNIT_ISSUE", "Hư",
+                "Cửa hư", List.of("https://img.test/la.jpg")))).isInstanceOf(TenancyException.class)
+                .hasMessageContaining("ảnh bạn vừa tải lên");
+        SupportView ok = support.create(customerId, new CreateInput(contractId, null, "UNIT_ISSUE", "Hư", "Cửa hư",
+                List.of(uploadedPhoto())));
+        assertThat(ok.status()).isEqualTo("Open");
+        assertThat(ok.transfer()).isNull();
+        // Loại khác vẫn không bắt buộc ảnh.
+        assertThat(support.create(customerId, new CreateInput(contractId, null, "OTHER", "Hỏi", "Giờ mở cửa", null))
+                .status()).isEqualTo("Open");
+    }
+
+    @Test
+    void damagedUnitMovesToASameTypeUnitKeepingTheContractAndPrice() {
+        long contractId = seedActiveContract();
+        long fromUnit = id("select unit_id from rental_contracts where id = " + contractId);
+        jdbc.update("insert into unit_access_keys (unit_id, contract_id, access_type, code_hash) values (?, ?, "
+                + "'AccessCode', 'hash-cu')", fromUnit, contractId);
+        long sameType = availableUnit(facilityId, "Small");
+        long larger = availableUnit(facilityId, "Large");
+        SupportView created = support.create(customerId, new CreateInput(contractId, null, "UNIT_ISSUE",
+                "Trần dột", "Nước dột vào khoang", List.of(uploadedPhoto())));
+        loginAs(FM);
+        support.assign(created.id(), fsId);
+
+        loginAs(FS);
+        assertThatThrownBy(() -> transfers.request(created.id(), " ")).isInstanceOf(TenancyException.class);
+        SupportView requested = transfers.request(created.id(), "Trần dột, cần thợ vài ngày");
+        assertThat(requested.status()).isEqualTo("Transferring");
+        assertThat(requested.transfer().status()).isEqualTo("Requested");
+        assertThat(support.staffRequests()).extracting(SupportView::id).contains(created.id());
+        assertThat(notifications(FM, "UNIT_TRANSFER_REQUESTED")).isPositive();
+        assertThatThrownBy(() -> transfers.complete(created.id(), 2)).isInstanceOf(TenancyException.class)
+                .hasMessageContaining("chưa điều khoang");
+        assertThatThrownBy(() -> support.resolve(created.id(), new ResolveInput("Sửa xong", null, null)))
+                .isInstanceOf(TenancyException.class).hasMessageContaining("chuyển khoang");
+        assertThatThrownBy(() -> support.cancel(created.id(), customerId)).isInstanceOf(TenancyException.class);
+
+        loginAs(FM);
+        assertThat(support.facilityRequests(facilityId, false)).extracting(SupportView::id).contains(created.id());
+        List<TransferCandidate> candidates = transfers.candidates(created.id());
+        assertThat(candidates).filteredOn(c -> c.unitId().equals(sameType)).singleElement()
+                .satisfies(c -> assertThat(c.sameType() && c.allowed()).isTrue());
+        assertThat(candidates).filteredOn(c -> c.unitId().equals(larger)).singleElement()
+                .satisfies(c -> assertThat(c.allowed()).isFalse());
+        assertThatThrownBy(() -> transfers.allocate(created.id(), larger)).isInstanceOf(TenancyException.class)
+                .hasMessageContaining("cùng loại");
+        SupportView allocated = transfers.allocate(created.id(), sameType);
+        assertThat(allocated.transfer().status()).isEqualTo("Allocated");
+        assertThat(allocated.transfer().toUnitId()).isEqualTo(sameType);
+        assertThat(unitStatus(sameType)).isEqualTo("Reserved");
+        assertThat(notifications(CUSTOMER, "UNIT_TRANSFER_ALLOCATED")).isPositive();
+
+        loginAs(FS);
+        assertThatThrownBy(() -> transfers.complete(created.id(), null)).isInstanceOf(TenancyException.class)
+                .hasMessageContaining("số chìa");
+        TransferCompletion done = transfers.complete(created.id(), 3);
+        assertThat(done.accessCode()).matches("\\d{6}");
+        assertThat(done.request().status()).isEqualTo("Resolved");
+        assertThat(done.request().transfer().status()).isEqualTo("Completed");
+        assertThat(done.request().unitCode()).isEqualTo(done.request().transfer().toUnitCode());
+        assertThat(jdbc.queryForObject("select unit_id from rental_contracts where id = ?", Long.class, contractId))
+                .isEqualTo(sameType);
+        assertThat(jdbc.queryForObject("select monthly_price from rental_contracts where id = ?", BigDecimal.class,
+                contractId)).isEqualByComparingTo("100000");
+        assertThat(unitStatus(sameType)).isEqualTo("Rented");
+        assertThat(unitStatus(fromUnit)).isEqualTo("Maintenance");
+        assertThat(count("select count(*) from unit_access_keys where contract_id = ? and unit_id = ? "
+                + "and status = 'Revoked'", contractId, fromUnit)).isEqualTo(2);
+        assertThat(count("select count(*) from unit_access_keys where contract_id = ? and status = 'Lost'",
+                contractId)).isZero();
+        assertThat(jdbc.queryForObject("select quantity from unit_access_keys where contract_id = ? and unit_id = ? "
+                + "and status = 'Active' and access_type = 'PhysicalKey'", Integer.class, contractId, sameType))
+                .isEqualTo(3);
+        assertThat(count("select count(*) from unit_access_keys where contract_id = ? and unit_id = ? "
+                + "and status = 'Active' and access_type = 'AccessCode'", contractId, sameType)).isEqualTo(1);
+        assertThat(count("select count(*) from audit_logs where action = 'CONTRACT_UNIT_CHANGED' and entity_id = ?",
+                String.valueOf(contractId))).isEqualTo(1);
+        assertThat(notifications(CUSTOMER, "UNIT_TRANSFER_COMPLETED")).isPositive();
+        assertThat(tenancy.rental(contractId, customerId).unitMoves()).singleElement()
+                .satisfies(move -> assertThat(move.toUnitCode()).isEqualTo(done.request().transfer().toUnitCode()));
+        assertThatThrownBy(() -> transfers.complete(created.id(), 3)).isInstanceOf(TenancyException.class);
+    }
+
+    @Test
+    void managerCancelsATransferAndOnlyALargerTypeIsOfferedWhenNoSameTypeIsFree() {
+        loginAs(BOM);
+        String code = "T" + SEQ.incrementAndGet() + System.nanoTime() % 1000;
+        long facility = backoffice.createFacility(code, "Kho chuyển khoang", null, null, null, null, null).id();
+        String fmEmail = "fm-t" + SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000 + "@example.com";
+        loginAs(ADMIN);
+        long fm = accounts.create(fmEmail, "Khoimoc@2026", "FM Chuyển Khoang", null, "FM", 1L).id();
+        backoffice.assignManager(facility, fm, true);
+        String fsEmail = "fs-t" + SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000 + "@example.com";
+        long staff = accounts.create(fsEmail, "Khoimoc@2026", "FS Chuyển Khoang", null, "FS", List.of(facility), 1L)
+                .id();
+        long contractId = seedActiveContract(facility);
+        long medium = availableUnit(facility, "Medium");
+        long large = availableUnit(facility, "Large");
+        SupportView created = support.create(customerId, new CreateInput(contractId, null, "UNIT_ISSUE", "Sàn nứt",
+                "Sàn khoang nứt", List.of(uploadedPhoto())));
+        loginAs(fmEmail);
+        jdbc.update("insert into staff_shifts (facility_id, staff_id, shift_date, start_time, end_time) "
+                + "values (?, ?, ?, '00:00', '23:59')", facility, staff, LocalDate.now(VN));
+        support.assign(created.id(), staff);
+
+        loginAs(fsEmail);
+        transfers.request(created.id(), "Sàn nứt, phải đổ lại");
+        assertThatThrownBy(() -> transfers.request(created.id(), "Lần hai")).isInstanceOf(TenancyException.class);
+
+        loginAs(fmEmail);
+        // Không còn khoang Small trống: loại rộng hơn được chọn (giữ giá cũ).
+        assertThat(transfers.candidates(created.id())).extracting(TransferCandidate::unitId)
+                .containsExactly(medium, large);
+        assertThat(transfers.candidates(created.id())).allMatch(c -> c.allowed() && !c.sameType());
+        transfers.allocate(created.id(), medium);
+        transfers.allocate(created.id(), large);
+        assertThat(unitStatus(medium)).isEqualTo("Available");
+        assertThat(unitStatus(large)).isEqualTo("Reserved");
+        assertThatThrownBy(() -> transfers.cancel(created.id(), " ")).isInstanceOf(TenancyException.class);
+        SupportView canceled = transfers.cancel(created.id(), "Thợ sửa kịp trong ngày");
+        assertThat(canceled.status()).isEqualTo("Assigned");
+        assertThat(canceled.transfer().status()).isEqualTo("Canceled");
+        assertThat(canceled.transfer().cancelReason()).isEqualTo("Thợ sửa kịp trong ngày");
+        assertThat(unitStatus(large)).isEqualTo("Available");
+        assertThat(notifications(fsEmail, "UNIT_TRANSFER_CANCELED")).isEqualTo(1);
+
+        loginAs(fsEmail);
+        assertThat(support.resolve(created.id(), new ResolveInput("Đã vá sàn", null, null)).status())
+                .isEqualTo("Resolved");
     }
 
     @Test
@@ -618,11 +765,15 @@ class SupportBackofficeIntegrationTest {
      * (doanh thu).
      */
     private long seedActiveContract() {
+        return seedActiveContract(facilityId);
+    }
+
+    private long seedActiveContract(long facility) {
         String suffix = SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000;
         long unitId = id("insert into storage_units (code, facility_id, unit_type_id, status) values ('S-" + suffix
-                + "', " + facilityId + ", (select id from unit_types where name = 'Small'), 'Rented') returning id");
+                + "', " + facility + ", (select id from unit_types where name = 'Small'), 'Rented') returning id");
         long requestId = id("insert into rental_requests (facility_id, customer_name, normalized_customer_email, "
-                + "customer_phone, unit_type_id, start_date, period, status, unit_id) values (" + facilityId
+                + "customer_phone, unit_type_id, start_date, period, status, unit_id) values (" + facility
                 + ", 'Khách Demo', '" + CUSTOMER + "', '0900000000', (select id from unit_types where name = "
                 + "'Small'), current_date, 3, 'Converted', " + unitId + ") returning id");
         long orderId = id("insert into rental_orders (request_id, customer_id, unit_id, status) values (" + requestId
@@ -639,6 +790,24 @@ class SupportBackofficeIntegrationTest {
         jdbc.update("insert into invoices (contract_id, customer_id, code, title, type, status, amount) values "
                 + "(?, ?, ?, 'Tháng đầu', 'Rental', 'Paid', 100000)", contractId, customerId, "INV-RNT-Q7-S" + suffix);
         return contractId;
+    }
+
+    /** Ảnh khách đã upload (media_uploads Pending) — URL hợp lệ cho bằng chứng khoang hư. */
+    private String uploadedPhoto() {
+        String url = "https://img.test/u-" + SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000 + ".jpg";
+        jdbc.update("insert into media_uploads (account_id, batch_id, url, status) values (?, gen_random_uuid(), ?, "
+                + "'Pending')", customerId, url);
+        return url;
+    }
+
+    private long availableUnit(long facility, String type) {
+        return id("insert into storage_units (code, facility_id, unit_type_id, status) values ('A-"
+                + SEQ.incrementAndGet() + "-" + System.nanoTime() % 100000 + "', " + facility
+                + ", (select id from unit_types where name = '" + type + "'), 'Available') returning id");
+    }
+
+    private String unitStatus(long unitId) {
+        return jdbc.queryForObject("select status from storage_units where id = ?", String.class, unitId);
     }
 
     private Map<String, BigDecimal> revenueThisMonth() {

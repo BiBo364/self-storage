@@ -20,16 +20,22 @@ import vn.lemar.selfstorage.support.application.SupportService;
 import vn.lemar.selfstorage.support.application.SupportService.CreateInput;
 import vn.lemar.selfstorage.support.application.SupportService.ResolveInput;
 import vn.lemar.selfstorage.support.application.SupportService.SupportView;
+import vn.lemar.selfstorage.support.application.UnitTransferService;
+import vn.lemar.selfstorage.support.application.UnitTransferService.TransferCandidate;
+import vn.lemar.selfstorage.support.application.UnitTransferService.TransferCompletion;
 
 /** Flow 7 — yêu cầu hỗ trợ: khách / FM / FS. */
 @RestController
 public class SupportController {
 
     private final SupportService supportService;
+    private final UnitTransferService transferService;
     private final CurrentAccountProvider currentAccount;
 
-    public SupportController(SupportService supportService, CurrentAccountProvider currentAccount) {
+    public SupportController(SupportService supportService, UnitTransferService transferService,
+                             CurrentAccountProvider currentAccount) {
         this.supportService = supportService;
+        this.transferService = transferService;
         this.currentAccount = currentAccount;
     }
 
@@ -39,7 +45,8 @@ public class SupportController {
     }
 
     @Operation(summary = "Gửi yêu cầu hỗ trợ",
-            description = "Gắn `contractId` (hợp đồng đang thuê) hoặc chọn `facilityId`. `LOST_KEY` bắt buộc hợp đồng.")
+            description = "Gắn `contractId` (hợp đồng đang thuê) hoặc chọn `facilityId`. `LOST_KEY` bắt buộc hợp đồng. "
+                    + "`UNIT_ISSUE` bắt buộc hợp đồng đang thuê và ≥ 1 ảnh (URL khách đã upload) — thiếu / sai → 400.")
     @PostMapping("/api/customer/support-requests")
     public ResponseEntity<ApiEnvelope<SupportView>> create(@Valid @RequestBody CreateBody body) {
         return ResponseEntity.ok(ApiEnvelope.ok("Đã gửi yêu cầu hỗ trợ", supportService.create(me(),
@@ -90,6 +97,50 @@ public class SupportController {
                 new ResolveInput(body.resolution(), body.newKeyQuantity(), body.feeAmount()))));
     }
 
+    @Operation(summary = "FS đề xuất chuyển khoang (khoang hư không sửa ngay được)",
+            description = "Chỉ FS được giao, yêu cầu `Assigned` gắn hợp đồng `Active` → `Transferring`; FM nhận thông "
+                    + "báo. Hợp đồng đang có yêu cầu trả kho / chuyển khoang chưa xong → 409.")
+    @PostMapping("/api/staff/support-requests/{id}/transfer")
+    public ResponseEntity<ApiEnvelope<SupportView>> requestTransfer(@PathVariable Long id,
+                                                                    @Valid @RequestBody TransferRequestBody body) {
+        return ResponseEntity.ok(ApiEnvelope.ok("Đã đề xuất chuyển khoang",
+                transferService.request(id, body.reason())));
+    }
+
+    @Operation(summary = "Khoang trống để chuyển (FM)",
+            description = "Khoang `Available` cùng cơ sở; `sameType` = cùng loại (cùng giá), `allowed` = được chọn — "
+                    + "còn khoang cùng loại thì chỉ cùng loại, hết mới cho loại diện tích ≥ khoang cũ.")
+    @GetMapping("/api/fm/support-requests/{id}/transfer/candidates")
+    public ResponseEntity<ApiEnvelope<List<TransferCandidate>>> transferCandidates(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiEnvelope.ok("Khoang trống", transferService.candidates(id)));
+    }
+
+    @Operation(summary = "FM điều khoang cho chuyển khoang",
+            description = "Khoang mới `Reserved`; điều lại thì nhả khoang trước. Khoang không hợp lệ → 400 / 409.")
+    @PostMapping("/api/fm/support-requests/{id}/transfer/allocate")
+    public ResponseEntity<ApiEnvelope<SupportView>> allocateTransfer(@PathVariable Long id,
+                                                                     @Valid @RequestBody AllocateBody body) {
+        return ResponseEntity.ok(ApiEnvelope.ok("Đã điều khoang", transferService.allocate(id, body.unitId())));
+    }
+
+    @Operation(summary = "FM huỷ chuyển khoang", description = "Nhả khoang đang giữ, yêu cầu về `Assigned`.")
+    @PostMapping("/api/fm/support-requests/{id}/transfer/cancel")
+    public ResponseEntity<ApiEnvelope<SupportView>> cancelTransfer(@PathVariable Long id,
+                                                                   @Valid @RequestBody CancelTransferBody body) {
+        return ResponseEntity.ok(ApiEnvelope.ok("Đã huỷ chuyển khoang", transferService.cancel(id, body.reason())));
+    }
+
+    @Operation(summary = "Hoàn tất chuyển khoang (FS được giao / FM)",
+            description = "Khoang mới `Rented`, khoang cũ `Maintenance`, hợp đồng đổi khoang (giá giữ nguyên), "
+                    + "chìa / mã cũ thu hồi và cấp lại; `keyQuantity` bắt buộc khi hợp đồng đang dùng chìa cơ. "
+                    + "`accessCode` = mã khoá số mới (chỉ trả một lần).")
+    @PostMapping("/api/staff/support-requests/{id}/transfer/complete")
+    public ResponseEntity<ApiEnvelope<TransferCompletion>> completeTransfer(@PathVariable Long id,
+                                                                            @Valid @RequestBody CompleteBody body) {
+        return ResponseEntity.ok(ApiEnvelope.ok("Đã chuyển khoang", transferService.complete(id,
+                body.keyQuantity())));
+    }
+
     private Long me() {
         return currentAccount.getCurrentAccountId();
     }
@@ -104,5 +155,17 @@ public class SupportController {
 
     public record ResolveBody(@NotBlank @Size(max = 2000) String resolution, Integer newKeyQuantity,
                               BigDecimal feeAmount) {
+    }
+
+    public record TransferRequestBody(@NotBlank @Size(max = 1000) String reason) {
+    }
+
+    public record AllocateBody(@NotNull Long unitId) {
+    }
+
+    public record CancelTransferBody(@NotBlank @Size(max = 500) String reason) {
+    }
+
+    public record CompleteBody(Integer keyQuantity) {
     }
 }

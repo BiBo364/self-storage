@@ -306,6 +306,23 @@ export function confirmCheckout(returnRequestId: number): Promise<CheckoutView> 
   });
 }
 
+/** `SupportService.TransferView` — lần chuyển khoang gần nhất của yêu cầu hỗ trợ (khoang hư). */
+export type SupportTransfer = {
+  id: number;
+  status: "Requested" | "Allocated" | "Completed" | "Canceled";
+  fromUnitId: number;
+  fromUnitCode: string | null;
+  toUnitId: number | null;
+  toUnitCode: string | null;
+  toUnitTypeName: string | null;
+  reason: string;
+  cancelReason: string | null;
+  keyQuantity: number | null;
+  createdAt: string;
+  allocatedAt: string | null;
+  completedAt: string | null;
+};
+
 /** `SupportService.SupportView` */
 export type SupportView = {
   id: number;
@@ -329,6 +346,7 @@ export type SupportView = {
   createdAt: string | null;
   assignedAt: string | null;
   resolvedAt: string | null;
+  transfer: SupportTransfer | null;
 };
 
 export type SupportResolution = {
@@ -345,5 +363,26 @@ export function resolveSupportRequest(id: number, body: SupportResolution): Prom
   return authed<SupportView>(`/api/staff/support-requests/${id}/resolve`, {
     method: "POST",
     body,
+  });
+}
+
+/** Khoang hư không sửa ngay được → đề xuất chuyển khoang (FM điều khoang trống). */
+export function requestUnitTransfer(id: number, reason: string): Promise<SupportView> {
+  return authed<SupportView>(`/api/staff/support-requests/${id}/transfer`, {
+    method: "POST",
+    body: { reason },
+  });
+}
+
+/** `UnitTransferService.TransferCompletion` — `accessCode` = mã khoá số mới, chỉ trả một lần. */
+export type TransferCompletion = { request: SupportView; accessCode: string | null };
+
+export function completeUnitTransfer(
+  id: number,
+  keyQuantity: number | undefined,
+): Promise<TransferCompletion> {
+  return authed<TransferCompletion>(`/api/staff/support-requests/${id}/transfer/complete`, {
+    method: "POST",
+    body: { keyQuantity },
   });
 }

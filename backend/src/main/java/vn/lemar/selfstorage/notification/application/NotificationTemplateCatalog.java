@@ -235,6 +235,25 @@ public class NotificationTemplateCatalog {
         put(NotificationType.SUPPORT_RESOLVED, NotificationRecipient.CUSTOMER,
                 "Yêu cầu hỗ trợ đã được xử lý",
                 "Yêu cầu hỗ trợ #{{requestId}} đã xử lý: {{resolution}}{{feeNote}}");
+        put(NotificationType.UNIT_TRANSFER_REQUESTED, NotificationRecipient.FM,
+                "Cần điều khoang thay thế",
+                "FS {{staffName}} đề xuất chuyển khách khỏi khoang {{fromUnitCode}} (yêu cầu hỗ trợ #{{requestId}}): "
+                        + "{{reason}}. Chọn khoang trống để chuyển.");
+        put(NotificationType.UNIT_TRANSFER_ALLOCATED, NotificationRecipient.FS,
+                "Đã có khoang để chuyển cho khách",
+                "Yêu cầu hỗ trợ #{{requestId}}: FM điều khoang {{toUnitCode}} thay khoang {{fromUnitCode}}. Chuyển đồ "
+                        + "cho khách rồi bấm hoàn tất chuyển khoang.");
+        put(NotificationType.UNIT_TRANSFER_ALLOCATED, NotificationRecipient.CUSTOMER,
+                "Bạn sẽ được chuyển sang khoang khác",
+                "Khoang {{fromUnitCode}} chưa sửa ngay được. Cơ sở dành cho bạn khoang {{toUnitCode}} — giá thuê và "
+                        + "hợp đồng giữ nguyên; nhân viên sẽ liên hệ để chuyển đồ.");
+        put(NotificationType.UNIT_TRANSFER_COMPLETED, NotificationRecipient.CUSTOMER,
+                "Đã chuyển sang khoang mới",
+                "Đồ của bạn đã chuyển từ khoang {{fromUnitCode}} sang khoang {{toUnitCode}} (hợp đồng "
+                        + "{{contractCode}}, giá thuê giữ nguyên).{{accessNote}}");
+        put(NotificationType.UNIT_TRANSFER_CANCELED, NotificationRecipient.FS,
+                "Huỷ chuyển khoang",
+                "FM huỷ chuyển khoang của yêu cầu hỗ trợ #{{requestId}}: {{reason}}. Tiếp tục xử lý yêu cầu.");
         put(NotificationType.CHECKOUT_COMPLETED, NotificationRecipient.CUSTOMER,
                 "Trả kho hoàn tất",
                 "Hợp đồng {{contractCode}} đã kết thúc. Tiền cọc hoàn lại: {{refundAmount}}đ (cơ sở xử lý thủ công).");

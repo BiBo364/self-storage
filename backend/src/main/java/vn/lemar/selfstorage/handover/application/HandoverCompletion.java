@@ -133,6 +133,20 @@ class HandoverCompletion {
         return plainCode;
     }
 
+    /** Cấp bộ chìa cơ mới trên khoang hiện tại của hợp đồng (caller đã thu hồi bộ cũ). */
+    void issuePhysicalKey(RentalContract contract, int quantity, Long actorAccountId) {
+        issue(UnitAccessKey.physicalKey(contract.getUnitId(), contract.getId(), quantity, Instant.now()),
+                actorAccountId);
+    }
+
+    /** Cấp mã khóa số mới trên khoang hiện tại của hợp đồng (caller đã thu hồi mã cũ); trả mã rõ đúng một lần. */
+    String issueCode(RentalContract contract, Long actorAccountId) {
+        String plainCode = newCode();
+        issue(UnitAccessKey.accessCode(contract.getUnitId(), contract.getId(), passwordEncoder.encode(plainCode),
+                Instant.now()), actorAccountId);
+        return plainCode;
+    }
+
     private void issue(UnitAccessKey key, Long actorAccountId) {
         accessKeys.save(key);
         Map<String, Object> newValue = new HashMap<>();

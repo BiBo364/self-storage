@@ -160,6 +160,15 @@ export function SupportPage({ navigate }: { navigate: Navigate }) {
                       ))}
                     </div>
                   )}
+                  {item.transfer && item.transfer.status !== "Canceled" && (
+                    <div className="mt-3 bg-surface-subtle p-3 text-small text-ink">
+                      {item.transfer.status === "Completed"
+                        ? `Đã chuyển sang khoang ${item.transfer.toUnitCode ?? ""} (thay khoang ${item.transfer.fromUnitCode ?? ""}). Hợp đồng và giá thuê giữ nguyên.`
+                        : item.transfer.status === "Allocated"
+                          ? `Khoang ${item.transfer.fromUnitCode ?? ""} chưa sửa ngay được — cơ sở dành cho bạn khoang ${item.transfer.toUnitCode ?? ""}. Nhân viên sẽ liên hệ để chuyển đồ; giá thuê giữ nguyên.`
+                          : `Khoang ${item.transfer.fromUnitCode ?? ""} chưa sửa ngay được — cơ sở đang tìm khoang thay thế cùng loại cho bạn.`}
+                    </div>
+                  )}
                   {item.assignedStaffName && (
                     <p className="mt-3 text-label text-muted">
                       Nhân viên phụ trách: {item.assignedStaffName}
@@ -273,8 +282,10 @@ function CreateForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const contracts = rentals.data ?? [];
-  const needsContract = category === "LOST_KEY";
+  const isUnitIssue = category === "UNIT_ISSUE";
+  const needsContract = category === "LOST_KEY" || isUnitIssue;
   const missingTarget = needsContract ? !contractId : !contractId && !facilityId;
+  const missingPhoto = isUnitIssue && photos.length === 0;
 
   async function addPhotos(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -434,8 +445,14 @@ function CreateForm({
 
       <div className="mt-4">
         <span className={FIELD_LABEL}>
-          Ảnh đính kèm ({photos.length}/{MAX_PHOTOS})
+          Ảnh đính kèm{isUnitIssue ? " *" : ""} ({photos.length}/{MAX_PHOTOS})
         </span>
+        {isUnitIssue && (
+          <p className="m-0 mb-2 text-label text-muted">
+            Chụp rõ chỗ hư hỏng của khoang (ít nhất 1 ảnh) — FM xem ảnh trước khi giao nhân viên xử
+            lý.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {photos.map((url) => (
             <div key={url} className="relative">
@@ -472,7 +489,14 @@ function CreateForm({
       </div>
 
       {needsContract && !contractId && (
-        <DemoNotice tone="info">Yêu cầu mất chìa khoá cần chọn hợp đồng liên quan.</DemoNotice>
+        <DemoNotice tone="info">
+          {isUnitIssue
+            ? "Báo khoang có vấn đề cần chọn hợp đồng của khoang đó."
+            : "Yêu cầu mất chìa khoá cần chọn hợp đồng liên quan."}
+        </DemoNotice>
+      )}
+      {missingPhoto && (
+        <DemoNotice tone="info">Thêm ít nhất 1 ảnh chụp tình trạng khoang.</DemoNotice>
       )}
       {submitError && <DemoNotice tone="error">{submitError}</DemoNotice>}
 
@@ -483,7 +507,9 @@ function CreateForm({
         <Button
           type="submit"
           pending={submitting}
-          disabled={uploading || missingTarget || !title.trim() || !description.trim()}
+          disabled={
+            uploading || missingTarget || missingPhoto || !title.trim() || !description.trim()
+          }
         >
           Gửi yêu cầu
         </Button>

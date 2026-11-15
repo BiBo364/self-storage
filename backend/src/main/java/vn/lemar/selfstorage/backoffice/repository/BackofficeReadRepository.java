@@ -172,7 +172,8 @@ public class BackofficeReadRepository {
                 count("select count(*) from rental_contracts c join storage_units u on u.id = c.unit_id "
                         + "where c.status = 'Active' and c.end_date < current_date" + fu),
                 count("select count(*) from return_requests r where r.status in ('Pending', 'Assigned')" + fr),
-                count("select count(*) from support_requests s where s.status in ('Open', 'Assigned')" + fs),
+                count("select count(*) from support_requests s where s.status in ('Open', 'Assigned', "
+                        + "'Transferring')" + fs),
                 unpaid, depositHeld(facilityId));
     }
 

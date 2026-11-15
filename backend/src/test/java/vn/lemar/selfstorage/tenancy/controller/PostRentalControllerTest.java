@@ -152,7 +152,7 @@ class PostRentalControllerTest {
     private static RentalView rental() {
         return new RentalView(7L, "HD-1", 4L, 1L, "A-01", 1L, "Active", new BigDecimal("100000"),
                 new BigDecimal("500000"), 3, LocalDate.now(), LocalDate.now().plusMonths(3), 90, false, List.of(),
-                List.of(), null, true, true);
+                List.of(), null, true, true, List.of());
     }
 
     private static ReturnRequestView returnView(String status) {

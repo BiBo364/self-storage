@@ -8,9 +8,11 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.lemar.selfstorage.audit.application.AuditEntry;
@@ -78,13 +80,14 @@ public class TenancyService {
     private final CurrentAccountProvider currentAccount;
     private final AuditRecorder auditRecorder;
     private final StaffAvailability staffAvailability;
+    private final JdbcTemplate jdbc;
 
     TenancyService(RentalContractService contracts, ContractInvoiceService invoices, HandoverOrderService orders,
                    ReturnAppointmentService returnAppointments, OrderNotificationService orderNotifications,
                    NotificationService notificationService, AccountQueryService accountQuery,
                    ReturnRequestRepository returnRequests, FacilityStaffQuery staffQuery, PricingQuery pricingQuery,
                    Access access, CurrentAccountProvider currentAccount, AuditRecorder auditRecorder,
-                   StaffAvailability staffAvailability) {
+                   StaffAvailability staffAvailability, JdbcTemplate jdbc) {
         this.contracts = contracts;
         this.invoices = invoices;
         this.orders = orders;
@@ -99,6 +102,7 @@ public class TenancyService {
         this.currentAccount = currentAccount;
         this.auditRecorder = auditRecorder;
         this.staffAvailability = staffAvailability;
+        this.jdbc = jdbc;
     }
 
     /** Kho đang thuê của khách. */
@@ -106,7 +110,15 @@ public class TenancyService {
                              Long facilityId, String status, BigDecimal monthlyPrice, BigDecimal depositAmount,
                              int period, LocalDate startDate, LocalDate endDate, long daysLeft, boolean overdue,
                              List<ContractBill> invoices, List<RentalContractService.AccessKeySnapshot> accessKeys,
-                             ReturnRequestView returnRequest, boolean canExtend, boolean canRequestReturn) {
+                             ReturnRequestView returnRequest, boolean canExtend, boolean canRequestReturn,
+                             List<UnitMoveNote> unitMoves) {
+    }
+
+    /**
+     * Flow 7 — hợp đồng đã chuyển khoang giữa kỳ (khoang hư): bản hợp đồng đã ký vẫn ghi khoang cũ, dòng này cho biết
+     * khoang hiện tại thay khoang nào, từ lúc nào.
+     */
+    public record UnitMoveNote(String fromUnitCode, String toUnitCode, Instant movedAt) {
     }
 
     /**
@@ -416,7 +428,21 @@ public class TenancyService {
                 c.monthlyPrice(), c.depositAmount(), c.period(), c.startDate(), c.endDate(), daysLeft,
                 c.active() && daysLeft < 0,
                 bills, contracts.accessKeys(c.id()), open, c.active() && open == null && !extensionPending,
-                c.active() && open == null && !extensionPending);
+                c.active() && open == null && !extensionPending, unitMoves(c.id()));
+    }
+
+    private List<UnitMoveNote> unitMoves(Long contractId) {
+        return jdbc.query("""
+                select f.code, t.code, x.completed_at from unit_transfers x
+                join storage_units f on f.id = x.from_unit_id
+                join storage_units t on t.id = x.to_unit_id
+                where x.contract_id = ? and x.status = 'Completed' order by x.completed_at""",
+                (rs, i) -> new UnitMoveNote(rs.getString(1), rs.getString(2), toInstant(rs.getTimestamp(3))),
+                contractId);
+    }
+
+    private static Instant toInstant(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
     }
 
     private ReturnRequestView returnView(ReturnRequest r) {

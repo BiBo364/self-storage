@@ -20,5 +20,5 @@ public interface SupportRequestRepository extends JpaRepository<SupportRequest, 
 
     List<SupportRequest> findByFacilityIdAndStatusInOrderByIdDesc(Long facilityId, Collection<String> statuses);
 
-    List<SupportRequest> findByAssignedStaffIdAndStatusOrderByIdAsc(Long staffId, String status);
+    List<SupportRequest> findByAssignedStaffIdAndStatusInOrderByIdAsc(Long staffId, Collection<String> statuses);
 }

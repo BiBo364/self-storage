@@ -31,13 +31,16 @@ public class RentalContractService {
     private final UnitAccessKeyRepository accessKeys;
     private final HandoverReadRepository readRepository;
     private final AuditRecorder auditRecorder;
+    private final HandoverCompletion completion;
 
     RentalContractService(RentalContractRepository contracts, UnitAccessKeyRepository accessKeys,
-                          HandoverReadRepository readRepository, AuditRecorder auditRecorder) {
+                          HandoverReadRepository readRepository, AuditRecorder auditRecorder,
+                          HandoverCompletion completion) {
         this.contracts = contracts;
         this.accessKeys = accessKeys;
         this.readRepository = readRepository;
         this.auditRecorder = auditRecorder;
+        this.completion = completion;
     }
 
     /** Ảnh chụp hợp đồng. */
@@ -56,6 +59,10 @@ public class RentalContractService {
 
     /** Kết quả thu hồi quyền truy cập khi trả kho. */
     public record RevokeResult(int physicalKeysIssued, int lostKeys) {
+    }
+
+    /** Kết quả chuyển khoang: số chìa cơ cấp lại (null = không dùng chìa cơ), mã khóa số rõ (một lần) nếu cấp lại. */
+    public record UnitMove(Long fromUnitId, Long toUnitId, Integer keyQuantity, String accessCode) {
     }
 
     @Transactional(readOnly = true)
@@ -183,6 +190,50 @@ public class RentalContractService {
         audit(AuditAction.ACCESS_KEY_ISSUED, AuditEntityType.UNIT_ACCESS_KEY, key.getId(), null,
                 Map.of("accessType", key.getAccessType(), "quantity", quantity, "contractId", contractId),
                 actorAccountId);
+    }
+
+    /**
+     * Flow 7 — khoang hư giữa kỳ thuê: chuyển hợp đồng {@code Active} sang {@code newUnitId} (giá, cọc, kỳ hạn giữ
+     * nguyên). Quyền truy cập đang {@code Active} thu hồi ({@code Revoked}, lý do "Chuyển khoang" — không tính mất
+     * chìa) rồi cấp lại trên khoang mới theo đúng loại đang dùng: chìa cơ {@code keyQuantity} (bắt buộc khi đang có
+     * chìa cơ); mã khóa số mới khi đang có mã (hợp đồng đang tạm khoá do quá hạn thì không có mã để cấp lại).
+     * Trạng thái khoang do caller đổi qua {@code StorageUnitService}. Audit {@code ACCESS_KEY_REVOKED},
+     * {@code ACCESS_KEY_ISSUED},
+     * {@code CONTRACT_UNIT_CHANGED}.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public UnitMove moveToUnit(Long contractId, Long newUnitId, Integer keyQuantity, Long actorAccountId) {
+        RentalContract contract = contracts.findByIdForUpdate(contractId).orElseThrow();
+        if (contract.getStatus() != RentalContractStatus.ACTIVE) {
+            throw new IllegalStateException("Hợp đồng " + contractId + " không còn hiệu lực");
+        }
+        List<UnitAccessKey> active = accessKeys.findActiveByContractForUpdate(contractId);
+        boolean hadKey = active.stream().anyMatch(k -> UnitAccessKey.PHYSICAL_KEY.equals(k.getAccessType()));
+        boolean hadCode = active.stream().anyMatch(k -> UnitAccessKey.ACCESS_CODE.equals(k.getAccessType()));
+        if (hadKey && (keyQuantity == null || keyQuantity < 1 || keyQuantity > 10)) {
+            throw new IllegalArgumentException("Nhập số chìa giao cho khoang mới (1–10)");
+        }
+        Long fromUnitId = contract.getUnitId();
+        contract.moveToUnit(newUnitId);
+        Instant now = Instant.now();
+        for (UnitAccessKey key : active) {
+            key.revoke(now);
+            audit(AuditAction.ACCESS_KEY_REVOKED, AuditEntityType.UNIT_ACCESS_KEY, key.getId(),
+                    Map.of("status", UnitAccessKey.ACTIVE),
+                    Map.of("status", key.getStatus(), "reason", "Chuyển khoang"), actorAccountId);
+        }
+        // Index một quyền Active / loại / hợp đồng: ghi thu hồi xuống DB trước khi cấp bộ mới.
+        accessKeys.flush();
+        contracts.flush();
+        if (hadKey) {
+            completion.issuePhysicalKey(contract, keyQuantity, actorAccountId);
+        }
+        String code = hadCode ? completion.issueCode(contract, actorAccountId) : null;
+        audit(AuditAction.CONTRACT_UNIT_CHANGED, AuditEntityType.RENTAL_CONTRACT, contractId,
+                Map.of("unitId", fromUnitId),
+                Map.of("unitId", newUnitId, "keyQuantity", hadKey ? keyQuantity : 0, "codeReissued", hadCode),
+                actorAccountId);
+        return new UnitMove(fromUnitId, newUnitId, hadKey ? keyQuantity : null, code);
     }
 
     /** Mọi hợp đồng đang thuê ({@code Active}) — đầu vào cron thu tiền thuê định kỳ. */

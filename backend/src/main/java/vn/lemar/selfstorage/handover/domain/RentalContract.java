@@ -184,6 +184,18 @@ public class RentalContract {
         this.documentHtml = html;
     }
 
+    /**
+     * Flow 7 — khoang hư giữa kỳ thuê: chuyển hợp đồng đang thuê sang khoang khác; giá, cọc, kỳ hạn giữ nguyên. Bản
+     * hợp đồng đã chốt ({@code document_html}) không đổi — lịch sử chuyển nằm ở {@code unit_transfers}.
+     */
+    public void moveToUnit(Long newUnitId) {
+        requireStatus(RentalContractStatus.ACTIVE);
+        if (newUnitId == null || newUnitId.equals(unitId)) {
+            throw new IllegalArgumentException("Khoang mới phải khác khoang hiện tại");
+        }
+        this.unitId = newUnitId;
+    }
+
     /** Spec 2.4: bàn giao hoàn tất — {@code Signed -> Active}. */
     public void activate() {
         requireStatus(RentalContractStatus.SIGNED);

@@ -194,6 +194,16 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
           <span className="text-label text-muted">
             Khoang {contract.unitCode} · Hợp đồng {contract.contractCode}
           </span>
+          {(contract.unitMoves ?? []).map((move) => (
+            <span
+              key={`${move.fromUnitCode}-${move.movedAt}`}
+              className="block text-label text-muted"
+            >
+              Đã chuyển từ khoang {move.fromUnitCode} sang {move.toUnitCode}
+              {move.movedAt ? ` ngày ${formatDateTime(move.movedAt)}` : ""} (khoang cũ hư) — giá
+              thuê giữ nguyên; bản hợp đồng đã ký vẫn ghi khoang cũ.
+            </span>
+          ))}
           <h1 className="mt-1 text-title text-ink">{facility?.name ?? "Hợp đồng thuê kho"}</h1>
           {facility?.address && (
             <p className="mt-1.5 flex items-center gap-1.5 text-small text-muted">

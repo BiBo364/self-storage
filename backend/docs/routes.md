@@ -77,6 +77,8 @@ hữu route (xem quy ước ở cuối trang).
 | POST | `/api/fm/support-requests/{id}/resolve` | Bearer + role `FM`; `appointment.assign` + facility scope | FM ghi kết quả xử lý | [support/requests.md](support/requests.md) |
 | GET | `/api/staff/support-requests` | Bearer + role `FS` | Yêu cầu hỗ trợ được giao | [support/requests.md](support/requests.md) |
 | POST | `/api/staff/support-requests/{id}/resolve` | Bearer + role `FS`; `unit_access_key.issue` + đúng FS | Xử lý (thay chìa, thu phí) | [support/requests.md](support/requests.md) |
+| POST | `/api/staff/support-requests/{id}/transfer`, `…/transfer/complete` | Bearer + role `FS`; `unit_access_key.issue` + đúng FS | Đề xuất / hoàn tất chuyển khoang (khoang hư) | [support/requests.md](support/requests.md#chuyển-khoang-khoang-hư-giữa-kỳ-thuê) |
+| GET / POST | `/api/fm/support-requests/{id}/transfer/candidates`, `…/allocate`, `…/cancel` | Bearer + role `FM`; `appointment.assign` + facility scope | Khoang trống để chuyển, điều khoang, huỷ chuyển | [support/requests.md](support/requests.md#chuyển-khoang-khoang-hư-giữa-kỳ-thuê) |
 | GET | `/api/fm/contracts`, `/api/fm/reports` | Bearer + role `FM`; `facility.access` + facility scope | Hợp đồng / báo cáo của cơ sở | [backoffice/overview.md](backoffice/overview.md) |
 | POST / PATCH | `/api/fm/storage-units`, `/api/fm/storage-units/{id}`, `/api/fm/storage-units/{id}/maintenance` | Bearer + role `FM`; `facility.access` + facility scope | Thêm / sửa khoang, bảo trì tay | [backoffice/overview.md](backoffice/overview.md) |
 | PUT | `/api/fm/storage-units/{id}/location` | Bearer + role `FM`; `facility.access` + facility scope | Đặt / đổi / gỡ vị trí khoang trên sơ đồ | [backoffice/overview.md](backoffice/overview.md#sơ-đồ-cơ-sở) |

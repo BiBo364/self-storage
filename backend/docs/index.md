@@ -248,6 +248,11 @@ Schema Flow 1.3 đi bằng migration V8–V11:
   [backoffice/overview.md › Yêu cầu tạo tài khoản](backoffice/overview.md#yêu-cầu-tạo-tài-khoản-bom--admin).
 - V36 hạ policy `fee.lost_key` (phí mỗi chìa cơ mất / không trả lại) từ 200000 xuống 100000 — chỉ khi DB còn giữ
   giá seed V25; giá BOM đã chỉnh giữ nguyên.
+- V37 (Flow 7 — khoang hư): thêm `Transferring` vào CHECK `support_requests.status`, bảng `unit_transfers` (chuyển
+  khoang giữa kỳ thuê gắn yêu cầu hỗ trợ; unique một lần chuyển đang mở / hợp đồng), dựng lại hai CHECK của
+  `audit_logs` (thêm `UNIT_TRANSFER_*`, `CONTRACT_UNIT_CHANGED`, `UnitTransfer`). Notification type
+  `UNIT_TRANSFER_REQUESTED`, `UNIT_TRANSFER_ALLOCATED`, `UNIT_TRANSFER_COMPLETED`, `UNIT_TRANSFER_CANCELED` chỉ thêm ở
+  code. Xem [support/requests.md › Chuyển khoang](support/requests.md#chuyển-khoang-khoang-hư-giữa-kỳ-thuê).
 - Policy `appointment.checkin_reschedule_enabled` không được seed: khách không đổi được lịch check-in `Pending`
   ([booking/appointment-booking.md](booking/appointment-booking.md)).
 
