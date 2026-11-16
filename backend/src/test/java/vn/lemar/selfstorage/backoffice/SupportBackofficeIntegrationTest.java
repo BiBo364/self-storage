@@ -236,6 +236,9 @@ class SupportBackofficeIntegrationTest {
         SupportView requested = transfers.request(created.id(), "Trần dột, cần thợ vài ngày");
         assertThat(requested.status()).isEqualTo("Transferring");
         assertThat(requested.transfer().status()).isEqualTo("Requested");
+        // Số chìa khách đang giữ (bộ chìa Active do seed: 2 chìa cơ) + có mã khoá số → FS biết giao bao nhiêu.
+        assertThat(requested.transfer().currentKeyQuantity()).isEqualTo(2);
+        assertThat(requested.transfer().hasAccessCode()).isTrue();
         assertThat(support.staffRequests()).extracting(SupportView::id).contains(created.id());
         assertThat(notifications(FM, "UNIT_TRANSFER_REQUESTED")).isPositive();
         assertThatThrownBy(() -> transfers.complete(created.id(), 2)).isInstanceOf(TenancyException.class)
@@ -256,6 +259,7 @@ class SupportBackofficeIntegrationTest {
         SupportView allocated = transfers.allocate(created.id(), sameType);
         assertThat(allocated.transfer().status()).isEqualTo("Allocated");
         assertThat(allocated.transfer().toUnitId()).isEqualTo(sameType);
+        assertThat(allocated.transfer().currentKeyQuantity()).isEqualTo(2);
         assertThat(unitStatus(sameType)).isEqualTo("Reserved");
         assertThat(notifications(CUSTOMER, "UNIT_TRANSFER_ALLOCATED")).isPositive();
 
@@ -266,6 +270,8 @@ class SupportBackofficeIntegrationTest {
         assertThat(done.accessCode()).matches("\\d{6}");
         assertThat(done.request().status()).isEqualTo("Resolved");
         assertThat(done.request().transfer().status()).isEqualTo("Completed");
+        assertThat(done.request().transfer().keyQuantity()).isEqualTo(3);
+        assertThat(done.request().transfer().currentKeyQuantity()).isEqualTo(3);
         assertThat(done.request().unitCode()).isEqualTo(done.request().transfer().toUnitCode());
         assertThat(jdbc.queryForObject("select unit_id from rental_contracts where id = ?", Long.class, contractId))
                 .isEqualTo(sameType);
@@ -313,7 +319,11 @@ class SupportBackofficeIntegrationTest {
         support.assign(created.id(), staff);
 
         loginAs(fsEmail);
-        transfers.request(created.id(), "Sàn nứt, phải đổ lại");
+        jdbc.update("delete from unit_access_keys where contract_id = ?", contractId);
+        SupportView requested = transfers.request(created.id(), "Sàn nứt, phải đổ lại");
+        // Hợp đồng không còn chìa cơ / mã số → không có số chìa phải giao.
+        assertThat(requested.transfer().currentKeyQuantity()).isNull();
+        assertThat(requested.transfer().hasAccessCode()).isFalse();
         assertThatThrownBy(() -> transfers.request(created.id(), "Lần hai")).isInstanceOf(TenancyException.class);
 
         loginAs(fmEmail);

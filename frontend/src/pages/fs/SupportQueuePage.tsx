@@ -190,7 +190,10 @@ function ResolvePanel({
   const [feeAmount, setFeeAmount] = useState("");
   const [transferMode, setTransferMode] = useState(false);
   const [transferReason, setTransferReason] = useState("");
-  const [transferKeys, setTransferKeys] = useState("");
+  // Điền sẵn số chìa cơ khách đang giữ: thu lại bao nhiêu thì giao bấy nhiêu ở khoang mới (FS vẫn sửa được).
+  const [transferKeys, setTransferKeys] = useState(() =>
+    request.transfer?.currentKeyQuantity ? String(request.transfer.currentKeyQuantity) : "",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const transfer = request.status === "Transferring" ? request.transfer : null;
@@ -368,10 +371,24 @@ function ResolvePanel({
               : `Đã đề xuất chuyển khoang khỏi ${transfer.fromUnitCode ?? ""}. Chờ FM điều khoang trống.`}
           </DemoNotice>
           <p className="m-0 text-small text-muted">Lý do: {transfer.reason}</p>
-          {transfer.status === "Allocated" && (
+          <p className="m-0 text-small text-ink">
+            {transfer.currentKeyQuantity ? (
+              <>
+                Khách đang giữ <strong>{transfer.currentKeyQuantity} chìa cơ</strong> của khoang{" "}
+                {transfer.fromUnitCode ?? ""} — thu lại đủ {transfer.currentKeyQuantity} chìa cũ,
+                giao {transfer.currentKeyQuantity} chìa của khoang mới
+                {transfer.toUnitCode ? ` ${transfer.toUnitCode}` : ""}.
+              </>
+            ) : (
+              "Khách không dùng chìa cơ — không cần giao chìa."
+            )}
+            {transfer.hasAccessCode &&
+              " Mã khoá số mới hiện ra sau khi bấm hoàn tất — đưa cho khách."}
+          </p>
+          {transfer.status === "Allocated" && transfer.currentKeyQuantity !== null && (
             <div>
               <label className={FIELD_LABEL} htmlFor="transfer-keys">
-                Số chìa giao cho khoang mới (bắt buộc nếu khách đang dùng chìa cơ)
+                Số chìa giao cho khoang mới <span className="text-danger">*</span>
               </label>
               <input
                 id="transfer-keys"

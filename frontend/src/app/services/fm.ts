@@ -443,7 +443,12 @@ export type SupportTransfer = {
   toUnitTypeName: string | null;
   reason: string;
   cancelReason: string | null;
+  /** Số chìa đã giao ở khoang mới (có khi Completed). */
   keyQuantity: number | null;
+  /** Số chìa cơ khách đang giữ (bộ chìa Active của hợp đồng); null = không dùng chìa cơ. */
+  currentKeyQuantity: number | null;
+  /** Hợp đồng đang có mã khoá số — mã mới được cấp khi hoàn tất chuyển khoang. */
+  hasAccessCode: boolean;
   createdAt: string;
   allocatedAt: string | null;
   completedAt: string | null;

@@ -433,6 +433,12 @@ function TransferSection({
         FS đề xuất chuyển khách khỏi khoang <strong>{transfer.fromUnitCode}</strong>:{" "}
         {transfer.reason}
       </p>
+      <p className="mt-1 text-small text-muted">
+        {transfer.currentKeyQuantity
+          ? `Khách đang giữ ${transfer.currentKeyQuantity} chìa cơ — khoang mới cần đủ ${transfer.currentKeyQuantity} chìa để giao.`
+          : "Khách không dùng chìa cơ."}
+        {transfer.hasAccessCode && " Có mã khoá số — cấp mã mới khi FS hoàn tất."}
+      </p>
       {transfer.status === "Allocated" && (
         <DemoNotice tone="info">
           Đã điều khoang {transfer.toUnitCode}

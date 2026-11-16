@@ -18,6 +18,7 @@ import vn.lemar.selfstorage.booking.application.ContractInvoiceService.ContractB
 import vn.lemar.selfstorage.booking.application.ContractInvoiceService;
 import vn.lemar.selfstorage.booking.application.HandoverOrderService;
 import vn.lemar.selfstorage.facility.application.FacilityAccess;
+import vn.lemar.selfstorage.handover.application.RentalContractService.AccessKeySnapshot;
 import vn.lemar.selfstorage.handover.application.RentalContractService.ContractSnapshot;
 import vn.lemar.selfstorage.handover.application.RentalContractService;
 import vn.lemar.selfstorage.identity.application.Access;
@@ -61,6 +62,9 @@ public class SupportService {
     static final String CATEGORY_LOST_KEY = "LOST_KEY";
     static final String CATEGORY_UNIT_ISSUE = "UNIT_ISSUE";
     static final String MSG_TRANSFERRING = "Yêu cầu đang chuyển khoang — hoàn tất hoặc huỷ chuyển khoang trước";
+    private static final String KEY_PHYSICAL = "PhysicalKey";
+    private static final String KEY_CODE = "AccessCode";
+    private static final String KEY_ACTIVE = "Active";
 
     private final SupportRequestRepository requests;
     private final RentalContractService contracts;
@@ -114,10 +118,16 @@ public class SupportService {
                               TransferView transfer) {
     }
 
-    /** Lần chuyển khoang gần nhất của yêu cầu (null nếu chưa từng đề xuất). */
+    /**
+     * Lần chuyển khoang gần nhất của yêu cầu (null nếu chưa từng đề xuất). {@code keyQuantity}: số chìa đã giao ở
+     * khoang mới (có khi {@code Completed}). {@code currentKeyQuantity}: số chìa cơ khách đang giữ theo bộ chìa
+     * {@code Active} của hợp đồng (null = không dùng chìa cơ) — FS thu lại và giao đúng số đó ở khoang mới;
+     * {@code hasAccessCode}: hợp đồng đang có mã khoá số (cấp lại khi hoàn tất).
+     */
     public record TransferView(Long id, String status, Long fromUnitId, String fromUnitCode, Long toUnitId,
                                String toUnitCode, String toUnitTypeName, String reason, String cancelReason,
-                               Integer keyQuantity, Instant createdAt, Instant allocatedAt, Instant completedAt) {
+                               Integer keyQuantity, Integer currentKeyQuantity, boolean hasAccessCode,
+                               Instant createdAt, Instant allocatedAt, Instant completedAt) {
     }
 
     /** Khách gửi yêu cầu. */
@@ -349,11 +359,16 @@ public class SupportService {
      * chìa mất = {@code quantity} của bộ đó. Không có bộ chìa đang dùng → 0 (không thu).
      */
     private BigDecimal lostKeyFee(Long contractId) {
-        int lost = contracts.accessKeys(contractId).stream()
-                .filter(k -> "PhysicalKey".equals(k.accessType()) && "Active".equals(k.status()))
+        int lost = heldPhysicalKeys(contracts.accessKeys(contractId));
+        return pricingQuery.decimalPolicy(POLICY_LOST_KEY).multiply(BigDecimal.valueOf(lost));
+    }
+
+    /** Tổng số chìa cơ trong các bộ chìa {@code Active} (0 = không dùng chìa cơ). */
+    private static int heldPhysicalKeys(List<AccessKeySnapshot> keys) {
+        return keys.stream()
+                .filter(k -> KEY_PHYSICAL.equals(k.accessType()) && KEY_ACTIVE.equals(k.status()))
                 .mapToInt(k -> k.quantity() == null ? 0 : k.quantity())
                 .sum();
-        return pricingQuery.decimalPolicy(POLICY_LOST_KEY).multiply(BigDecimal.valueOf(lost));
     }
 
     Long orderIdOf(SupportRequest request) {
@@ -409,9 +424,13 @@ public class SupportService {
                 left join storage_units u on u.id = ?
                 left join unit_types ut on ut.id = u.unit_type_id
                 where f.id = ?""", t.getToUnitId(), t.getFromUnitId());
+        List<AccessKeySnapshot> keys = contracts.accessKeys(t.getContractId());
+        int held = heldPhysicalKeys(keys);
+        boolean hasCode = keys.stream().anyMatch(k -> KEY_CODE.equals(k.accessType()) && KEY_ACTIVE.equals(k.status()));
         return new TransferView(t.getId(), t.getStatus(), t.getFromUnitId(), (String) row.get("from_code"),
                 t.getToUnitId(), (String) row.get("to_code"), (String) row.get("to_type"), t.getReason(),
-                t.getCancelReason(), t.getKeyQuantity(), t.getCreatedAt(), t.getAllocatedAt(), t.getCompletedAt());
+                t.getCancelReason(), t.getKeyQuantity(), held > 0 ? held : null, hasCode, t.getCreatedAt(),
+                t.getAllocatedAt(), t.getCompletedAt());
     }
 
     private void audit(AuditAction action, Long id, Object oldValue, Object newValue, String reason, Long actorId) {

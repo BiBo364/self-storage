@@ -58,7 +58,13 @@ ngay được thì chuyển khách sang khoang khác. **Hợp đồng giữ nguy
   Unique index `uq_unit_transfers_open_per_contract`: mỗi hợp đồng tối đa một lần chuyển đang mở.
 - Bản hợp đồng đã ký (`document_html`) không đổi, vẫn ghi khoang cũ. `GET /api/customer/rentals/{id}` trả
   `unitMoves` (khoang cũ → mới, thời điểm) để trang hợp đồng hiện "Đã chuyển từ khoang … sang …".
-- Response yêu cầu hỗ trợ có `transfer` = lần chuyển gần nhất (`status`, khoang cũ / mới, lý do, lý do huỷ, số chìa).
+- Response yêu cầu hỗ trợ có `transfer` = lần chuyển gần nhất (`status`, khoang cũ / mới, lý do, lý do huỷ,
+  `keyQuantity` = số chìa đã giao ở khoang mới khi `Completed`), kèm hai trường đọc từ bộ chìa của hợp đồng lúc trả
+  response:
+  - `currentKeyQuantity` — tổng `quantity` các bộ chìa cơ `Active` (khách đang giữ); `null` khi không dùng chìa cơ.
+    Màn FS hiện "Khách đang giữ N chìa cơ — thu lại N chìa cũ, giao N chìa của khoang mới" và điền sẵn N vào ô số
+    chìa (FS sửa được; server vẫn bắt buộc gửi `keyQuantity`). Không dùng chìa cơ thì màn FS ẩn ô số chìa.
+  - `hasAccessCode` — hợp đồng đang có mã khoá số `Active` (mã mới cấp khi hoàn tất).
 
 ## Route
 
