@@ -74,7 +74,8 @@ function LocationFields({
   const select =
     "min-h-[44px] w-full rounded-lg border border-rule-strong bg-surface px-3 text-body text-ink outline-0 focus:border-brand";
   return (
-    <div className="grid grid-cols-3 gap-3 max-[560px]:grid-cols-1">
+    // items-end: nhãn "Bên lối đi…" dài xuống 2 dòng vẫn giữ ba ô nhập thẳng hàng ở đáy.
+    <div className="grid grid-cols-3 items-end gap-3 max-[560px]:grid-cols-1">
       <div>
         <label className={FIELD_LABEL} htmlFor={`${idPrefix}-floor`}>
           Tầng
