@@ -13,7 +13,7 @@ const MAX_CHARS = 2000;
 const GREETING: ChatTurn = {
   role: "assistant",
   content:
-    "Xin chào! Mình là trợ lý tư vấn của Lemar Self Storage. Bạn muốn hỏi về cơ sở, loại khoang, giá thuê hay quy trình thuê kho?",
+    "Xin chào! Mình là trợ lý tư vấn của Kho Mộc. Bạn muốn hỏi về cơ sở, loại khoang, giá thuê hay quy trình thuê kho?",
 };
 
 function loadHistory(): ChatTurn[] {

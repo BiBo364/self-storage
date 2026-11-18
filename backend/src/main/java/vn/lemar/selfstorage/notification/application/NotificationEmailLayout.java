@@ -17,7 +17,7 @@ import org.springframework.web.util.HtmlUtils;
  */
 public final class NotificationEmailLayout {
 
-    private static final String BRAND = "LEMAR SELF STORAGE";
+    private static final String BRAND = "KHO MỘC";
     private static final int PREHEADER_MAX = 120;
     private static final String PREHEADER_TOKEN = "{{preheader}}";
     private static final String PARAGRAPH_STYLE =
@@ -29,7 +29,7 @@ public final class NotificationEmailLayout {
             <head>
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>Thông báo từ LEMAR Self Storage</title>
+              <title>Thông báo từ Kho Mộc</title>
             </head>
             <body style="margin:0;padding:0;background-color:#f3f4f6;">
               <div style="display:none;max-height:0;overflow:hidden;">{{preheader}}</div>
@@ -43,7 +43,7 @@ public final class NotificationEmailLayout {
                         <td style="background-color:#111827;padding:20px 32px;
                                    font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;
                                    color:#ffffff;letter-spacing:1px;">
-                          LEMAR SELF STORAGE
+                          KHO MỘC
                         </td>
                       </tr>
                       <tr>
@@ -58,8 +58,8 @@ public final class NotificationEmailLayout {
                         <td style="padding:20px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;
                                    font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;
                                    color:#6b7280;">
-                          Email tự động từ LEMAR Self Storage — vui lòng không trả lời.<br>
-                          © 2026 LEMAR Self Storage
+                          Email tự động từ Kho Mộc — vui lòng không trả lời.<br>
+                          © 2026 Kho Mộc
                         </td>
                       </tr>
                     </table>

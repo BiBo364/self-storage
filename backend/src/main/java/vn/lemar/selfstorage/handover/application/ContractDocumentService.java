@@ -73,7 +73,7 @@ public class ContractDocumentService {
                 .append(esc(row.termsVersion())).append(" · Trạng thái ").append(esc(row.status())).append("</p>")
                 .append("<h1>HỢP ĐỒNG THUÊ KHOANG LƯU TRỮ</h1>")
                 .append("<h2>Điều 1. Các bên</h2><table>")
-                .append(tr("Bên cho thuê", "Lemar Self Storage — " + row.facilityName()))
+                .append(tr("Bên cho thuê", "Kho Mộc — " + row.facilityName()))
                 .append(tr("Địa chỉ cơ sở", row.facilityAddress()))
                 .append(tr("Bên thuê", row.customerName()))
                 .append(tr("Email", row.customerEmail()))

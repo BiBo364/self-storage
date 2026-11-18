@@ -11,8 +11,8 @@ class NotificationEmailLayoutTest {
         String html = NotificationEmailLayout.wrap("Yêu cầu thuê kho đã được duyệt",
                 "Khoang A-01 <script>alert(1)</script> đã sẵn sàng.\n\nXác nhận tại https://lemar.vn/p/1");
 
-        assertThat(html).contains("<title>Thông báo từ LEMAR Self Storage</title>");
-        assertThat(html).contains("LEMAR SELF STORAGE");
+        assertThat(html).contains("<title>Thông báo từ Kho Mộc</title>");
+        assertThat(html).contains("KHO MỘC");
         assertThat(html).contains("Yêu cầu thuê kho đã được duyệt");
         assertThat(html).contains("&lt;script&gt;");
         assertThat(html).doesNotContain("<script>");
@@ -25,6 +25,6 @@ class NotificationEmailLayoutTest {
         String html = NotificationEmailLayout.wrap("Tiêu đề", null);
 
         assertThat(html).contains("Tiêu đề");
-        assertThat(html).contains("LEMAR SELF STORAGE");
+        assertThat(html).contains("KHO MỘC");
     }
 }

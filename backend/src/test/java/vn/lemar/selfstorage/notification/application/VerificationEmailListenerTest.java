@@ -31,7 +31,7 @@ class VerificationEmailListenerTest {
                 eq("Mã xác minh email đăng ký Kho Mộc"),
                 argThat(html -> html.contains("Mã xác minh email của bạn là: 123456")
                         && html.contains("Mã có hiệu lực trong 10 phút")
-                        && html.contains("LEMAR SELF STORAGE")));
+                        && html.contains("KHO MỘC")));
     }
 
     @Test

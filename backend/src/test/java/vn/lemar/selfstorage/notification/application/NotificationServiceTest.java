@@ -74,7 +74,7 @@ class NotificationServiceTest {
         ArgumentCaptor<String> htmlCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailSender).sendHtml(
                 eq("customer1@lemar.vn"), eq("Yêu cầu thuê kho đã được duyệt"), htmlCaptor.capture());
-        assertThat(htmlCaptor.getValue()).contains("LEMAR SELF STORAGE").contains("A-01");
+        assertThat(htmlCaptor.getValue()).contains("KHO MỘC").contains("A-01");
     }
 
     @Test
