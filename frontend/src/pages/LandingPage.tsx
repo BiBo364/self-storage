@@ -25,6 +25,7 @@ import { FacilityMapSection } from "../components/domain/FacilityMapSection";
 import { FacilityShowcase } from "../components/domain/FacilityShowcase";
 import { Button } from "../components/ui/Button";
 import { SelectField } from "../components/ui/FormField";
+import { PhotoBackdrop, STORAGE_PHOTOS } from "../components/ui/PhotoBackdrop";
 import { CountUp, Reveal } from "../components/ui/Reveal";
 import { SurfaceState } from "../components/ui/SurfaceState";
 
@@ -174,6 +175,7 @@ export function LandingPage({ navigate }: { navigate: Navigate }) {
   return (
     <>
       <section className="relative overflow-hidden bg-background">
+        <PhotoBackdrop src={STORAGE_PHOTOS.yellowDoors} />
         <span
           className="hero-glow -left-32 -top-40 h-[460px] w-[460px] bg-[rgba(242,195,0,0.20)]"
           aria-hidden="true"

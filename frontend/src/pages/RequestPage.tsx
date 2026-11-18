@@ -16,6 +16,7 @@ import {
 } from "../app/services/customer";
 import { Button } from "../components/ui/Button";
 import { DemoNotice } from "../components/ui/DemoNotice";
+import { PhotoBackdrop, STORAGE_PHOTOS } from "../components/ui/PhotoBackdrop";
 import {
   FIELD_GROUP,
   FIELD_LABEL,
@@ -106,9 +107,11 @@ export function RequestPage({
   const facilities = facilitiesResource.data ?? [];
 
   return (
-    <section className={embedded ? "" : PUBLIC_PAGE}>
+    <section className={embedded ? "" : `relative overflow-hidden ${PUBLIC_PAGE}`}>
+      {/* Trong khu khách hàng (embedded) trang nằm trong shell nên không có ảnh nền. */}
+      {!embedded && <PhotoBackdrop src={STORAGE_PHOTOS.row} />}
       <div
-        className={`${embedded ? "" : PAGE_CONTAINER} grid grid-cols-[0.8fr_1.2fr] items-start gap-16 max-[900px]:grid-cols-1 max-[900px]:gap-8`}
+        className={`${embedded ? "" : `relative ${PAGE_CONTAINER}`} grid grid-cols-[0.8fr_1.2fr] items-start gap-16 max-[900px]:grid-cols-1 max-[900px]:gap-8`}
       >
         <div>
           <button

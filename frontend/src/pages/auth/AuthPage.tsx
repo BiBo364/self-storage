@@ -1,6 +1,7 @@
 import { ArrowLeft, Box, CalendarDays, Receipt } from "lucide-react";
 import { Navigate, View } from "../../app/types";
 import { Brand } from "../../components/ui/Brand";
+import { PhotoBackdrop, STORAGE_PHOTOS } from "../../components/ui/PhotoBackdrop";
 import type { Theme } from "../../components/ui/ThemeToggle";
 import { ThemeToggle } from "../../components/ui/ThemeToggle";
 import { LoginForm } from "./LoginForm";
@@ -27,8 +28,9 @@ export function AuthPage({
   const mode = view === "register" ? "register" : view === "verify" ? "verify" : "login";
 
   return (
-    <div className="min-h-screen bg-background px-6 pb-16 pt-7 max-[760px]:px-4 max-[760px]:pb-12 max-[760px]:pt-5">
-      <div className="mx-auto w-[min(1120px,100%)]">
+    <div className="relative min-h-screen overflow-hidden bg-background px-6 pb-16 pt-7 max-[760px]:px-4 max-[760px]:pb-12 max-[760px]:pt-5">
+      <PhotoBackdrop src={STORAGE_PHOTOS.driveUp} position="65% center" />
+      <div className="relative mx-auto w-[min(1120px,100%)]">
         <div className="flex items-center justify-between gap-4">
           <Brand onClick={() => navigate("/")} />
           <div className="flex items-center gap-4">
