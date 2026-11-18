@@ -31,7 +31,12 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import vn.lemar.selfstorage.booking.application.AppointmentBookingService;
+import vn.lemar.selfstorage.booking.application.AppointmentBookingService.Slot;
 import vn.lemar.selfstorage.booking.application.AppointmentNoShowService;
+import vn.lemar.selfstorage.booking.application.CheckinRescheduleService.Rescheduled;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentForbiddenException;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentValidationException;
 import vn.lemar.selfstorage.booking.application.BookingExpiryService;
 import vn.lemar.selfstorage.booking.application.HandoverOrderService.ContractInvoice;
 import vn.lemar.selfstorage.booking.application.InvoicePaymentService;
@@ -41,6 +46,7 @@ import vn.lemar.selfstorage.handover.application.ContractDocumentService;
 import vn.lemar.selfstorage.handover.application.HandoverExpiryService;
 import vn.lemar.selfstorage.handover.application.HandoverOverdueService;
 import vn.lemar.selfstorage.handover.application.HandoverQueryService;
+import vn.lemar.selfstorage.handover.application.HandoverRescheduleService;
 import vn.lemar.selfstorage.handover.application.HandoverWorkflowService;
 import vn.lemar.selfstorage.handover.application.HandoverWorkflowService.ConfirmOutcome;
 import vn.lemar.selfstorage.handover.application.HandoverWorkflowService.RejectOutcome;
@@ -80,6 +86,8 @@ class HandoverFlowIntegrationTest {
     private HandoverWorkflowService workflow;
     @Autowired
     private HandoverQueryService queryService;
+    @Autowired
+    private HandoverRescheduleService rescheduleService;
     @Autowired
     private HandoverExpiryService handoverExpiry;
     @Autowired
@@ -124,6 +132,7 @@ class HandoverFlowIntegrationTest {
         SecurityContextHolder.clearContext();
         jdbc.update("update policies set value = '2' where key = 'handover.max_rejection_count'");
         jdbc.update("update facilities set enabled_key_access = true, enabled_code_access = true");
+        jdbc.update("update policies set value = 'true' where key = 'staff.shift_required'");
     }
 
     // ------------------------------------------------------------------ happy path
@@ -875,6 +884,186 @@ class HandoverFlowIntegrationTest {
                 .isEqualTo(original);
     }
 
+    // ------------------------------------------------------------------ FS dời lịch nhận kho
+
+    @Test
+    void staffReschedulesBeforeArrivalMovesAppointmentAndReopensHandover() {
+        jdbc.update("update policies set value = 'false' where key = 'staff.shift_required'");
+        Seed seed = seedAhead(fsId);
+        loginAs(FS);
+        Slot slot = freeSlot(seed.appointmentId);
+
+        Rescheduled result = rescheduleService.reschedule(seed.appointmentId, dateOf(slot), slot.startAt(),
+                "  Khách bận đột xuất  ");
+
+        assertThat(result.arrived()).isFalse();
+        assertThat(result.oldAppointmentId()).isEqualTo(seed.appointmentId);
+        Map<String, Object> old = jdbc.queryForMap("select status, cancel_reason from appointments where id = ?",
+                seed.appointmentId);
+        assertThat(old.get("status")).isEqualTo("Canceled");
+        assertThat(old.get("cancel_reason")).isEqualTo("Dời lịch: Khách bận đột xuất");
+        Map<String, Object> fresh = jdbc.queryForMap("select status, staff_id, started_at from appointments "
+                + "where id = ?", result.newAppointmentId());
+        assertThat(fresh.get("status")).isEqualTo("Pending");
+        assertThat(((Number) fresh.get("staff_id")).longValue()).isEqualTo(fsId);
+        assertThat(((java.sql.Timestamp) fresh.get("started_at")).toInstant()).isEqualTo(slot.startAt());
+        assertThat(count("select count(*) from rental_appointments where appointment_id = ? and order_id = ?",
+                result.newAppointmentId(), seed.orderId)).isEqualTo(1);
+        assertThat(orderStatus(seed.orderId)).isEqualTo("InProgress");
+        assertThat(unitStatus(seed.unitId)).isEqualTo("Reserved");
+        assertThat(handoverResult(seed.handoverId)).isEqualTo("CANCELED");
+        assertThat(jdbc.queryForObject("select reject_reason from handover_records where id = ?", String.class,
+                seed.handoverId)).isEqualTo("Dời lịch: Khách bận đột xuất");
+        long newHandoverId = id("select id from handover_records where appointment_id = "
+                + result.newAppointmentId());
+        assertThat(handoverResult(newHandoverId)).isEqualTo("IN_PROGRESS");
+        assertThat(view(newHandoverId).step()).isEqualTo("WAITING_ARRIVAL");
+        assertThat(auditCount("APPOINTMENT_RESCHEDULED", "Appointment", seed.appointmentId)).isEqualTo(1);
+        assertThat(notifications(CUSTOMER, "APPOINTMENT_RESCHEDULED", seed.orderId)).isEqualTo(1);
+    }
+
+    @Test
+    void staffReschedulesSignedUnpaidSessionCancelsContractAndKeepsHistory() {
+        jdbc.update("update policies set value = 'false' where key = 'staff.shift_required'");
+        Seed seed = seedInProgress(fsId);
+        long contractId = untilSigned(seed);
+        ContractInvoice invoice = firstMonthInvoice(contractId);
+        loginAs(FS);
+        Slot slot = freeSlot(seed.appointmentId);
+
+        Rescheduled result = rescheduleService.reschedule(seed.appointmentId, dateOf(slot), slot.startAt(),
+                "Khách chưa đủ tiền, hẹn quay lại");
+
+        assertThat(result.arrived()).isTrue();
+        // Buổi cũ đã diễn ra → lịch cũ giữ Done; phiên cũ đóng, hợp đồng + hoá đơn chưa trả huỷ.
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class,
+                seed.appointmentId)).isEqualTo("Done");
+        assertThat(handoverResult(seed.handoverId)).isEqualTo("CANCELED");
+        assertThat(contractStatus(contractId)).isEqualTo("Canceled");
+        assertThat(invoiceStatus(invoice.invoiceId())).isEqualTo("Canceled");
+        assertThat(orderStatus(seed.orderId)).isEqualTo("InProgress");
+
+        long newHandoverId = id("select id from handover_records where appointment_id = "
+                + result.newAppointmentId());
+        HandoverView fresh = view(newHandoverId);
+        assertThat(fresh.step()).isEqualTo("WAITING_ARRIVAL");
+        assertThat(fresh.contract()).isNull();
+        assertThat(fresh.previousSession()).isNotNull();
+        assertThat(fresh.previousSession().id()).isEqualTo(seed.handoverId);
+        assertThat(fresh.previousSession().reason()).isEqualTo("Dời lịch: Khách chưa đủ tiền, hẹn quay lại");
+        assertThat(fresh.previousSession().identityStatus()).isEqualTo("Verified");
+        assertThat(fresh.previousSession().identityPhotos()).hasSize(1);
+        assertThat(fresh.previousSession().inspectionNotes()).isEqualTo("Khoang sạch, khoá tốt");
+
+        // Phiên mới làm lại từ đầu: khách đến → xác minh → hiện trạng → hợp đồng nháp mới (không dùng lại bản cũ).
+        jdbc.update("update appointments set status = 'Done', arrived_at = now() where id = ?",
+                result.newAppointmentId());
+        jdbc.update("update handover_records set due_at = now() + interval '1 day' where id = ?", newHandoverId);
+        untilAgreed(new Seed(seed.unitId, seed.orderId, result.newAppointmentId(), newHandoverId));
+        long newContractId = contractId(seed.orderId);
+        assertThat(newContractId).isNotEqualTo(contractId);
+        assertThat(contractStatus(newContractId)).isEqualTo("Draft");
+        assertThat(view(newHandoverId).step()).isEqualTo("SIGN_CONTRACT");
+    }
+
+    @Test
+    void rescheduleGuards() {
+        jdbc.update("update policies set value = 'false' where key = 'staff.shift_required'");
+        Seed seed = seedAhead(fsId);
+        loginAs(FS);
+        Slot slot = freeSlot(seed.appointmentId);
+        LocalDate date = dateOf(slot);
+
+        assertThatThrownBy(() -> rescheduleService.reschedule(seed.appointmentId, date, slot.startAt(), " "))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("lý do");
+        // Ngoài hạn giữ đơn (expires_at = 20 ngày nữa).
+        LocalDate far = LocalDate.now(VN).plusDays(30);
+        assertThatThrownBy(() -> rescheduleService.reschedule(seed.appointmentId, far,
+                far.atTime(8, 0).atZone(VN).toInstant(), "Lý do"))
+                .isInstanceOf(AppointmentValidationException.class);
+        // Khung không đúng giờ bắt đầu của 3 khung.
+        assertThatThrownBy(() -> rescheduleService.reschedule(seed.appointmentId, date,
+                slot.startAt().plusSeconds(600), "Lý do"))
+                .isInstanceOf(AppointmentValidationException.class);
+        // Khung đã có lịch tại cơ sở.
+        jdbc.update("insert into appointments (customer_id, facility_id, type, date, started_at, end_at, status) "
+                + "values (?, ?, 'CHECKIN', ?, ?, ?, 'Pending')", customerId, facilityId, date,
+                java.sql.Timestamp.from(slot.startAt()), java.sql.Timestamp.from(slot.endAt()));
+        assertThatThrownBy(() -> rescheduleService.reschedule(seed.appointmentId, date, slot.startAt(), "Lý do"))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessageContaining("đã có người đặt");
+        // FS nghỉ phép ngày hẹn mới.
+        Slot other = freeSlot(seed.appointmentId);
+        long leaveId = id("insert into staff_leaves (staff_id, from_date, to_date, reason, status) values (" + fsId
+                + ", '" + dateOf(other) + "', '" + dateOf(other) + "', 'Việc riêng', 'Approved') returning id");
+        try {
+            assertThatThrownBy(() -> rescheduleService.reschedule(seed.appointmentId, dateOf(other),
+                    other.startAt(), "Lý do"))
+                    .isInstanceOf(AppointmentConflictException.class)
+                    .hasMessageContaining("nghỉ phép");
+        } finally {
+            jdbc.update("delete from staff_leaves where id = ?", leaveId);
+        }
+        // FS không phụ trách lịch.
+        long otherStaff = id("select id from accounts where email = '" + FM + "'");
+        Seed foreign = seedAhead(otherStaff);
+        assertThatThrownBy(() -> rescheduleService.reschedule(foreign.appointmentId, dateOf(other), other.startAt(),
+                "Lý do"))
+                .isInstanceOf(AppointmentForbiddenException.class);
+        // Lịch đã quá giờ mà khách chưa đến → để no-show xử lý.
+        Seed late = seedScheduledNoShow();
+        assertThatThrownBy(() -> rescheduleService.reschedule(late.appointmentId, dateOf(other), other.startAt(),
+                "Lý do"))
+                .isInstanceOf(AppointmentConflictException.class)
+                .hasMessageContaining("quá giờ");
+        // Không có gì thay đổi.
+        assertThat(jdbc.queryForObject("select status from appointments where id = ?", String.class,
+                seed.appointmentId)).isEqualTo("Pending");
+        assertThat(handoverResult(seed.handoverId)).isEqualTo("IN_PROGRESS");
+        assertThat(auditCount("APPOINTMENT_RESCHEDULED", "Appointment", seed.appointmentId)).isZero();
+    }
+
+    @Test
+    void rescheduleBlockedOncePaidOrWhilePaying() {
+        jdbc.update("update policies set value = 'false' where key = 'staff.shift_required'");
+        // Đang có phiên thanh toán tháng đầu mở → không huỷ ngang giao dịch.
+        Seed paying = seedInProgress(fsId);
+        long payingContract = untilSigned(paying);
+        assertThat(invoicePaymentService.start(firstMonthInvoice(payingContract).invoiceId(), customerId,
+                "127.0.0.1").rejected()).isFalse();
+        loginAs(FS);
+        Slot slot = freeSlot(paying.appointmentId);
+        assertThatThrownBy(() -> rescheduleService.reschedule(paying.appointmentId, dateOf(slot), slot.startAt(),
+                "Lý do"))
+                .isInstanceOf(HandoverConflictException.class)
+                .hasMessageContaining("đang thanh toán");
+
+        // Đã trả tháng đầu → hoàn tất bàn giao, không dời.
+        Seed paid = seedInProgress(fsId);
+        long paidContract = untilSigned(paid);
+        pay(firstMonthInvoice(paidContract));
+        loginAs(FS);
+        assertThatThrownBy(() -> rescheduleService.reschedule(paid.appointmentId, dateOf(slot), slot.startAt(),
+                "Lý do"))
+                .isInstanceOf(HandoverConflictException.class)
+                .hasMessageContaining("đã thanh toán");
+        assertThat(handoverResult(paid.handoverId)).isEqualTo("IN_PROGRESS");
+        assertThat(contractStatus(paidContract)).isEqualTo("Signed");
+    }
+
+    private Slot freeSlot(long appointmentId) {
+        return rescheduleService.slots(appointmentId).days().stream()
+                .flatMap(day -> day.slots().stream())
+                .filter(Slot::available)
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private static LocalDate dateOf(Slot slot) {
+        return slot.startAt().atZone(VN).toLocalDate();
+    }
+
     // ------------------------------------------------------------------ nguồn URL ảnh / bản scan
 
     @Test
@@ -952,7 +1141,19 @@ class HandoverFlowIntegrationTest {
         return seed(fsId, false);
     }
 
+    /** Đơn {@code InProgress} với lịch Pending chưa tới giờ (2–4 giờ nữa), khách chưa đến. */
+    private Seed seedAhead(long staffId) {
+        return seed(staffId, false,
+                "now() + interval '2 hours', now() + interval '4 hours', null, 'Pending'");
+    }
+
     private Seed seed(long staffId, boolean arrived) {
+        return seed(staffId, arrived, arrived
+                ? "now() - interval '30 minutes', now() + interval '90 minutes', now() - interval '10 minutes', 'Done'"
+                : "now() - interval '3 hours', now() - interval '1 hour', null, 'Pending'");
+    }
+
+    private Seed seed(long staffId, boolean arrived, String times) {
         int n = SEQ.incrementAndGet();
         String suffix = n + "-" + System.nanoTime() % 100000;
         long unitId = id("insert into storage_units (code, facility_id, unit_type_id, status) values ('H-" + suffix
@@ -969,9 +1170,6 @@ class HandoverFlowIntegrationTest {
         jdbc.update("insert into invoices (order_id, customer_id, code, title, type, status, amount, due_date) values "
                 + "(?, ?, ?, 'Đặt cọc', 'Deposit', 'Paid', 500000, now() + interval '3 days')", orderId, customerId,
                 "INV-DEP-Q7-H" + suffix);
-        String times = arrived
-                ? "now() - interval '30 minutes', now() + interval '90 minutes', now() - interval '10 minutes', 'Done'"
-                : "now() - interval '3 hours', now() - interval '1 hour', null, 'Pending'";
         long appointmentId = id("insert into appointments (customer_id, facility_id, staff_id, type, date, started_at,"
                 + " end_at, arrived_at, status) values (" + customerId + ", " + facilityId + ", " + staffId
                 + ", 'CHECKIN', current_date, " + times + ") returning id");

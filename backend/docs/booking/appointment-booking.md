@@ -67,9 +67,13 @@ Ghi nhận khi tạo: `Appointment(CHECKIN, Pending, staff_id = null)` + dòng `
 - **HandoverRecord sinh cùng transaction:** booking phát `CheckinAppointmentCreated(appointmentId, orderId, unitId)`;
   handover nghe `BEFORE_COMMIT`, idempotent theo `appointment_id`. Insert lỗi (vd đơn đã có record đang mở —
   partial unique index) rollback cả lịch hẹn.
-- **Không đổi lịch:** khách không đổi được lịch check-in `Pending` — không có API đổi lịch và policy
+- **Khách không đổi lịch:** khách không đổi được lịch check-in `Pending` — không có API đổi lịch phía khách và policy
   `appointment.checkin_reschedule_enabled` không được seed. Lịch bị huỷ (no-show, FS huỷ, quá hạn bàn giao) và đơn về
   `Deposited` thì khách đặt lịch mới theo luật "đặt lại" ở trên.
+- **FS dời lịch:** FS phụ trách dời được lịch check-in của mình sang khung khác — trước khi khách đến, hoặc khách đã
+  đến nhưng chưa trả tiền tháng đầu. Khung mới theo luật "đặt lại" (tới ngày hết hạn giữ đơn), FS phải còn phụ trách
+  được khung đó; đơn giữ `InProgress`, lịch mới gán sẵn FS, phiên bàn giao cũ đóng và phiên mới làm lại từ đầu; khách +
+  FM nhận `APPOINTMENT_RESCHEDULED`. Chi tiết: [staff-appointment-reschedule.md](../routes/handover/staff-appointment-reschedule.md).
 - **`AppointmentBookingService.bookable(orderId)`** chạy cùng kiểm tra cửa sổ như lúc đặt (trạng thái, chờ đề xuất
   lại, mốc cọc, cửa sổ ngày) và trả `true`/`false` thay vì 409. Dùng để quyết định hiện hành động `BOOK_CHECKIN`
   trên đơn ([rental-orders-mine.md](../routes/booking/rental-orders-mine.md)) và trả `bookCheckinOrderId` sau khi trả

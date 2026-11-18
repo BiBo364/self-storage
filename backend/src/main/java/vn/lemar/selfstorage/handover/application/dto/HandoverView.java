@@ -51,7 +51,16 @@ public record HandoverView(
         boolean keyAccessEnabled,
         boolean codeAccessEnabled,
         long rejectionCount,
-        int maxRejectionCount) {
+        int maxRejectionCount,
+        @Schema(description = "Phiên trước của đơn đã đóng vì FS dời lịch (null nếu không có) — chỉ để xem lại")
+        PreviousSession previousSession) {
+
+    @Schema(description = "Phiên bàn giao trước đã đóng vì dời lịch — xác minh / hiện trạng ghi ở buổi cũ")
+    public record PreviousSession(Long id, String reason, LocalDate appointmentDate, Instant appointmentStart,
+                                  Instant appointmentEnd, Instant arrivedAt, String identityStatus,
+                                  Instant identityVerifiedAt, List<String> identityPhotos, String inspectionStatus,
+                                  String inspectionNotes, List<String> inspectionPhotos) {
+    }
 
     @Schema(description = "Hợp đồng thuê đang xử lý của đơn")
     public record Contract(Long id, String code, String status, String termsVersion, BigDecimal monthlyPrice,

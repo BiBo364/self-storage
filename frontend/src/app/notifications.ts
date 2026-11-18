@@ -26,6 +26,7 @@ const GROUP_BY_TYPE: Record<string, NotificationGroup> = {
   HANDOVER_REJECTED: "approval",
   DEPOSIT_PAYMENT_SUCCEEDED: "invoice",
   APPOINTMENT_CREATED: "assignment",
+  APPOINTMENT_RESCHEDULED: "assignment",
   APPOINTMENT_CANCELED_NO_SHOW: "assignment",
   FS_ASSIGNED: "assignment",
   FS_ASSIGNMENT_REQUIRED: "assignment",
@@ -69,6 +70,9 @@ export function notificationPath(
       return role === "FM" ? "/fm/appointments" : undefined;
     case "FS_ASSIGNMENT_REQUIRED":
       return role === "FM" ? "/fm/appointments" : undefined;
+    case "APPOINTMENT_RESCHEDULED":
+      // Khách: giờ mới nằm ở "Kho của tôi" (đơn đang chờ nhận kho); FM: lịch hẹn của cơ sở.
+      return role === "FM" ? "/fm/appointments" : role === "CUSTOMER" ? "/my-storage" : undefined;
     case "RENTAL_REQUEST_APPROVED":
     case "RENTAL_REQUEST_REJECTED":
     case "PROPOSAL_REPROPOSED":

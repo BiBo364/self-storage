@@ -40,6 +40,11 @@ import vn.lemar.selfstorage.SecurityConfig;
 import vn.lemar.selfstorage.booking.application.HandoverOrderService.ContractInvoice;
 import vn.lemar.selfstorage.handover.application.ContractDocumentService;
 import vn.lemar.selfstorage.handover.application.HandoverQueryService;
+import vn.lemar.selfstorage.handover.application.HandoverRescheduleService;
+import vn.lemar.selfstorage.booking.application.AppointmentBookingService.SlotWindow;
+import vn.lemar.selfstorage.booking.application.CheckinRescheduleService.Rescheduled;
+import vn.lemar.selfstorage.booking.application.exception.AppointmentConflictException;
+import vn.lemar.selfstorage.booking.controller.BookingExceptionHandler;
 import vn.lemar.selfstorage.handover.application.HandoverWorkflowService;
 import vn.lemar.selfstorage.handover.application.HandoverWorkflowService.ConfirmOutcome;
 import vn.lemar.selfstorage.handover.application.HandoverWorkflowService.RejectOutcome;
@@ -62,9 +67,9 @@ import vn.lemar.selfstorage.identity.repository.AccountRepository;
 
 /** HTTP contract Flow 2.2–2.5: FS (`/api/staff`), khách (`/api/customer`), hợp đồng + FM duyệt mốc tính tiền. */
 @WebMvcTest(controllers = {StaffHandoverController.class, CustomerHandoverController.class,
-    ContractController.class})
+    ContractController.class, StaffRescheduleController.class})
 @Import({SecurityConfig.class, JwtConfiguration.class, AccountJwtAuthenticationConverter.class,
-    HandoverExceptionHandler.class})
+    HandoverExceptionHandler.class, BookingExceptionHandler.class})
 @TestPropertySource(properties = "security.jwt.secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 class HandoverControllerTest {
 
@@ -81,6 +86,8 @@ class HandoverControllerTest {
     private HandoverQueryService queryService;
     @MockBean
     private HandoverWorkflowService workflow;
+    @MockBean
+    private HandoverRescheduleService rescheduleService;
     @MockBean
     private ContractDocumentService documentService;
     @MockBean
@@ -317,13 +324,51 @@ class HandoverControllerTest {
         verify(workflow).reviewStartDateOverride(7L, false, "Không");
     }
 
+    @Test
+    void staffReschedule() throws Exception {
+        login(FS, "FS", 3L);
+        LocalDate date = LocalDate.of(2026, 11, 20);
+        Instant start = Instant.parse("2026-11-20T01:00:00Z");
+        when(rescheduleService.slots(7L)).thenReturn(new SlotWindow(4L, 1L, date, date, List.of()));
+        mockMvc.perform(as(get("/api/staff/appointments/7/reschedule-slots"), FS))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.orderId").value(4));
+
+        when(rescheduleService.reschedule(7L, date, start, "Khách bận"))
+                .thenReturn(new Rescheduled(7L, 9L, 4L, false, date, start, start.plusSeconds(7200),
+                        "08:00–10:00 19/11/2026", "08:00–10:00 20/11/2026"));
+        mockMvc.perform(json(post("/api/staff/appointments/7/reschedule"), FS,
+                        "{\"date\":\"2026-11-20\",\"startAt\":\"2026-11-20T01:00:00Z\",\"reason\":\"Khách bận\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã dời lịch nhận kho"))
+                .andExpect(jsonPath("$.data.newAppointmentId").value(9));
+        verify(rescheduleService).reschedule(7L, date, start, "Khách bận");
+
+        mockMvc.perform(json(post("/api/staff/appointments/7/reschedule"), FS,
+                        "{\"date\":\"2026-11-20\",\"startAt\":\"2026-11-20T01:00:00Z\",\"reason\":\" \"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(json(post("/api/staff/appointments/7/reschedule"), FS, "{\"reason\":\"Lý do\"}"))
+                .andExpect(status().isBadRequest());
+        doThrow(new HandoverConflictException("Khách đã thanh toán tháng đầu")).when(rescheduleService)
+                .reschedule(8L, date, start, "Lý do");
+        mockMvc.perform(json(post("/api/staff/appointments/8/reschedule"), FS,
+                        "{\"date\":\"2026-11-20\",\"startAt\":\"2026-11-20T01:00:00Z\",\"reason\":\"Lý do\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Khách đã thanh toán tháng đầu"));
+        doThrow(new AppointmentConflictException("Khung giờ đã có người đặt, vui lòng chọn khung khác"))
+                .when(rescheduleService).reschedule(9L, date, start, "Lý do");
+        mockMvc.perform(json(post("/api/staff/appointments/9/reschedule"), FS,
+                        "{\"date\":\"2026-11-20\",\"startAt\":\"2026-11-20T01:00:00Z\",\"reason\":\"Lý do\"}"))
+                .andExpect(status().isConflict());
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static HandoverView view(Long id, String step) {
         return new HandoverView(id, 4L, 5L, "IN_PROGRESS", step, "A-01", "Small", 1L, "Q7", "Addr", 6L, "Khách",
                 CUSTOMER, "0900", LocalDate.now(), Instant.now(), Instant.now(), Instant.now(), "Verified", null,
                 List.of(), "Pending", null, null, List.of(), null, null, null, null, null, null, null, List.of(), true,
-                true, 0, 2);
+                true, 0, 2, null);
     }
 
     private void login(String email, String roleName, Long accountId) {

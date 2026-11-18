@@ -113,7 +113,13 @@ public class HandoverQueryService {
                 row.dueAt(), row.completedAt(), row.requestedAccess(), row.customerConfirmedAt(),
                 contract == null ? null : contract(contract), invoice, keys, options.keyAccess(),
                 options.codeAccess(), records.countByOrderIdAndResult(row.orderId(), HandoverResult.REJECTED),
-                pricingQuery.intPolicy(HandoverWorkflowService.POLICY_MAX_REJECTION));
+                pricingQuery.intPolicy(HandoverWorkflowService.POLICY_MAX_REJECTION),
+                readRepository.findRescheduledBefore(row.orderId(), row.id())
+                        .map(p -> new HandoverView.PreviousSession(p.id(), p.reason(), p.appointmentDate(),
+                                p.appointmentStart(), p.appointmentEnd(), p.arrivedAt(), p.identityStatus(),
+                                p.identityVerifiedAt(), p.identityPhotos(), p.inspectionStatus(),
+                                p.inspectionNotes(), p.inspectionPhotos()))
+                        .orElse(null));
     }
 
     private static String step(HandoverRow row, RentalContract contract, HandoverView.Invoice invoice) {

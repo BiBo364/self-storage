@@ -81,6 +81,23 @@ export type HandoverView = {
   codeAccessEnabled: boolean;
   rejectionCount: number;
   maxRejectionCount: number;
+  /** Phiên trước của đơn đã đóng vì FS dời lịch — chỉ để xem lại. */
+  previousSession: HandoverPreviousSession | null;
+};
+
+export type HandoverPreviousSession = {
+  id: number;
+  reason: string | null;
+  appointmentDate: string | null;
+  appointmentStart: string | null;
+  appointmentEnd: string | null;
+  arrivedAt: string | null;
+  identityStatus: string | null;
+  identityVerifiedAt: string | null;
+  identityPhotos: string[];
+  inspectionStatus: string | null;
+  inspectionNotes: string | null;
+  inspectionPhotos: string[];
 };
 
 /** `HandoverOrderService.ContractInvoice` — hoá đơn tháng đầu trả về khi ký. */

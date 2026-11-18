@@ -146,6 +146,32 @@ public class HandoverReadRepository {
                 localDate(rs, "start_date_override_requested"), rs.getString(8), rs.getString(9)), fmAccountId);
     }
 
+    /** Phiên bàn giao cũ đã đóng vì FS dời lịch — dữ liệu giữ làm lịch sử, FS xem lại ở phiên mới. */
+    public record PreviousSessionRow(Long id, String reason, String identityStatus, Instant identityVerifiedAt,
+                                     List<String> identityPhotos, String inspectionStatus, String inspectionNotes,
+                                     List<String> inspectionPhotos, LocalDate appointmentDate,
+                                     Instant appointmentStart, Instant appointmentEnd, Instant arrivedAt) {
+    }
+
+    /** Phiên gần nhất trước {@code beforeHandoverId} của cùng đơn, đóng với lý do "Dời lịch: …". */
+    public Optional<PreviousSessionRow> findRescheduledBefore(Long orderId, Long beforeHandoverId) {
+        return jdbc.query("""
+                select h.id, h.reject_reason, h.identity_status, h.identity_verified_at, h.identity_photos,
+                       h.inspection_status, h.inspection_notes, h.inspection_photos,
+                       a.date, a.started_at, a.end_at, a.arrived_at
+                from handover_records h
+                join appointments a on a.id = h.appointment_id
+                where h.order_id = ? and h.id < ? and h.result = 'CANCELED' and h.reject_reason like 'Dời lịch:%'
+                order by h.id desc
+                limit 1
+                """, (rs, i) -> new PreviousSessionRow(rs.getLong("id"), rs.getString("reject_reason"),
+                rs.getString("identity_status"), instant(rs, "identity_verified_at"),
+                photos(rs.getArray("identity_photos")), rs.getString("inspection_status"),
+                rs.getString("inspection_notes"), photos(rs.getArray("inspection_photos")), localDate(rs, "date"),
+                instant(rs, "started_at"), instant(rs, "end_at"), instant(rs, "arrived_at")),
+                orderId, beforeHandoverId).stream().findFirst();
+    }
+
     /** Cơ sở của hợp đồng (qua khoang). */
     public Optional<Long> findContractFacilityId(Long contractId) {
         return jdbc.query("select u.facility_id from rental_contracts c join storage_units u on u.id = c.unit_id "

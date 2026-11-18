@@ -46,3 +46,45 @@ export function cancelStaffAppointment(
     accessToken: accessToken(),
   });
 }
+
+export type RescheduleSlot = { startAt: string; endAt: string; available: boolean };
+export type RescheduleDay = { date: string; slots: RescheduleSlot[] };
+/** Khung để dời lịch nhận kho: hôm nay → ngày hết hạn giữ đơn. */
+export type RescheduleWindow = {
+  orderId: number;
+  facilityId: number;
+  minDate: string;
+  maxDate: string;
+  days: RescheduleDay[];
+};
+export type RescheduledAppointment = {
+  oldAppointmentId: number;
+  newAppointmentId: number;
+  orderId: number;
+  arrived: boolean;
+  date: string;
+  startAt: string;
+  endAt: string;
+  oldTime: string;
+  newTime: string;
+};
+
+export function fetchRescheduleSlots(appointmentId: number): Promise<RescheduleWindow> {
+  return apiRequest<RescheduleWindow>(`/api/staff/appointments/${appointmentId}/reschedule-slots`, {
+    accessToken: accessToken(),
+  });
+}
+
+/** Dời lịch nhận kho — trước khi khách đến hoặc khi phiên bàn giao chưa thanh toán tháng đầu. */
+export function rescheduleStaffAppointment(
+  appointmentId: number,
+  date: string,
+  startAt: string,
+  reason: string,
+): Promise<RescheduledAppointment> {
+  return apiRequest<RescheduledAppointment>(`/api/staff/appointments/${appointmentId}/reschedule`, {
+    method: "POST",
+    body: { date, startAt, reason },
+    accessToken: accessToken(),
+  });
+}

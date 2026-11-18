@@ -40,7 +40,7 @@ Sắp theo code alphabet.
 | Permission | Ý nghĩa | ADMIN | BOM | FM | FS | CUSTOMER | Căn cứ |
 |---|---|:-:|:-:|:-:|:-:|:-:|---|
 | `appointment.assign` | Phân công FS | | | F | | | draft.md §1.5 |
-| `appointment.checkin` | Xác nhận khách đã đến (Done) | | | | F | | §2.1 |
+| `appointment.checkin` | Xác nhận khách đã đến (Done) | | | | F | | §2.1 — cũng dùng cho FS huỷ lịch và dời lịch nhận kho (`HandoverRescheduleService`, `POST /api/staff/appointments/{id}/reschedule`) |
 | `appointment.create` | Chọn lịch check-in | | | | | own | §1.5 |
 | `appointment.read` | Xem lịch theo cơ sở / được gán | G | G | F | F | | §2.1 |
 | `facility.access` | Truy cập dữ liệu cơ sở — guard back-office FM | F | F | F | F | | `GET /api/fm/storage-units`, back-office FM, `GET /api/facility-access/ping/{facilityId}` |

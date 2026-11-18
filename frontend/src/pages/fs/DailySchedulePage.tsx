@@ -7,6 +7,7 @@ import {
   fetchStaffAppointments,
   type StaffAppointment,
 } from "../../app/staffSchedule";
+import { ReschedulePanel } from "../../components/domain/ReschedulePanel";
 import { Button } from "../../components/ui/Button";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { DetailPanel } from "../../components/ui/DetailPanel";
@@ -67,6 +68,8 @@ export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
     kind: "arrive" | "cancel";
   } | null>(null);
   const [reason, setReason] = useState("");
+  const [rescheduling, setRescheduling] = useState<StaffAppointment | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
@@ -200,6 +203,8 @@ export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
         </div>
       </div>
 
+      {notice && <DemoNotice tone="success">{notice}</DemoNotice>}
+
       {isLoading ? (
         <SurfaceState variant="loading" title="Đang tải lịch làm việc…" />
       ) : error ? (
@@ -281,6 +286,17 @@ export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
                       {appointment.type === "CHECKIN" && (
                         <Button
                           variant="secondary"
+                          onClick={() => {
+                            setNotice(null);
+                            setRescheduling(appointment);
+                          }}
+                        >
+                          Dời lịch
+                        </Button>
+                      )}
+                      {appointment.type === "CHECKIN" && (
+                        <Button
+                          variant="secondary"
                           onClick={() => openAction(appointment, "cancel")}
                         >
                           Hủy
@@ -312,6 +328,20 @@ export function DailySchedulePage({ navigate }: { navigate: Navigate }) {
             );
           })}
         </div>
+      )}
+
+      {rescheduling && (
+        <ReschedulePanel
+          appointmentId={rescheduling.id}
+          summary={`${rescheduling.customer.name ?? rescheduling.customer.email} · ${formatTimeRange(rescheduling)} ${formatDateVN(rescheduling.date)}`}
+          arrived={false}
+          onClose={() => setRescheduling(null)}
+          onDone={(result) => {
+            setRescheduling(null);
+            setNotice(`Đã dời lịch sang ${result.newTime}. Khách và FM đã nhận thông báo.`);
+            setReloadKey((key) => key + 1);
+          }}
+        />
       )}
 
       {action && (

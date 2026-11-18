@@ -33,6 +33,10 @@ Mutation trên `/handovers/{id}` trả `HandoverView` mới (`step` = bước k�
 - 409 — sai thứ tự bước, phiên đã đóng (kể cả sửa hiện trạng sau khi đã chốt bàn giao), đơn không `InProgress`; sửa
   hiện trạng khi khách chưa đồng ý hiện trạng; sửa thông tin bên thuê khi chưa xác minh danh tính hoặc hợp đồng đã ký.
 
+`HandoverView.previousSession`: phiên gần nhất trước đó của cùng đơn đã đóng vì FS dời lịch (lý do, giờ hẹn cũ, kết quả
+xác minh + ảnh giấy tờ, hiện trạng + ảnh), `null` nếu không có — chỉ để xem lại, xem
+[staff-appointment-reschedule.md](staff-appointment-reschedule.md).
+
 `HandoverView.step` (`HandoverQueryService.step`, cùng giá trị cho khách và FS) — kiểm theo thứ tự, gặp điều kiện
 đầu tiên chưa đạt thì dừng:
 

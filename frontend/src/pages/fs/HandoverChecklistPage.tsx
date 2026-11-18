@@ -1,4 +1,13 @@
-import { ArrowLeft, Check, Download, FileText, IdCard, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarClock,
+  Check,
+  Download,
+  FileText,
+  History,
+  IdCard,
+  RefreshCw,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { formatDate, formatDateTime, formatMoney, formatTime, isoDate } from "../../app/format";
 import { errorMessage, errorStatus } from "../../app/http";
@@ -25,7 +34,9 @@ import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { DemoNotice } from "../../components/ui/DemoNotice";
 import { FIELD_LABEL } from "../../components/ui/FormField";
 import { ImageLightbox } from "../../components/ui/ImageLightbox";
+import { ReschedulePanel } from "../../components/domain/ReschedulePanel";
 import { UnitLocationCard } from "../../components/domain/UnitLocationCard";
+import type { RescheduledAppointment } from "../../app/staffSchedule";
 import { StatusTag } from "../../components/ui/StatusTag";
 import { SurfaceState } from "../../components/ui/SurfaceState";
 import {
@@ -195,6 +206,8 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerReason, setCustomerReason] = useState("");
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduled, setRescheduled] = useState<RescheduledAppointment | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -307,6 +320,24 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
     }
   }
 
+  if (rescheduled) {
+    return (
+      <div className="grid gap-6">
+        <BackLink navigate={navigate} />
+        <SurfaceState
+          variant="empty"
+          title={`Đã dời lịch nhận kho sang ${rescheduled.newTime}`}
+          description={
+            rescheduled.arrived
+              ? "Phiên bàn giao này đã đóng (thông tin giữ làm lịch sử). Buổi mới vẫn do bạn phụ trách và làm lại từ bước xác minh danh tính; khách và FM đã nhận thông báo."
+              : "Lịch mới vẫn do bạn phụ trách; khách và FM đã nhận thông báo."
+          }
+          action={{ label: "Về lịch làm việc", onClick: () => navigate("/staff/schedule") }}
+        />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="grid gap-6">
@@ -365,6 +396,9 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
     !isClosed &&
     current.identityStatus === "Verified" &&
     (!contract || contract.status === "Draft");
+  // Dời lịch: trước khi khách trả tiền tháng đầu (backend kiểm lại: đã trả / đang thanh toán → 409).
+  const canReschedule = !isClosed && invoice?.status !== "Paid";
+  const previous = current.previousSession;
   const customerChanged =
     customerName.trim() !== (current.customerName ?? "") ||
     customerPhone.trim() !== (current.customerPhone ?? "");
@@ -396,8 +430,33 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
             {current.orderId}
           </p>
         </div>
-        <StatusTag tone={tag.tone}>{tag.label}</StatusTag>
+        <div className="flex flex-wrap items-center gap-3">
+          {canReschedule && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy}
+              onClick={() => setRescheduleOpen(true)}
+            >
+              <CalendarClock size={14} /> Dời lịch nhận kho
+            </Button>
+          )}
+          <StatusTag tone={tag.tone}>{tag.label}</StatusTag>
+        </div>
       </div>
+
+      {rescheduleOpen && (
+        <ReschedulePanel
+          appointmentId={current.appointmentId}
+          summary={`${current.customerName ?? current.customerEmail ?? "—"} · ${formatTime(current.appointmentStart)}–${formatTime(current.appointmentEnd)} ${formatDate(current.appointmentDate)}`}
+          arrived={current.arrivedAt !== null}
+          onClose={() => setRescheduleOpen(false)}
+          onDone={(result) => {
+            setRescheduleOpen(false);
+            setRescheduled(result);
+          }}
+        />
+      )}
 
       {actionError && <DemoNotice tone="error">{actionError}</DemoNotice>}
       {notice && !actionError && <DemoNotice tone="success">{notice}</DemoNotice>}
@@ -445,6 +504,42 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                   : ""}
               </p>
               <IdentityPhotoStrip urls={current.identityPhotos ?? []} />
+            </div>
+          )}
+
+          {previous && (
+            <div className="step-enter bg-surface p-5">
+              <span className="inline-flex items-center gap-1.5 text-label text-muted">
+                <History size={15} /> Phiên trước (đã dời lịch)
+              </span>
+              <p className="mb-0 mt-1 text-small text-ink">
+                {formatTime(previous.appointmentStart)}–{formatTime(previous.appointmentEnd)}{" "}
+                {formatDate(previous.appointmentDate)}
+              </p>
+              {previous.reason && (
+                <p className="mb-0 mt-1 text-small text-muted">{previous.reason}</p>
+              )}
+              <dl className="mb-0 mt-3 grid gap-2 text-small">
+                <Row term="Xác minh">
+                  {previous.identityStatus === "Verified"
+                    ? `Đạt${previous.identityVerifiedAt ? ` · ${formatDateTime(previous.identityVerifiedAt)}` : ""}`
+                    : label(previous.identityStatus)}
+                </Row>
+                <Row term="Hiện trạng">{label(previous.inspectionStatus)}</Row>
+              </dl>
+              {previous.inspectionNotes && (
+                <p className="mb-0 mt-2 whitespace-pre-line text-small text-muted">
+                  {previous.inspectionNotes}
+                </p>
+              )}
+              {previous.identityPhotos.length + previous.inspectionPhotos.length > 0 && (
+                <IdentityPhotoStrip
+                  urls={[...previous.identityPhotos, ...previous.inspectionPhotos]}
+                />
+              )}
+              <p className="mb-0 mt-3 text-label text-muted">
+                Chỉ để tham khảo — buổi này cần xác minh và ghi hiện trạng lại.
+              </p>
             </div>
           )}
 

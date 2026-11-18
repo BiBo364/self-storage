@@ -90,6 +90,14 @@ public class NotificationTemplateCatalog {
         put(NotificationType.APPOINTMENT_CREATED, NotificationRecipient.FM,
                 "Có lịch check-in mới cần phân công",
                 "Đơn {{orderCode}}: lịch hẹn {{appointmentTime}} tại {{facilityAddress}} cần phân công FS.");
+        put(NotificationType.APPOINTMENT_RESCHEDULED, NotificationRecipient.CUSTOMER,
+                "Lịch nhận kho đã được dời",
+                "Lịch nhận kho của đơn {{orderCode}} đã dời từ {{oldAppointmentTime}} sang {{appointmentTime}} tại "
+                        + "{{facilityAddress}}. Lý do: {{reason}}. Vui lòng mang theo CCCD/Passport.");
+        put(NotificationType.APPOINTMENT_RESCHEDULED, NotificationRecipient.FM,
+                "FS đã dời lịch nhận kho",
+                "Đơn {{orderCode}}: lịch nhận kho dời từ {{oldAppointmentTime}} sang {{appointmentTime}} tại "
+                        + "{{facilityAddress}}. Lý do: {{reason}}.");
         put(NotificationType.APPOINTMENT_CANCELED_NO_SHOW, NotificationRecipient.CUSTOMER,
                 "Lịch hẹn check-in đã bị hủy do bạn không đến",
                 "Lịch hẹn cũ: {{appointmentTime}}. Bạn có thể đặt lịch mới tại {{rescheduleLink}}.");

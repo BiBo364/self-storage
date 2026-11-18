@@ -228,6 +228,9 @@ Từ chối khoang:
 - `RentalOrderCanceled` (Cascade, đồng bộ);
 - `CheckinAppointmentClosed` (booking huỷ lịch check-in khi khách chưa đến — cron no-show hoặc FS huỷ lịch;
   `reject_reason` = "Khách không đến nhận kho theo lịch hẹn." hoặc lý do FS nhập);
+- FS dời lịch nhận kho (`HandoverRescheduleService`, `reject_reason` = "Dời lịch: {lý do}") — trước khi khách đến hoặc
+  khi chưa trả tiền tháng đầu; đơn giữ `InProgress`, lịch mới mở biên bản mới. Xem
+  [staff-appointment-reschedule.md](../routes/handover/staff-appointment-reschedule.md);
 - cron bên dưới.
 
 ## Cron Flow 2
