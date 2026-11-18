@@ -46,7 +46,7 @@ Sắp theo code alphabet.
 | `facility.access` | Truy cập dữ liệu cơ sở — guard back-office FM | F | F | F | F | | `GET /api/fm/storage-units`, back-office FM, `GET /api/facility-access/ping/{facilityId}` |
 | `handover_record.inspect` | Ghi/xác nhận hiện trạng khoang | | | | F | own | §2.2 — `HandoverWorkflowService.recordInspection` (`PUT /api/staff/handovers/{id}/inspection`), `correctInspection` (`POST /api/staff/handovers/{id}/inspection-correction`) |
 | `handover_record.reject` | Từ chối khoang tại chỗ | | | | | own | §2.5 |
-| `handover_record.verify_identity` | Xác minh danh tính | | | | F | | §2.2 |
+| `handover_record.verify_identity` | Xác minh danh tính | | | | F | | §2.2 — `HandoverWorkflowService.verifyIdentity`, `correctCustomerInfo` (`POST /api/staff/handovers/{id}/customer-info`, sửa họ tên / SĐT bên thuê trước khi ký) |
 | `invoice.pay` | Thanh toán hóa đơn | | | | | own | §1.4 |
 | `invoice.read` | Xem hóa đơn | | | F | | own | §1.4 |
 | `notification.create_other` | Tạo thông báo `OTHER` thủ công | G | G | | | | `POST /api/notifications` |

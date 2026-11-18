@@ -159,6 +159,19 @@ export function correctHandoverInspection(
   });
 }
 
+/** Sửa họ tên / số điện thoại bên thuê (ghi vào tài khoản khách) — bắt buộc lý do; chỉ khi hợp đồng chưa ký. */
+export function correctHandoverCustomerInfo(
+  id: number,
+  name: string,
+  phone: string,
+  reason: string,
+): Promise<HandoverView> {
+  return authed<HandoverView>(`/api/staff/handovers/${id}/customer-info`, {
+    method: "POST",
+    body: { name, phone, reason },
+  });
+}
+
 export function markHandoverNotSigned(id: number): Promise<HandoverView> {
   return authed<HandoverView>(`/api/staff/handovers/${id}/not-signed`, { method: "POST" });
 }

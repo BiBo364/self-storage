@@ -4,6 +4,7 @@ import { formatDate, formatDateTime, formatMoney, formatTime, isoDate } from "..
 import { errorMessage, errorStatus } from "../../app/http";
 import { pathId, queryParam } from "../../app/routes";
 import {
+  correctHandoverCustomerInfo,
   correctHandoverInspection,
   fetchContractDocumentUrl,
   fetchStaffHandover,
@@ -190,6 +191,10 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   const [correctionNotes, setCorrectionNotes] = useState("");
   const [correctionPhotos, setCorrectionPhotos] = useState<PickedFile[]>([]);
   const [correctionReason, setCorrectionReason] = useState("");
+  const [customerEditOpen, setCustomerEditOpen] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerReason, setCustomerReason] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -355,6 +360,21 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
   const activeIndex = stepIndex(step);
   const isClosed = current.result !== "IN_PROGRESS";
   const canCorrectInspection = !isClosed && current.inspectionStatus === "Agreed";
+  // Sửa thông tin bên thuê: đã đối chiếu giấy tờ, hợp đồng chưa ký (backend kiểm lại, đã ký → 409).
+  const canCorrectCustomer =
+    !isClosed &&
+    current.identityStatus === "Verified" &&
+    (!contract || contract.status === "Draft");
+  const customerChanged =
+    customerName.trim() !== (current.customerName ?? "") ||
+    customerPhone.trim() !== (current.customerPhone ?? "");
+
+  function openCustomerEdit() {
+    setCustomerName(current.customerName ?? "");
+    setCustomerPhone(current.customerPhone ?? "");
+    setCustomerReason("");
+    setCustomerEditOpen(true);
+  }
   const photoCount = current.inspectionPhotos?.length ?? 0;
   const inspectionSummary = `${current.inspectionNotes || "Không có ghi chú"} · ${photoCount} ảnh`;
 
@@ -988,6 +1008,115 @@ export function HandoverChecklistPage({ navigate }: { navigate: Navigate }) {
                       size="sm"
                       disabled={busy}
                       onClick={() => setCorrectionOpen(false)}
+                    >
+                      Đóng
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {canCorrectCustomer && (
+            <div className="mt-6 bg-surface-subtle p-4">
+              <strong className="block text-small text-ink">
+                Thông tin bên thuê trên hợp đồng
+              </strong>
+              <p className="mb-0 mt-1 text-small text-muted">
+                {current.customerName ?? "—"} · {current.customerPhone ?? "—"} ·{" "}
+                {current.customerEmail ?? "—"}
+              </p>
+              {!customerEditOpen ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-3"
+                  disabled={busy}
+                  onClick={openCustomerEdit}
+                >
+                  Sửa thông tin bên thuê
+                </Button>
+              ) : (
+                <div className="mt-3 grid gap-3">
+                  <p className="m-0 text-label text-muted">
+                    Sửa theo giấy tờ đã đối chiếu, trước khi ký. Thông tin được ghi vào tài khoản
+                    khách, bản nháp hợp đồng cập nhật theo; cần ghi lý do và được lưu vết. Email
+                    đăng nhập không sửa ở đây.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 max-[640px]:grid-cols-1">
+                    <div>
+                      <label className={FIELD_LABEL} htmlFor="customer-name">
+                        Họ tên bên thuê
+                      </label>
+                      <input
+                        id="customer-name"
+                        className={INPUT_CLASS}
+                        value={customerName}
+                        maxLength={255}
+                        onChange={(event) => setCustomerName(event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className={FIELD_LABEL} htmlFor="customer-phone">
+                        Số điện thoại
+                      </label>
+                      <input
+                        id="customer-phone"
+                        className={INPUT_CLASS}
+                        type="tel"
+                        value={customerPhone}
+                        maxLength={20}
+                        onChange={(event) => setCustomerPhone(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={FIELD_LABEL} htmlFor="customer-reason">
+                      Lý do sửa
+                    </label>
+                    <textarea
+                      id="customer-reason"
+                      className={TEXTAREA_CLASS}
+                      value={customerReason}
+                      maxLength={500}
+                      onChange={(event) => setCustomerReason(event.target.value)}
+                      placeholder="Ví dụ: tên trên tài khoản khác tên trên CCCD."
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      pending={busy}
+                      disabled={
+                        !customerReason.trim() ||
+                        !customerName.trim() ||
+                        !customerPhone.trim() ||
+                        !customerChanged
+                      }
+                      onClick={async () => {
+                        const ok = await run(
+                          () =>
+                            correctHandoverCustomerInfo(
+                              current.id,
+                              customerName.trim(),
+                              customerPhone.trim(),
+                              customerReason.trim(),
+                            ),
+                          "Đã cập nhật thông tin bên thuê.",
+                        );
+                        if (ok) {
+                          setCustomerEditOpen(false);
+                          setCustomerReason("");
+                        }
+                      }}
+                    >
+                      <Check size={14} /> Lưu thông tin bên thuê
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setCustomerEditOpen(false)}
                     >
                       Đóng
                     </Button>

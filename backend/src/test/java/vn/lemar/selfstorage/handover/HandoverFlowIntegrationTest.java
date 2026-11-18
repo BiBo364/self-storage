@@ -778,6 +778,103 @@ class HandoverFlowIntegrationTest {
         assertThat(auditCount("INSPECTION_CORRECTED", "HandoverRecord", seed.handoverId)).isZero();
     }
 
+    // ------------------------------------------------------------------ sửa thông tin bên thuê trước khi ký
+
+    @Test
+    void staffCorrectsCustomerInfoBeforeSigningWithReasonAndAudit() {
+        Map<String, Object> original = jdbc.queryForMap("select name, phone from accounts where id = ?", customerId);
+        try {
+            Seed seed = seedInProgress(fsId);
+            loginAs(FS);
+            workflow.verifyIdentity(seed.handoverId, true, null, idPhotos());
+            workflow.recordInspection(seed.handoverId, "Khoang sạch", List.of());
+            loginAs(CUSTOMER);
+            workflow.agreeInspection(seed.handoverId, customerId, null);
+            long contractId = contractId(seed.orderId);
+            int auditsBefore = auditCount("ACCOUNT_UPDATED", "Account", customerId);
+
+            loginAs(FS);
+            workflow.correctCustomerInfo(seed.handoverId, "  Trần Vĩnh Khang  ", " 0907 030 604 ",
+                    " Tên tài khoản khác tên trên CCCD ");
+
+            HandoverView view = view(seed.handoverId);
+            assertThat(view.customerName()).isEqualTo("Trần Vĩnh Khang");
+            assertThat(view.customerPhone()).isEqualTo("0907 030 604");
+            // Bản nháp render động → thấy ngay thông tin mới.
+            assertThat(documentService.render(contractId)).contains("Trần Vĩnh Khang").contains("0907 030 604");
+            assertThat(auditCount("ACCOUNT_UPDATED", "Account", customerId)).isEqualTo(auditsBefore + 1);
+            Map<String, Object> audit = jdbc.queryForMap("select actor_account_id, reason, "
+                    + "old_value->>'name' as old_name, old_value->>'phone' as old_phone, "
+                    + "new_value->>'name' as new_name, new_value->>'phone' as new_phone from audit_logs "
+                    + "where action = 'ACCOUNT_UPDATED' and entity_type = 'Account' and entity_id = ? "
+                    + "order by id desc limit 1", String.valueOf(customerId));
+            assertThat(((Number) audit.get("actor_account_id")).longValue()).isEqualTo(fsId);
+            assertThat(audit.get("reason"))
+                    .isEqualTo("Sửa tại phiên bàn giao #" + seed.handoverId + ": Tên tài khoản khác tên trên CCCD");
+            assertThat(audit.get("old_name")).isEqualTo(original.get("name"));
+            assertThat(audit.get("old_phone")).isEqualTo(original.get("phone"));
+            assertThat(audit.get("new_name")).isEqualTo("Trần Vĩnh Khang");
+            assertThat(audit.get("new_phone")).isEqualTo("0907 030 604");
+
+            // Đã ký → không sửa nữa; bản đã chốt giữ thông tin lúc ký.
+            workflow.signContract(contractId, uploaded(fsId, "signed.pdf"));
+            String frozen = documentHtml(contractId);
+            assertThatThrownBy(() -> workflow.correctCustomerInfo(seed.handoverId, "Tên khác", "0901234567",
+                    "Lý do"))
+                    .isInstanceOf(HandoverConflictException.class)
+                    .hasMessageContaining("Hợp đồng đã ký");
+            assertThat(documentService.render(contractId)).isEqualTo(frozen).contains("Trần Vĩnh Khang");
+            assertThat(auditCount("ACCOUNT_UPDATED", "Account", customerId)).isEqualTo(auditsBefore + 1);
+        } finally {
+            jdbc.update("update accounts set name = ?, phone = ? where id = ?", original.get("name"),
+                    original.get("phone"), customerId);
+        }
+    }
+
+    @Test
+    void customerInfoCorrectionGuards() {
+        Map<String, Object> original = jdbc.queryForMap("select name, phone from accounts where id = ?", customerId);
+        Seed seed = seedInProgress(fsId);
+        loginAs(FS);
+
+        // Chưa đối chiếu giấy tờ → chưa sửa được.
+        assertThatThrownBy(() -> workflow.correctCustomerInfo(seed.handoverId, "Tên mới", "0901234567", "Lý do"))
+                .isInstanceOf(HandoverConflictException.class)
+                .hasMessageContaining("xác minh danh tính");
+
+        workflow.verifyIdentity(seed.handoverId, true, null, idPhotos());
+        HandoverView current = view(seed.handoverId);
+        assertThatThrownBy(() -> workflow.correctCustomerInfo(seed.handoverId, "Tên mới", "0901234567", " "))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("lý do");
+        assertThatThrownBy(() -> workflow.correctCustomerInfo(seed.handoverId, "Tên mới", "0901234567",
+                "x".repeat(501)))
+                .isInstanceOf(HandoverValidationException.class);
+        assertThatThrownBy(() -> workflow.correctCustomerInfo(seed.handoverId, " ", "0901234567", "Lý do"))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("Họ tên");
+        assertThatThrownBy(() -> workflow.correctCustomerInfo(seed.handoverId, "x".repeat(256), "0901234567",
+                "Lý do"))
+                .isInstanceOf(HandoverValidationException.class);
+        assertThatThrownBy(() -> workflow.correctCustomerInfo(seed.handoverId, "Tên mới", "abc", "Lý do"))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("Số điện thoại");
+        assertThatThrownBy(() -> workflow.correctCustomerInfo(seed.handoverId, current.customerName(),
+                current.customerPhone(), "Lý do"))
+                .isInstanceOf(HandoverValidationException.class)
+                .hasMessageContaining("không thay đổi");
+
+        // FS không phụ trách lịch này.
+        long otherStaff = id("select id from accounts where email = '" + FM + "'");
+        Seed foreign = seedInProgress(otherStaff);
+        assertThatThrownBy(() -> workflow.correctCustomerInfo(foreign.handoverId, "Tên mới", "0901234567",
+                "Lý do"))
+                .isInstanceOf(HandoverForbiddenException.class);
+
+        assertThat(jdbc.queryForMap("select name, phone from accounts where id = ?", customerId))
+                .isEqualTo(original);
+    }
+
     // ------------------------------------------------------------------ nguồn URL ảnh / bản scan
 
     @Test

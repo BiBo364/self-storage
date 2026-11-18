@@ -24,6 +24,9 @@ sequenceDiagram
     opt Sửa hiện trạng (trước khi chốt bàn giao)
         FS->>H: inspection-correction (lý do bắt buộc, audit INSPECTION_CORRECTED)
     end
+    opt Sửa thông tin bên thuê (đã xác minh, hợp đồng chưa ký)
+        FS->>H: customer-info (họ tên + SĐT vào tài khoản khách, lý do bắt buộc, audit ACCOUNT_UPDATED)
+    end
     opt Đổi mốc tính tiền
         FS->>H: start-date-override (Pending, khoá bước ký)
         Note over H: FM approve / reject
@@ -113,6 +116,7 @@ kiện chung: record `IN_PROGRESS`, đơn `InProgress`, khách đã đến (`arr
 | Ghi hiện trạng | FS, `handover_record.inspect` | `Verified`, hiện trạng còn `Pending`; ảnh là upload của chính FS này (xem dưới) | `inspection_notes`, `inspection_photos` (≤ 20 URL) | — |
 | Đồng ý hiện trạng | Khách của đơn | `Verified`, hiện trạng `Pending`, ghi chú khách ≤ 1000 ký tự (400, kiểm trước), FS đã ghi hiện trạng — có ghi chú hoặc ≥ 1 ảnh (`HandoverRecord.inspectionRecorded()`), chưa ghi → 409 | `Agreed` + `unit_inspected_at`; ghi chú khách nối vào notes ("Khách lưu ý: …"); sinh hợp đồng `Draft` nếu đơn chưa có | `UNIT_INSPECTED` |
 | Sửa hiện trạng | FS, `handover_record.inspect` | hiện trạng đã `Agreed`; lý do bắt buộc ≤ 500 ký tự; ≤ 20 ảnh; sau khi sửa phải còn ghi chú hoặc ≥ 1 ảnh (400) | thay toàn bộ `inspection_notes` + `inspection_photos`; hợp đồng đã ký không đổi theo | `INSPECTION_CORRECTED` (old/new `inspectionNotes` + `photoCount`, `reason`) |
+| Sửa thông tin bên thuê | FS, `handover_record.verify_identity` | `Verified`; hợp đồng của đơn chưa ký (chưa có hoặc `Draft`, khoá trước khi kiểm — đã ký → 409); họ tên không trống ≤ 255 ký tự, số điện thoại theo định dạng form gửi nhu cầu, lý do bắt buộc ≤ 500 ký tự (400, kiểm trước khoá); không có gì thay đổi → 400 | ghi `accounts.name` + `accounts.phone` của khách; email không sửa | `ACCOUNT_UPDATED` trên `Account` khách (old/new `name` + `phone`, `reason` = "Sửa tại phiên bàn giao #{id}: …") |
 | Đề nghị đổi mốc | FS, `rental_contract.start_date_override.request` | hợp đồng `Draft`, chưa có đề nghị `Pending`, ngày ≥ hôm nay | `start_date_override_* = Pending` | `START_DATE_OVERRIDE_REQUESTED` |
 | Duyệt / từ chối mốc | FM, `rental_contract.start_date_override.review` + facility scope | có đề nghị `Pending` | duyệt: `start_date` = ngày đề nghị; từ chối: giữ ngày chính sách | `START_DATE_OVERRIDE_APPROVED` / `_REJECTED` |
 | Ký hợp đồng | FS, `rental_contract.sign` | `Verified` + `Agreed`, `pdfUrl` là upload của chính FS này (400), hợp đồng `Draft`, không còn đề nghị `Pending` | `Signed`, `signed_at`, `pdf_url`; chốt `document_html`; tạo hoá đơn tháng đầu | `CONTRACT_SIGNED`, `INVOICE_CREATED` |
@@ -136,6 +140,13 @@ dùng khi khách đã đồng ý hiện trạng mà FS cần ghi lại (sai sót
 đồng ý, miễn biên bản còn `IN_PROGRESS` (và điều kiện chung ở trên) — phiên đã chốt (`COMPLETED`) hoặc đã đóng → 409.
 Hợp đồng còn `Draft` thì bản nháp render động nên thấy hiện trạng mới; hợp đồng đã ký giữ nguyên bản đã chốt lúc ký
 (`document_html`).
+
+Sửa thông tin bên thuê (`POST /api/staff/handovers/{id}/customer-info`, `HandoverWorkflowService.correctCustomerInfo`):
+dùng khi FS đối chiếu giấy tờ thấy họ tên / số điện thoại trên tài khoản sai (tên khác CCCD, số cũ) — sửa tại chỗ thay
+vì nhờ Admin. Ghi thẳng vào tài khoản khách qua `identity.CustomerContactService` vì hợp đồng lấy hai trường này từ tài
+khoản (xem [Bản hợp đồng](#bản-hợp-đồng)): bản nháp thấy ngay; mọi bản nháp khác của khách cũng thấy tên mới, còn bản đã
+ký của hợp đồng khác giữ nguyên bản đã chốt. Không lưu riêng trên hợp đồng và dùng lại audit `ACCOUNT_UPDATED` nên không
+cần migration. "Không thay đổi" so với giá trị đang hiển thị (số điện thoại tài khoản, trống thì số trên yêu cầu thuê).
 
 Sinh hợp đồng `Draft`:
 - `code = HD-{facility}-{YYMMDD}-{6 ký tự}`;
@@ -254,6 +265,9 @@ Cascade "Không đến nhận kho quá hạn giữ"; chỉ báo khách `APPOINTM
 `GET /api/contracts/{id}/document` trả HTML (để in) từ mẫu `builtin-v1`:
 - nội dung: các bên, khoang + diện tích, hiện trạng (`inspection_notes`), mốc tính tiền, thời hạn, giá, cọc, điều
   khoản chung;
+- nguồn các bên: "Bên cho thuê" = "Kho Mộc — {tên cơ sở}" + địa chỉ cơ sở (BOM sửa ở thông tin cơ sở); "Bên thuê",
+  email, số điện thoại = tài khoản khách (số điện thoại tài khoản trống thì lấy số trên yêu cầu thuê) — FS sửa họ tên /
+  số điện thoại trước khi ký bằng [Sửa thông tin bên thuê](#flow-2224--thao-tác), Admin sửa ở quản lý tài khoản;
 - **trước khi ký:** render động từ dữ liệu hiện tại; còn đề nghị đổi mốc `Pending` → 409;
 - **lúc ký:** render một lần trong cùng transaction ký và lưu vào `rental_contracts.document_html`;
 - **sau khi ký:** trả nguyên bản đã chốt — sửa hiện trạng, gia hạn hay đổi dữ liệu khác không làm đổi bản in. Hợp
@@ -278,6 +292,7 @@ gia hạn đã thanh toán.
   - sinh hợp đồng và bản in;
   - thứ tự bước, FS không phụ trách, loại truy cập bị tắt;
   - đổi mốc tính tiền;
+  - sửa hiện trạng, sửa thông tin bên thuê (bản nháp + audit, chặn khi đã ký / chưa xác minh / FS khác, kiểm dữ liệu);
   - từ chối dưới / chạm ngưỡng, khách không ký;
   - huỷ trước / sau khi trả tháng đầu;
   - cron quá hạn (còn hạn / hết hạn), hoá đơn tháng đầu quá hạn, no-show (còn hạn / hết hạn).

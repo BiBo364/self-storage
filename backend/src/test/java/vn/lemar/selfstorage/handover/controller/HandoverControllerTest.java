@@ -159,6 +159,32 @@ class HandoverControllerTest {
     }
 
     @Test
+    void staffCustomerInfoCorrection() throws Exception {
+        login(FS, "FS", 3L);
+        when(queryService.view(1L)).thenReturn(view(1L, "SIGN_CONTRACT"));
+
+        mockMvc.perform(json(post("/api/staff/handovers/1/customer-info"), FS,
+                        "{\"name\":\"Trần Vĩnh Khang\",\"phone\":\"0907030604\",\"reason\":\"Sai tên\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Đã cập nhật thông tin bên thuê"))
+                .andExpect(jsonPath("$.data.step").value("SIGN_CONTRACT"));
+        verify(workflow).correctCustomerInfo(1L, "Trần Vĩnh Khang", "0907030604", "Sai tên");
+
+        mockMvc.perform(json(post("/api/staff/handovers/1/customer-info"), FS,
+                        "{\"name\":\"A\",\"phone\":\"0907030604\",\"reason\":\" \"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(json(post("/api/staff/handovers/1/customer-info"), FS,
+                        "{\"name\":\" \",\"phone\":\"0907030604\",\"reason\":\"Lý do\"}"))
+                .andExpect(status().isBadRequest());
+        doThrow(new HandoverConflictException("Hợp đồng đã ký — không sửa thông tin bên thuê")).when(workflow)
+                .correctCustomerInfo(2L, "A", "0907030604", "Lý do");
+        mockMvc.perform(json(post("/api/staff/handovers/2/customer-info"), FS,
+                        "{\"name\":\"A\",\"phone\":\"0907030604\",\"reason\":\"Lý do\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Hợp đồng đã ký — không sửa thông tin bên thuê"));
+    }
+
+    @Test
     void staffContractActions() throws Exception {
         login(FS, "FS", 3L);
         when(workflow.signContract(7L, "https://img/s.pdf")).thenReturn(new ContractInvoice(9L, "INV-RNT-Q7-1",
