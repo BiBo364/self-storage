@@ -239,6 +239,14 @@ public class ContractInvoiceService {
     }
 
     /**
+     * Hoá đơn phí quá hạn ({@code INV-OVD-…}): công nợ của những ngày đã quá hạn — không tự hết hạn (cron bỏ qua) và
+     * trả được cả sau {@code due_date}; chỉ đóng khi khách trả, gộp vào quyết toán trả kho, hoặc hết phí phải thu.
+     */
+    public static boolean isOverdueFeeCode(String code) {
+        return code != null && code.startsWith("INV-" + OVERDUE_KIND + "-");
+    }
+
+    /**
      * Hoá đơn quyết toán trả kho phần đã đối trừ tiền cọc → {@code Paid} ngay (không qua cổng).
      *
      * @param kind một trong {@link #SETTLEMENT_KINDS} — mỗi loại phí một hoá đơn

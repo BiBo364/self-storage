@@ -125,7 +125,9 @@ public class InvoicePaymentService {
             throw new BookingConflictException(MSG_NOT_UNPAID);
         }
         Instant now = Instant.now();
-        if (invoice.getDueDate() != null && invoice.getDueDate().isBefore(now)) {
+        // Phí quá hạn (INV-OVD) là công nợ không tự hết hạn: trả được cả sau due_date.
+        if (invoice.getDueDate() != null && invoice.getDueDate().isBefore(now)
+                && !ContractInvoiceService.isOverdueFeeCode(invoice.getCode())) {
             throw new BookingConflictException(MSG_OVERDUE);
         }
         // Hoá đơn gắn hợp đồng sau bàn giao (gia hạn, phạt, dịch vụ): đơn đã Done là bình thường — bỏ kiểm đơn.

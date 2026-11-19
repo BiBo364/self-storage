@@ -123,8 +123,10 @@ loại:
   ([handover/records.md](../handover/records.md)); tháng sau (hợp đồng `Active`): FM nhận `RENT_UNPAID`, nợ giữ trên
   hoá đơn `Expired` ([tenancy/rentals.md](../tenancy/rentals.md#thu-tiền-thuê-hằng-tháng));
 - `Extension` — hợp đồng không đổi, khách tạo hoá đơn gia hạn mới ([tenancy/rentals.md](../tenancy/rentals.md));
-- `Penalty` `INV-OVD` — không listener riêng; lượt `OverdueJob` sau thấy không còn hoá đơn mở thì tạo hoá đơn phí quá
-  hạn mới cho phần chưa trả;
+- `Penalty` `INV-OVD` — **không hết hạn**: cron bỏ qua (`InvoiceRepository.findOverdueUnpaidIds` lọc mã `INV-OVD-…`,
+  `expireInvoice` chặn thêm một lớp). Đây là công nợ của những ngày đã quá hạn, giữ `Unpaid` tới khi khách trả (trả được
+  cả sau `due_date`) hoặc gộp vào quyết toán trả kho — nếu để `Expired`, quyết toán không gộp và khoản nợ bị mất
+  ([tenancy/rentals.md](../tenancy/rentals.md));
 - `Penalty` `INV-PEN` phần còn thiếu khi trả kho — trả kho vẫn hoàn tất, hoá đơn giữ `Expired` làm công nợ, FM nhận
   `CHECKOUT_SHORTFALL_UNPAID` ([checkout/return.md](../checkout/return.md));
 - `Service` (`INV-SVC`) — chỉ `Expired`, không có xử lý thêm.

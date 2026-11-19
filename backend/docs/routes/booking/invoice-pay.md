@@ -48,7 +48,9 @@ transaction (`MANDATORY`) nên `Canceled` + `needs_reproposal` được ghi trư
 
 Một transaction, khoá đơn (của hợp đồng) → hoá đơn:
 
-- hoá đơn không `Unpaid` → 409 "Hoá đơn không còn ở trạng thái chờ thanh toán"; quá `due_date` → 409;
+- hoá đơn không `Unpaid` → 409 "Hoá đơn không còn ở trạng thái chờ thanh toán"; quá `due_date` → 409 — trừ phí
+  quá hạn `INV-OVD`: là công nợ không tự hết hạn nên trả được cả sau `due_date`
+  ([tenancy/rentals.md](../../tenancy/rentals.md));
 - đơn chưa bàn giao xong: đơn đã đóng → 409; đơn quá `expires_at` → 409 "Đơn thuê kho đã hết hạn…". Hoá đơn sau bàn
   giao trên đơn `Done` (gia hạn, tiền thuê, phạt…) bỏ qua kiểm đơn;
 - đã có `PAY/Success` → 409 như hoá đơn cọc;

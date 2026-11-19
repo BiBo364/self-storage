@@ -158,7 +158,11 @@ Phí cộng dồn nằm trên đúng một hoá đơn `Penalty` mã `INV-OVD-…
   - lịch chưa tới hoặc khách không đến → vẫn hôm nay; ngày dừng không bao giờ vượt hôm nay.
 - **Gia hạn phủ kỳ quá hạn** (`end_date` mới ≥ hôm nay): phí **ngừng cộng thêm** nhưng hoá đơn đã phát sinh **giữ
   nguyên `Unpaid`** — đó là công nợ của những ngày đã thực sự quá hạn, thu khi khách trả hoá đơn hoặc trừ vào cọc
-  lúc trả kho. Không huỷ: huỷ sẽ cho phép khách chậm rồi gia hạn để xoá sạch phí. Cron vẫn quét hợp đồng đang có
+  lúc trả kho. Không huỷ: huỷ sẽ cho phép khách chậm rồi gia hạn để xoá sạch phí.
+- **`INV-OVD` không tự hết hạn:** hết cộng phí thì `due_date` (now + 7 ngày lúc đổi số tiền gần nhất) không còn được dời,
+  nên cron hết hạn hoá đơn bỏ qua `INV-OVD` và trang thanh toán cho trả cả sau `due_date`. Nếu để `Expired`, quyết toán
+  trả kho (chỉ gộp hoá đơn `Unpaid` + tiền thuê `Expired`) sẽ không gộp và khoản nợ bị mất. Còn `INV-OVD` chưa trả thì
+  truy cập bị khoá vì quá hạn kéo dài chưa mở lại. Cron vẫn quét hợp đồng đang có
   `INV-OVD` mở (kể cả đã gia hạn) để đồng bộ số tiền khi còn quá hạn.
 - **Còn giao dịch `Pending`:** không đổi số tiền, vì cổng đã nhận số cũ — kể cả giao dịch đã quá cửa sổ 15' (không
   còn tính là phiên mở) nhưng chưa được chốt; xác nhận muộn sẽ chốt `Paid` đúng số tiền đã thu.

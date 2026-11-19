@@ -88,6 +88,8 @@ class PostRentalIntegrationTest {
     @Autowired
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
     @Autowired
+    private vn.lemar.selfstorage.booking.application.BookingExpiryService bookingExpiry;
+    @Autowired
     private JdbcTemplate jdbc;
 
     private long customerId;
@@ -483,6 +485,44 @@ class PostRentalIntegrationTest {
         assertThat(overdue.accrue(seed.contractId)).isFalse();
         // Gia hạn chỉ dừng cộng thêm: khoản phí của những ngày đã quá hạn vẫn còn nợ, không bị huỷ.
         assertThat(openOverdueAmount(seed.contractId)).isEqualByComparingTo("160000");
+    }
+
+    @Test
+    void overdueFeeAfterExtensionNeverExpiresAndFoldsIntoSettlement() {
+        Seed seed = seedActive(LocalDate.now(VN).minusDays(10));
+        overdue.accrue(seed.contractId);
+        pay(tenancy.requestExtension(seed.contractId, customerId, 1));
+        assertThat(overdue.accrue(seed.contractId)).isFalse();
+        long feeId = id("select id from invoices where contract_id = " + seed.contractId
+                + " and code like 'INV-OVD-%' and status = 'Unpaid'");
+        // Hết cộng phí nên hạn trả không còn được dời: để hạn trôi qua như sau 7 ngày.
+        jdbc.update("update invoices set due_date = now() - interval '1 day' where id = ?", feeId);
+
+        // Công nợ phí quá hạn không tự hết hạn — trước đây cron chuyển Expired và quyết toán không gộp → mất khoản nợ.
+        assertThat(bookingExpiry.overdueInvoiceIds()).doesNotContain(feeId);
+        assertThat(bookingExpiry.expireInvoice(feeId)).isFalse();
+        overdue.accrue(seed.contractId);
+        assertThat(invoiceStatus(feeId)).isEqualTo("Unpaid");
+        assertThat(openOverdueAmount(seed.contractId)).isEqualByComparingTo("140000");
+
+        // Khách chưa trả → gộp vào quyết toán trả kho, trừ vào cọc.
+        BigDecimal folded = new org.springframework.transaction.support.TransactionTemplate(transactionManager)
+                .execute(status -> contractInvoices.foldUnpaidIntoSettlement(seed.contractId, "Gộp vào quyết toán"));
+        assertThat(folded).isGreaterThanOrEqualTo(new BigDecimal("140000"));
+        assertThat(invoiceStatus(feeId)).isEqualTo("Canceled");
+    }
+
+    @Test
+    void overdueFeeStaysPayableAfterItsDueDate() {
+        Seed seed = seedActive(LocalDate.now(VN).minusDays(10));
+        overdue.accrue(seed.contractId);
+        long feeId = id("select id from invoices where contract_id = " + seed.contractId
+                + " and code like 'INV-OVD-%' and status = 'Unpaid'");
+        jdbc.update("update invoices set due_date = now() - interval '1 day' where id = ?", feeId);
+
+        pay(contractInvoices.bill(feeId).orElseThrow());
+
+        assertThat(invoiceStatus(feeId)).isEqualTo("Paid");
     }
 
     @Test
