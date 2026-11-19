@@ -57,6 +57,7 @@ public class TenancyService {
     static final String POLICY_MAX_NO_SHOWS = "return.max_no_shows";
     static final String REASON_NO_SHOW = "Khách không đến buổi trả kho";
     static final int MAX_PREFERRED_DAYS = 30;
+    private static final java.util.Locale VI = java.util.Locale.forLanguageTag("vi-VN");
     static final String MSG_NOT_FOUND = "Không tìm thấy hợp đồng thuê";
     static final String MSG_RETURN_NOT_FOUND = "Không tìm thấy yêu cầu trả kho";
     static final String MSG_EXTENSION_PENDING =
@@ -157,6 +158,14 @@ public class TenancyService {
         }
         if (invoices.hasUnpaid(contractId, "Extension")) {
             throw TenancyException.conflict("Đã có hoá đơn gia hạn chờ thanh toán");
+        }
+        // Còn nợ phí quá hạn → trả trước rồi mới gia hạn (gia hạn chỉ dừng cộng phí, không xoá nợ đã phát sinh).
+        ContractBill overdueFee = openOverdueFee(invoices.bills(contractId));
+        if (overdueFee != null) {
+            // String.format theo vi-VN → 140.000 (NumberFormat dùng chung không an toàn đa luồng).
+            throw TenancyException.conflict("Vui lòng thanh toán phí quá hạn "
+                    + String.format(VI, "%,d", overdueFee.amount().longValue()) + " đ (hoá đơn "
+                    + overdueFee.code() + ") trước khi gia hạn");
         }
         BigDecimal amount = contract.monthlyPrice().multiply(BigDecimal.valueOf(months))
                 .setScale(2, RoundingMode.HALF_UP);
@@ -424,11 +433,20 @@ public class TenancyService {
         ReturnRequestView open = returnRequests.findOpenByContractId(c.id()).map(r -> returnView(r, c)).orElse(null);
         List<ContractBill> bills = invoices.bills(c.id());
         boolean extensionPending = bills.stream().anyMatch(b -> b.unpaid() && "Extension".equals(b.type()));
+        // Phí quá hạn chưa trả chặn gia hạn (phải trả trước), không chặn trả kho (gộp vào quyết toán, trừ cọc).
+        boolean overdueFeeOpen = openOverdueFee(bills) != null;
         return new RentalView(c.id(), c.code(), c.orderId(), c.unitId(), unitCode(c), c.facilityId(), c.status(),
                 c.monthlyPrice(), c.depositAmount(), c.period(), c.startDate(), c.endDate(), daysLeft,
                 c.active() && daysLeft < 0,
-                bills, contracts.accessKeys(c.id()), open, c.active() && open == null && !extensionPending,
+                bills, contracts.accessKeys(c.id()), open,
+                c.active() && open == null && !extensionPending && !overdueFeeOpen,
                 c.active() && open == null && !extensionPending, unitMoves(c.id()));
+    }
+
+    /** Hoá đơn phí quá hạn {@code INV-OVD} còn {@code Unpaid} của hợp đồng (tối đa một). */
+    private static ContractBill openOverdueFee(List<ContractBill> bills) {
+        return bills.stream().filter(b -> b.unpaid() && ContractInvoiceService.isOverdueFeeCode(b.code()))
+                .findFirst().orElse(null);
     }
 
     private List<UnitMoveNote> unitMoves(Long contractId) {

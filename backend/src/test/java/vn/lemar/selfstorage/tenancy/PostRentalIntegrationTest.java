@@ -480,22 +480,32 @@ class PostRentalIntegrationTest {
             assertThat(o.chargedDays()).isEqualTo(8);
         });
 
+        // Còn nợ phí quá hạn → phải trả trước rồi mới gia hạn (vẫn gửi yêu cầu trả kho được: phí trừ vào cọc).
+        assertThatThrownBy(() -> tenancy.requestExtension(seed.contractId, customerId, 1))
+                .isInstanceOf(TenancyException.class)
+                .hasMessageContaining("phí quá hạn 160.000 đ");
+        assertThat(tenancy.rental(seed.contractId, customerId).canExtend()).isFalse();
+        assertThat(tenancy.rental(seed.contractId, customerId).canRequestReturn()).isTrue();
+
+        long feeId = id("select id from invoices where contract_id = " + seed.contractId
+                + " and code like 'INV-OVD-%' and status = 'Unpaid'");
+        pay(contractInvoices.bill(feeId).orElseThrow());
+        assertThat(tenancy.rental(seed.contractId, customerId).canExtend()).isTrue();
         pay(tenancy.requestExtension(seed.contractId, customerId, 1));
-        assertThat(overdue.overdueCandidateIds()).contains(seed.contractId);
+        // Gia hạn phủ kỳ quá hạn → ngừng cộng phí; phí đã trả không bị lập lại.
         assertThat(overdue.accrue(seed.contractId)).isFalse();
-        // Gia hạn chỉ dừng cộng thêm: khoản phí của những ngày đã quá hạn vẫn còn nợ, không bị huỷ.
-        assertThat(openOverdueAmount(seed.contractId)).isEqualByComparingTo("160000");
+        assertThat(invoiceStatus(feeId)).isEqualTo("Paid");
+        assertThat(count("select count(*) from invoices where contract_id = ? and code like 'INV-OVD-%' "
+                + "and status = 'Unpaid'", seed.contractId)).isZero();
     }
 
     @Test
-    void overdueFeeAfterExtensionNeverExpiresAndFoldsIntoSettlement() {
+    void overdueFeeNeverExpiresAndFoldsIntoSettlement() {
         Seed seed = seedActive(LocalDate.now(VN).minusDays(10));
         overdue.accrue(seed.contractId);
-        pay(tenancy.requestExtension(seed.contractId, customerId, 1));
-        assertThat(overdue.accrue(seed.contractId)).isFalse();
         long feeId = id("select id from invoices where contract_id = " + seed.contractId
                 + " and code like 'INV-OVD-%' and status = 'Unpaid'");
-        // Hết cộng phí nên hạn trả không còn được dời: để hạn trôi qua như sau 7 ngày.
+        // Phí ngừng cộng (vd. tới buổi trả kho khách đến) thì hạn trả không còn được dời: để hạn trôi qua.
         jdbc.update("update invoices set due_date = now() - interval '1 day' where id = ?", feeId);
 
         // Công nợ phí quá hạn không tự hết hạn — trước đây cron chuyển Expired và quyết toán không gộp → mất khoản nợ.

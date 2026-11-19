@@ -44,13 +44,16 @@ Route trả kho tại cơ sở (`…/checkout`) thuộc [checkout/return.md](../
 - `daysLeft`, `overdue` (hợp đồng `Active` đã qua `end_date`; hợp đồng đã kết thúc luôn `false`);
 - yêu cầu trả kho (`ReturnRequestView`) có `appointmentStart` và `appointmentArrivedAt` (mốc FS xác nhận khách đến
   buổi trả kho; `null` = chưa đến / chưa có lịch);
-- `canExtend`: hợp đồng `Active`, không có yêu cầu trả kho mở, không có hoá đơn gia hạn chờ trả;
+- `canExtend`: hợp đồng `Active`, không có yêu cầu trả kho mở, không có hoá đơn gia hạn chờ trả, không còn phí quá
+  hạn `INV-OVD` chưa trả;
 - `canRequestReturn`: hợp đồng `Active`, không có yêu cầu trả kho mở, không có hoá đơn gia hạn chờ trả.
 
 ## Gia hạn
 
-1. Khách chọn `months` (1 – `extension.max_months` = 12). Bị chặn khi đã có yêu cầu trả kho mở hoặc còn hoá đơn
-   gia hạn `Unpaid` (409).
+1. Khách chọn `months` (1 – `extension.max_months` = 12). Bị chặn (409) khi đã có yêu cầu trả kho mở, còn hoá đơn
+   gia hạn `Unpaid`, hoặc **còn phí quá hạn `INV-OVD` chưa trả** — "Vui lòng thanh toán phí quá hạn 140.000 đ (hoá đơn
+   INV-OVD-…) trước khi gia hạn". Khách trả phí trước rồi mới gia hạn (hai hoá đơn riêng, không gộp); trả kho thì
+   không bị chặn vì phí gộp vào quyết toán, trừ cọc.
 2. Hệ thống tạo hoá đơn `Extension`:
    - mã `INV-EXT-{facility}-{YYMMDD}-{rand}`;
    - `amount = monthly_price × months`, giá chốt lúc ký nên không đổi;
@@ -156,14 +159,14 @@ Phí cộng dồn nằm trên đúng một hoá đơn `Penalty` mã `INV-OVD-…
   - yêu cầu trả kho đang mở có lịch `RETURN` mà FS **đã xác nhận khách đến** (`appointmentArrivedAt`) → ngày bắt đầu
     của buổi đó (`appointmentStart`), kể cả khi biên bản còn chờ (khoang còn đồ / chờ trả phần thiếu);
   - lịch chưa tới hoặc khách không đến → vẫn hôm nay; ngày dừng không bao giờ vượt hôm nay.
-- **Gia hạn phủ kỳ quá hạn** (`end_date` mới ≥ hôm nay): phí **ngừng cộng thêm** nhưng hoá đơn đã phát sinh **giữ
-  nguyên `Unpaid`** — đó là công nợ của những ngày đã thực sự quá hạn, thu khi khách trả hoá đơn hoặc trừ vào cọc
-  lúc trả kho. Không huỷ: huỷ sẽ cho phép khách chậm rồi gia hạn để xoá sạch phí.
-- **`INV-OVD` không tự hết hạn:** hết cộng phí thì `due_date` (now + 7 ngày lúc đổi số tiền gần nhất) không còn được dời,
-  nên cron hết hạn hoá đơn bỏ qua `INV-OVD` và trang thanh toán cho trả cả sau `due_date`. Nếu để `Expired`, quyết toán
-  trả kho (chỉ gộp hoá đơn `Unpaid` + tiền thuê `Expired`) sẽ không gộp và khoản nợ bị mất. Còn `INV-OVD` chưa trả thì
-  truy cập bị khoá vì quá hạn kéo dài chưa mở lại. Cron vẫn quét hợp đồng đang có
-  `INV-OVD` mở (kể cả đã gia hạn) để đồng bộ số tiền khi còn quá hạn.
+- **Gia hạn khi còn nợ phí:** không được — phải trả `INV-OVD` trước (xem [Gia hạn](#gia-hạn), bước 1). Gia hạn phủ kỳ
+  quá hạn (`end_date` mới ≥ hôm nay) thì phí **ngừng cộng thêm**. Hoá đơn phí đã phát sinh không bao giờ bị huỷ vì gia
+  hạn: huỷ sẽ cho phép khách chậm rồi gia hạn để xoá sạch phí.
+- **`INV-OVD` không tự hết hạn:** khi phí ngừng cộng (vd. dừng ở ngày buổi trả kho khách đến) thì `due_date` (now + 7
+  ngày lúc đổi số tiền gần nhất) không còn được dời, nên cron hết hạn hoá đơn bỏ qua `INV-OVD` và trang thanh toán cho
+  trả cả sau `due_date`. Nếu để `Expired`, quyết toán trả kho (chỉ gộp hoá đơn `Unpaid` + tiền thuê `Expired`) sẽ
+  không gộp và khoản nợ bị mất. Còn `INV-OVD` chưa trả thì truy cập bị khoá vì quá hạn kéo dài chưa mở lại. Cron vẫn
+  quét hợp đồng đang có `INV-OVD` mở để đồng bộ số tiền khi còn quá hạn.
 - **Còn giao dịch `Pending`:** không đổi số tiền, vì cổng đã nhận số cũ — kể cả giao dịch đã quá cửa sổ 15' (không
   còn tính là phiên mở) nhưng chưa được chốt; xác nhận muộn sẽ chốt `Paid` đúng số tiền đã thu.
 - **Khách trả phí quá hạn rồi vẫn tiếp tục quá hạn:** hoá đơn mới chỉ thu phần chênh.

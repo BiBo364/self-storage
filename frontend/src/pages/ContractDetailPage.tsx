@@ -374,6 +374,22 @@ function ContractDetail({ contractId, navigate }: { contractId: number; navigate
         </div>
 
         <aside className="grid gap-3">
+          {/* Còn phí quá hạn chưa trả: backend chặn gia hạn (canExtend = false) — trả phí trước rồi mới gia hạn. */}
+          {!contract.canExtend &&
+            contract.status === "Active" &&
+            (() => {
+              const overdueFee = contract.invoices.find(
+                (bill) => bill.code.startsWith("INV-OVD-") && bill.status === "Unpaid",
+              );
+              return overdueFee ? (
+                <div className="bg-warning-soft p-4 text-small text-warning">
+                  <strong className="block">Thanh toán phí quá hạn trước khi gia hạn</strong>
+                  Còn phí quá hạn {formatMoney(overdueFee.amount)} chưa thanh toán (hoá đơn{" "}
+                  {overdueFee.code}). Thanh toán hoá đơn này ở danh sách hoá đơn bên dưới, sau đó
+                  mới gia hạn được. Nếu trả kho, phí sẽ được trừ vào tiền cọc.
+                </div>
+              ) : null;
+            })()}
           {contract.canExtend && (
             <ExtendPanel
               contractId={contract.contractId}
